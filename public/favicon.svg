@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <rect width="100" height="100" rx="50" fill="#FCFAF6"/>
+  <!-- Crown Insignia -->
+  <path d="M50 30L62 48L72 36L66 56H34L28 36L38 48L50 30Z" fill="#A77B43" stroke="#8B6335" stroke-width="1.5" stroke-linejoin="round"/>
+  <circle cx="50" cy="27" r="2.5" fill="#A77B43"/>
+  <circle cx="27" cy="34" r="2.5" fill="#A77B43"/>
+  <circle cx="73" cy="34" r="2.5" fill="#A77B43"/>
+  <!-- Letter A -->
+  <path d="M50 62L43 78H48L49.5 74H50.5L52 78H57L50 62ZM50 67L51.2 71.5H48.8L50 67Z" fill="#8B6335"/>
+</svg>
