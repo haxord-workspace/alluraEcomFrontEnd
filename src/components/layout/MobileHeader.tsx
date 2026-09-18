@@ -7,11 +7,11 @@ export const MobileHeader: React.FC = () => {
   const { cartCount, setIsMobileMenuOpen, setIsSearchOpen, setIsCartOpen } = useShop();
 
   return (
-    <header className="lg:hidden sticky top-0 z-40 bg-allura-card/95 backdrop-blur-md border-b border-allura-border/60 py-3 px-4 flex items-center justify-between safe-top">
+    <header className="lg:hidden sticky top-0 z-40 bg-[#FFFFFF] border-b border-[#561C08]/15 py-3 px-4 flex items-center justify-between safe-top">
       {/* Left Menu Trigger */}
       <button
         onClick={() => setIsMobileMenuOpen(true)}
-        className="p-1.5 text-allura-text hover:text-allura-gold transition-colors"
+        className="p-1.5 text-[#000000] hover:text-[#561C08] transition-colors"
         aria-label="Open Navigation Menu"
       >
         <Menu size={22} strokeWidth={1.8} />
@@ -26,7 +26,7 @@ export const MobileHeader: React.FC = () => {
       <div className="flex items-center gap-3">
         <button
           onClick={() => setIsSearchOpen(true)}
-          className="p-1.5 text-allura-text hover:text-allura-gold transition-colors"
+          className="p-1.5 text-[#000000] hover:text-[#561C08] transition-colors"
           aria-label="Open Search"
         >
           <Search size={20} strokeWidth={1.8} />
@@ -34,12 +34,12 @@ export const MobileHeader: React.FC = () => {
 
         <button
           onClick={() => setIsCartOpen(true)}
-          className="p-1.5 text-allura-text hover:text-allura-gold transition-colors relative"
+          className="p-1.5 text-[#000000] hover:text-[#561C08] transition-colors relative"
           aria-label="Open Cart"
         >
           <ShoppingBag size={20} strokeWidth={1.8} />
           {cartCount > 0 && (
-            <span className="absolute 0 top-0.5 right-0.5 bg-allura-gold text-allura-card text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+            <span className="absolute 0 top-0.5 right-0.5 bg-[#561C08] text-white text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
               {cartCount}
             </span>
           )}

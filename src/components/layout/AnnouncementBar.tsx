@@ -18,7 +18,7 @@ export const AnnouncementBar: React.FC = () => {
   }, [announcements.length]);
 
   return (
-    <div className="bg-[#8B6335] text-[#FCFAF6] py-2 px-3 sm:px-4 text-[10px] sm:text-[11px] font-sans tracking-[0.22em] uppercase font-medium flex items-center justify-between border-b border-[#735028] select-none">
+    <div className="bg-[#561C08] text-[#FFFFFF] py-2.5 px-3 sm:px-4 text-[10px] sm:text-[11px] font-heading tracking-[0.22em] uppercase font-semibold flex items-center justify-between border-b border-[#3D1406] select-none">
       <button
         onClick={() =>
           setCurrentIndex(prev => (prev === 0 ? announcements.length - 1 : prev - 1))

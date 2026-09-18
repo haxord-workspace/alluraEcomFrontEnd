@@ -191,7 +191,7 @@ export const HomePage: React.FC = () => {
       
       {/* 1. HIGH-CONVERSION HERO SECTION */}
       <section 
-        className="relative w-full min-h-[640px] sm:min-h-[600px] lg:h-[86vh] lg:max-h-[860px] overflow-hidden bg-[#F7F1E7]"
+        className="relative w-full min-h-[600px] sm:min-h-[580px] lg:h-[84vh] lg:max-h-[820px] overflow-hidden bg-[#F7E6C8]"
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
@@ -216,32 +216,31 @@ export const HomePage: React.FC = () => {
                 }}
               />
 
-              {/* Multi-layered responsive gradients for maximum text legibility on all devices */}
+              {/* Multi-layered responsive brand gradients for crisp contrast */}
               {/* Desktop lateral gradient */}
-              <div className="absolute inset-0 hidden sm:block bg-gradient-to-r from-[#F7F1E7]/95 via-[#F7F1E7]/60 to-transparent lg:from-[#F7F1E7]/95 lg:via-[#F7F1E7]/40" />
-              {/* Mobile bottom-to-top gradient for crisp readable card text */}
-              <div className="absolute inset-0 sm:hidden bg-gradient-to-t from-[#F7F1E7] via-[#F7F1E7]/85 to-[#F7F1E7]/25" />
-              <div className="absolute inset-0 bg-gradient-to-t from-[#F7F1E7]/60 via-transparent to-transparent" />
+              <div className="absolute inset-0 hidden sm:block bg-gradient-to-r from-[#F7E6C8]/98 via-[#F7E6C8]/80 to-transparent lg:from-[#F7E6C8]/98 lg:via-[#F7E6C8]/60" />
+              {/* Mobile bottom-to-top gradient */}
+              <div className="absolute inset-0 sm:hidden bg-gradient-to-t from-[#F7E6C8] via-[#F7E6C8]/92 to-[#F7E6C8]/30" />
 
-              {/* Content Container */}
-              <div className="max-w-7xl mx-auto h-full px-5 sm:px-6 lg:px-8 relative flex items-end sm:items-center justify-between pb-10 sm:pb-0">
+              {/* Content Container (Layered above gradients) */}
+              <div className="max-w-7xl mx-auto h-full px-5 sm:px-6 lg:px-8 relative z-30 flex items-center justify-between pb-8 sm:pb-0">
                 
                 {/* Left High-Conversion Copy & Actions */}
-                <div className="max-w-xl space-y-3 sm:space-y-4 pt-6 sm:pt-0">
+                <div className="max-w-xl space-y-4 pt-4 sm:pt-0">
                   
-                  {/* Top Eyebrow & Live Trust Indicator */}
+                  {/* Top Eyebrow & Brand Tagline */}
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#8B6335]/15 border border-[#8B6335]/30 text-[10px] sm:text-[11px] font-sans font-bold tracking-[0.18em] uppercase text-[#8B6335]">
-                      <Sparkles size={11} className="text-[#A77B43]" />
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#561C08]/10 border border-[#561C08]/25 text-[10px] sm:text-[11px] font-heading font-bold tracking-[0.18em] uppercase text-[#561C08]">
+                      <Sparkles size={11} className="text-[#561C08]" />
                       <span>{slide.badge}</span>
                     </span>
-                    <span className="hidden sm:inline-block text-[11px] font-sans font-medium text-[#746A60] tracking-wider">
-                      {slide.eyebrow}
+                    <span className="text-[11px] font-body font-semibold text-[#561C08] tracking-widest uppercase">
+                      WEAR YOUR STORY WITH ALLURA
                     </span>
                   </div>
 
                   {/* Main High-Impact Typography Heading */}
-                  <h1 className="font-serif text-3xl sm:text-5xl lg:text-[62px] text-[#2C2926] font-normal leading-[1.04] tracking-tight uppercase">
+                  <h1 className="font-heading text-3xl sm:text-5xl lg:text-[54px] text-[#000000] font-bold leading-[1.08] tracking-tight uppercase">
                     {slide.headingLines.map((line, lIdx) => (
                       <span key={lIdx} className="block">
                         {line}
@@ -249,22 +248,22 @@ export const HomePage: React.FC = () => {
                     ))}
                   </h1>
 
-                  {/* Benefit-Driven Subtext */}
-                  <p className="text-xs sm:text-sm text-[#5C5349] font-sans max-w-lg leading-relaxed line-clamp-3 sm:line-clamp-none">
+                  {/* Benefit-Driven Narrative Subtext */}
+                  <p className="text-xs sm:text-sm text-[#561C08] font-body max-w-lg leading-relaxed font-medium line-clamp-3 sm:line-clamp-none">
                     {slide.description}
                   </p>
 
                   {/* Incentive / Coupon Offer Pill */}
-                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/80 backdrop-blur-sm border border-[#DED2C1] text-[11px] font-sans text-[#3A332C] shadow-xs">
-                    <Tag size={12} className="text-[#8B6335] flex-shrink-0" />
-                    <span className="font-medium truncate">{slide.offerPill}</span>
+                  <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-white border border-[#561C08]/20 text-[11px] font-body text-[#561C08] shadow-xs font-semibold">
+                    <Tag size={12} className="text-[#561C08] flex-shrink-0" />
+                    <span className="font-semibold truncate">{slide.offerPill}</span>
                   </div>
 
                   {/* Dual Call-to-Action Buttons */}
                   <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
                     <Link
                       to={slide.primaryLink}
-                      className="inline-flex items-center justify-center gap-2 bg-[#2C2926] hover:bg-[#8B6335] text-[#FCFAF6] text-xs font-sans font-bold tracking-[0.2em] uppercase py-3.5 px-7 rounded-xl shadow-luxury transition-all duration-300 group text-center"
+                      className="inline-flex items-center justify-center gap-2 bg-[#561C08] hover:bg-[#3D1406] text-white text-xs font-heading font-bold tracking-[0.2em] uppercase py-4 px-8 rounded-xl shadow-md transition-all duration-300 group text-center"
                     >
                       <span>{slide.primaryCta}</span>
                       <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
@@ -275,17 +274,17 @@ export const HomePage: React.FC = () => {
                         href={slide.secondaryLink}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center justify-center gap-2 bg-white/80 hover:bg-white text-[#2C2926] border border-[#DED2C1] text-xs font-sans font-bold tracking-[0.16em] uppercase py-3.5 px-5 rounded-xl shadow-xs transition-all text-center backdrop-blur-sm"
+                        className="inline-flex items-center justify-center gap-2 bg-white hover:bg-[#561C08]/10 text-[#561C08] border-2 border-[#561C08] text-xs font-heading font-bold tracking-[0.16em] uppercase py-3.5 px-6 rounded-xl shadow-xs transition-all text-center"
                       >
-                        <MessageSquare size={14} className="text-[#8B6335]" />
+                        <MessageSquare size={14} className="text-[#561C08]" />
                         <span>{slide.secondaryCta}</span>
                       </a>
                     ) : (
                       <Link
                         to={slide.secondaryLink}
-                        className="inline-flex items-center justify-center gap-2 bg-white/80 hover:bg-white text-[#2C2926] border border-[#DED2C1] text-xs font-sans font-bold tracking-[0.16em] uppercase py-3.5 px-5 rounded-xl shadow-xs transition-all text-center backdrop-blur-sm"
+                        className="inline-flex items-center justify-center gap-2 bg-white hover:bg-[#561C08]/10 text-[#561C08] border-2 border-[#561C08] text-xs font-heading font-bold tracking-[0.16em] uppercase py-3.5 px-6 rounded-xl shadow-xs transition-all text-center"
                       >
-                        <Sparkles size={14} className="text-[#8B6335]" />
+                        <Sparkles size={14} className="text-[#561C08]" />
                         <span>{slide.secondaryCta}</span>
                       </Link>
                     )}
@@ -293,14 +292,14 @@ export const HomePage: React.FC = () => {
 
                   {/* Quick-Jump Trend Category Pills */}
                   <div className="pt-2 hidden sm:flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
-                    <span className="text-[10px] uppercase font-bold tracking-wider text-[#746A60] whitespace-nowrap">
+                    <span className="text-[10px] uppercase font-bold tracking-wider text-[#561C08] whitespace-nowrap">
                       Trending:
                     </span>
                     {slide.quickPills.map(pill => (
                       <Link
                         key={pill.label}
                         to={pill.path}
-                        className="px-2.5 py-1 rounded-full bg-white/70 hover:bg-white border border-[#DED2C1] text-[11px] font-sans font-medium text-[#2C2926] hover:text-[#8B6335] whitespace-nowrap transition-colors"
+                        className="px-3 py-1 rounded-full bg-white hover:bg-[#561C08] text-[#561C08] hover:text-white border border-[#561C08]/20 text-[11px] font-body font-semibold whitespace-nowrap transition-colors shadow-xs"
                       >
                         {pill.label}
                       </Link>
@@ -314,19 +313,19 @@ export const HomePage: React.FC = () => {
                         <button
                           key={i}
                           onClick={() => setCurrentSlide(i)}
-                          className={`text-xs font-sans tracking-widest font-semibold transition-all relative pb-1 ${
-                            currentSlide === i ? 'text-[#2C2926]' : 'text-[#746A60]/50 hover:text-[#2C2926]'
+                          className={`text-xs font-heading tracking-widest font-bold transition-all relative pb-1 ${
+                            currentSlide === i ? 'text-[#561C08]' : 'text-[#561C08]/40 hover:text-[#561C08]'
                           }`}
                         >
                           0{i + 1}
                           {currentSlide === i && (
-                            <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#8B6335] rounded-full animate-fade-in" />
+                            <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#561C08] rounded-full animate-fade-in" />
                           )}
                         </button>
                       ))}
                     </div>
 
-                    <span className="text-[11px] font-sans text-[#746A60] italic hidden sm:inline">
+                    <span className="text-[11px] font-body text-[#561C08] italic hidden sm:inline font-medium">
                       {slide.socialProof}
                     </span>
                   </div>
@@ -334,19 +333,19 @@ export const HomePage: React.FC = () => {
                 </div>
 
                 {/* Right Column (Editorial Quote & Tags for Large Screens) */}
-                <div className="hidden lg:flex flex-col items-end text-right space-y-5 max-w-xs pr-4">
-                  <div className="space-y-1 text-xs font-sans tracking-[0.22em] uppercase text-[#2C2926] font-semibold">
+                <div className="hidden lg:flex flex-col items-end text-right space-y-4 max-w-xs pr-4">
+                  <div className="space-y-1 text-xs font-heading tracking-[0.22em] uppercase text-[#561C08] font-bold">
                     {slide.rightTags.map(tag => (
                       <div key={tag}>{tag}</div>
                     ))}
                   </div>
-                  <div className="w-16 h-[1.5px] bg-[#A77B43]" />
-                  <div className="font-serif italic text-sm text-[#746A60] tracking-wide max-w-[190px] leading-snug">
-                    {slide.quote}
+                  <div className="w-16 h-[2px] bg-[#561C08]" />
+                  <div className="font-heading font-medium text-sm text-[#561C08] tracking-wide max-w-[210px] leading-snug uppercase">
+                    WEAR YOUR STORY WITH ALLURA
                   </div>
-                  <div className="pt-4 flex items-center gap-1.5 text-[11px] text-[#8B6335] font-sans font-bold">
-                    <Star size={12} fill="#A77B43" className="text-[#A77B43]" />
-                    <span>Kerala's Finest Handlooms</span>
+                  <div className="pt-2 flex items-center gap-1.5 text-[11px] text-[#561C08] font-body font-bold">
+                    <Star size={12} fill="#561C08" className="text-[#561C08]" />
+                    <span>Perinthalmanna Atelier</span>
                   </div>
                 </div>
 
@@ -356,19 +355,19 @@ export const HomePage: React.FC = () => {
         })}
 
         {/* Carousel Arrow Controls */}
-        <div className="absolute bottom-6 right-6 z-20 hidden sm:flex items-center gap-2.5">
+        <div className="absolute bottom-6 right-6 z-30 hidden sm:flex items-center gap-2.5">
           <button
             onClick={() =>
               setCurrentSlide(prev => (prev === 0 ? heroSlides.length - 1 : prev - 1))
             }
-            className="w-10 h-10 rounded-full bg-[#FCFAF6]/90 hover:bg-[#FCFAF6] text-[#2C2926] border border-[#DED2C1] flex items-center justify-center backdrop-blur-sm transition-all shadow-subtle hover:scale-105"
+            className="w-10 h-10 rounded-full bg-white hover:bg-[#561C08] text-[#561C08] hover:text-white border border-[#561C08]/20 flex items-center justify-center transition-all shadow-md hover:scale-105"
             aria-label="Previous Slide"
           >
             <ChevronLeft size={18} />
           </button>
           <button
             onClick={() => setCurrentSlide(prev => (prev + 1) % heroSlides.length)}
-            className="w-10 h-10 rounded-full bg-[#FCFAF6]/90 hover:bg-[#FCFAF6] text-[#2C2926] border border-[#DED2C1] flex items-center justify-center backdrop-blur-sm transition-all shadow-subtle hover:scale-105"
+            className="w-10 h-10 rounded-full bg-white hover:bg-[#561C08] text-[#561C08] hover:text-white border border-[#561C08]/20 flex items-center justify-center transition-all shadow-md hover:scale-105"
             aria-label="Next Slide"
           >
             <ChevronRight size={18} />
@@ -377,46 +376,46 @@ export const HomePage: React.FC = () => {
       </section>
 
       {/* 1.1 HIGH-CONVERSION TRUST & PROMISE STRIP */}
-      <section className="max-w-7xl mx-auto px-5 sm:px-6 lg:px-8 -mt-6 sm:-mt-10 relative z-20">
-        <div className="bg-white/95 backdrop-blur-md border border-[#DED2C1] rounded-2xl p-4 sm:p-6 shadow-luxury grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 text-xs font-sans">
+      <section className="max-w-7xl mx-auto px-5 sm:px-6 lg:px-8 -mt-6 sm:-mt-10 relative z-30">
+        <div className="bg-white border border-[#561C08]/15 rounded-2xl p-4 sm:p-6 shadow-md grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 text-xs font-body">
           
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[#F7F1E7] text-[#8B6335] flex items-center justify-center flex-shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-[#F7E6C8] text-[#561C08] flex items-center justify-center flex-shrink-0">
               <Truck size={18} />
             </div>
             <div>
-              <p className="font-bold text-[#2C2926] font-serif text-sm">48-Hr Kerala Dispatch</p>
-              <p className="text-[11px] text-[#746A60]">Complimentary on orders &gt; ₹2,999</p>
+              <p className="font-bold text-[#000000] font-heading text-sm">48-Hr Kerala Dispatch</p>
+              <p className="text-[11px] text-[#561C08]/80 font-medium">Free on orders &gt; ₹2,999</p>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[#F7F1E7] text-[#8B6335] flex items-center justify-center flex-shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-[#F7E6C8] text-[#561C08] flex items-center justify-center flex-shrink-0">
               <ShieldCheck size={18} />
             </div>
             <div>
-              <p className="font-bold text-[#2C2926] font-serif text-sm">Silk Mark Certified</p>
-              <p className="text-[11px] text-[#746A60]">100% genuine artisan handlooms</p>
+              <p className="font-bold text-[#000000] font-heading text-sm">Silk Mark Certified</p>
+              <p className="text-[11px] text-[#561C08]/80 font-medium">100% genuine artisan handlooms</p>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[#F7F1E7] text-[#8B6335] flex items-center justify-center flex-shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-[#F7E6C8] text-[#561C08] flex items-center justify-center flex-shrink-0">
               <RefreshCw size={18} />
             </div>
             <div>
-              <p className="font-bold text-[#2C2926] font-serif text-sm">7-Day Doorstep Swaps</p>
-              <p className="text-[11px] text-[#746A60]">Effortless size & style exchange</p>
+              <p className="font-bold text-[#000000] font-heading text-sm">7-Day Doorstep Swaps</p>
+              <p className="text-[11px] text-[#561C08]/80 font-medium">Hassle-free size & style exchange</p>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[#F7F1E7] text-[#8B6335] flex items-center justify-center flex-shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-[#F7E6C8] text-[#561C08] flex items-center justify-center flex-shrink-0">
               <MessageSquare size={18} />
             </div>
             <div>
-              <p className="font-bold text-[#2C2926] font-serif text-sm">WhatsApp Concierge</p>
-              <p className="text-[11px] text-[#746A60]">Personalized styling at 9037991774</p>
+              <p className="font-bold text-[#000000] font-heading text-sm">WhatsApp Concierge</p>
+              <p className="text-[11px] text-[#561C08]/80 font-medium">Styling advice at 9037991774</p>
             </div>
           </div>
 
@@ -430,13 +429,13 @@ export const HomePage: React.FC = () => {
             <span className="text-[11px] font-sans font-bold tracking-[0.25em] uppercase text-[#8B6335] block mb-1">
               FIND YOUR LOOK
             </span>
-            <h2 className="font-serif text-2xl sm:text-4xl text-[#2C2926] font-normal uppercase tracking-tight">
+            <h2 className="font-heading text-2xl sm:text-4xl text-[#000000] font-bold uppercase tracking-tight">
               SHOP BY OCCASION
             </h2>
           </div>
           <Link
             to="/shop"
-            className="inline-flex items-center gap-1.5 text-xs font-sans font-bold tracking-[0.2em] text-[#2C2926] hover:text-[#8B6335] transition-colors mt-3 sm:mt-0 uppercase"
+            className="inline-flex items-center gap-1.5 text-xs font-heading font-bold tracking-[0.2em] text-[#561C08] hover:text-[#3D1406] transition-colors mt-3 sm:mt-0 uppercase"
           >
             <span>EXPLORE ALL</span>
             <ArrowRight size={14} />
@@ -479,29 +478,29 @@ export const HomePage: React.FC = () => {
           ]).map(banner => (
             <div
               key={banner.id}
-              className="relative aspect-[16/10] sm:aspect-[16/9] rounded-2xl overflow-hidden group shadow-subtle border border-[#DED2C1]"
+              className="relative aspect-[16/10] sm:aspect-[16/9] rounded-2xl overflow-hidden group shadow-md border border-[#561C08]/15"
             >
               <img
                 src={banner.desktopImage || '/images/editorial-banners/new-arrivals.jpeg'}
                 alt={banner.headline || banner.title}
                 className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-700"
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-[#2C2926]/90 via-[#2C2926]/40 to-transparent flex flex-col justify-end p-6 sm:p-8 text-[#FCFAF6]">
+              <div className="absolute inset-0 bg-gradient-to-t from-[#561C08]/95 via-[#561C08]/45 to-transparent flex flex-col justify-end p-6 sm:p-8 text-white">
                 {banner.badge && (
-                  <span className="inline-block text-[10px] font-sans font-bold uppercase tracking-[0.2em] text-[#A77B43] mb-1">
+                  <span className="inline-block text-[10px] font-heading font-bold uppercase tracking-[0.2em] text-[#F7E6C8] mb-1">
                     {banner.badge}
                   </span>
                 )}
-                <h3 className="font-serif text-2xl sm:text-3xl font-medium tracking-wide text-[#FCFAF6]">
+                <h3 className="font-heading text-2xl sm:text-3xl font-bold tracking-wide text-white">
                   {banner.headline || banner.title}
                 </h3>
-                <p className="text-xs font-sans text-[#EFE5D5] mt-1.5 max-w-xs leading-relaxed">
+                <p className="text-xs sm:text-sm font-body text-[#F7E6C8] mt-1.5 max-w-xs leading-relaxed font-normal">
                   {banner.subtitle || banner.description}
                 </p>
                 <div className="pt-4">
                   <Link
                     to={banner.targetUrl || '/shop'}
-                    className="inline-flex items-center gap-2 bg-[#8B6335] hover:bg-[#2C2926] text-[#FCFAF6] text-[11px] font-sans font-bold tracking-[0.2em] uppercase py-2.5 px-5 rounded-xl transition-all duration-300 shadow-xs group/btn"
+                    className="inline-flex items-center gap-2 bg-[#561C08] hover:bg-[#3D1406] text-white text-[11px] font-heading font-bold tracking-[0.2em] uppercase py-3 px-6 rounded-xl transition-all duration-300 shadow-md group/btn border border-white/20"
                   >
                     <span>{banner.ctaText || 'SHOP NOW'}</span>
                     <ArrowRight size={13} className="group-hover/btn:translate-x-1 transition-transform" />
@@ -515,18 +514,18 @@ export const HomePage: React.FC = () => {
 
       {/* 4. BEST SELLERS PRODUCT GRID */}
       <section className="max-w-7xl mx-auto px-6 lg:px-8">
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-8 border-b border-[#DED2C1]/60 pb-4">
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-8 border-b border-[#561C08]/15 pb-4">
           <div>
-            <h2 className="font-serif text-2xl sm:text-4xl text-[#2C2926] font-normal uppercase tracking-tight">
+            <h2 className="font-heading text-2xl sm:text-4xl text-[#000000] font-bold uppercase tracking-tight">
               BEST SELLERS
             </h2>
-            <p className="text-xs sm:text-sm text-[#746A60] font-sans mt-0.5">
+            <p className="text-xs sm:text-sm text-[#561C08] font-body mt-0.5 font-medium">
               Loved by our boutique customers
             </p>
           </div>
           <Link
             to="/shop"
-            className="inline-flex items-center gap-1.5 text-xs font-sans font-bold tracking-[0.2em] text-[#2C2926] hover:text-[#8B6335] transition-colors mt-3 sm:mt-0 uppercase"
+            className="inline-flex items-center gap-1.5 text-xs font-heading font-bold tracking-[0.2em] text-[#561C08] hover:text-[#3D1406] transition-colors mt-3 sm:mt-0 uppercase"
           >
             <span>VIEW ALL</span>
             <ArrowRight size={14} />
@@ -541,63 +540,63 @@ export const HomePage: React.FC = () => {
       </section>
 
       {/* 5. TRUST STRIP / SERVICE FEATURES */}
-      <section className="border-y border-[#DED2C1] bg-[#EFE5D5]/50 py-10">
+      <section className="border-y border-[#561C08]/15 bg-[#F7E6C8] py-10">
         <div className="max-w-7xl mx-auto px-6 lg:px-8 grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
           <div className="flex flex-col items-center space-y-2">
-            <div className="w-11 h-11 rounded-full bg-[#FCFAF6] flex items-center justify-center text-[#A77B43] shadow-xs border border-[#DED2C1]">
+            <div className="w-11 h-11 rounded-full bg-white flex items-center justify-center text-[#561C08] shadow-xs border border-[#561C08]/15">
               <Truck size={20} />
             </div>
-            <h4 className="font-serif text-sm font-semibold tracking-wider uppercase text-[#2C2926]">
+            <h4 className="font-heading text-sm font-bold tracking-wider uppercase text-[#000000]">
               FREE SHIPPING
             </h4>
-            <p className="text-xs text-[#746A60] font-sans">On orders above ₹2,999</p>
+            <p className="text-xs text-[#561C08] font-body font-medium">On orders above ₹2,999</p>
           </div>
 
           <div className="flex flex-col items-center space-y-2">
-            <div className="w-11 h-11 rounded-full bg-[#FCFAF6] flex items-center justify-center text-[#A77B43] shadow-xs border border-[#DED2C1]">
+            <div className="w-11 h-11 rounded-full bg-white flex items-center justify-center text-[#561C08] shadow-xs border border-[#561C08]/15">
               <ShieldCheck size={20} />
             </div>
-            <h4 className="font-serif text-sm font-semibold tracking-wider uppercase text-[#2C2926]">
+            <h4 className="font-heading text-sm font-bold tracking-wider uppercase text-[#000000]">
               SECURE PAYMENTS
             </h4>
-            <p className="text-xs text-[#746A60] font-sans">100% safe and trusted</p>
+            <p className="text-xs text-[#561C08] font-body font-medium">100% safe and trusted</p>
           </div>
 
           <div className="flex flex-col items-center space-y-2">
-            <div className="w-11 h-11 rounded-full bg-[#FCFAF6] flex items-center justify-center text-[#A77B43] shadow-xs border border-[#DED2C1]">
+            <div className="w-11 h-11 rounded-full bg-white flex items-center justify-center text-[#561C08] shadow-xs border border-[#561C08]/15">
               <RefreshCw size={20} />
             </div>
-            <h4 className="font-serif text-sm font-semibold tracking-wider uppercase text-[#2C2926]">
+            <h4 className="font-heading text-sm font-bold tracking-wider uppercase text-[#000000]">
               EASY EXCHANGE
             </h4>
-            <p className="text-xs text-[#746A60] font-sans">Hassle free</p>
+            <p className="text-xs text-[#561C08] font-body font-medium">7-Day doorstep swaps</p>
           </div>
 
           <div className="flex flex-col items-center space-y-2">
-            <div className="w-11 h-11 rounded-full bg-[#FCFAF6] flex items-center justify-center text-[#A77B43] shadow-xs border border-[#DED2C1]">
+            <div className="w-11 h-11 rounded-full bg-white flex items-center justify-center text-[#561C08] shadow-xs border border-[#561C08]/15">
               <MessageSquare size={20} />
             </div>
-            <h4 className="font-serif text-sm font-semibold tracking-wider uppercase text-[#2C2926]">
+            <h4 className="font-heading text-sm font-bold tracking-wider uppercase text-[#000000]">
               WHATSAPP SUPPORT
             </h4>
-            <p className="text-xs text-[#746A60] font-sans">+91 9037991774</p>
+            <p className="text-xs text-[#561C08] font-body font-medium">+91 9037991774</p>
           </div>
         </div>
       </section>
 
-      {/* 6. THE ALLURA EXPERIENCE */}
+      {/* 6. THE ALLURA EXPERIENCE & BRAND STORY */}
       <section className="max-w-7xl mx-auto px-6 lg:px-8">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
-          <div className="lg:col-span-5 relative aspect-[4/5] rounded-xl overflow-hidden shadow-luxury group border border-[#DED2C1]">
+          <div className="lg:col-span-5 relative aspect-[4/5] rounded-2xl overflow-hidden shadow-md group border border-[#561C08]/15">
             <img
               src="/images/boutique-experience/boutique-store.jpeg"
               alt="The Allura Boutique Experience"
               className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-700"
             />
-            <div className="absolute inset-0 bg-[#342A25]/25 flex items-center justify-center">
+            <div className="absolute inset-0 bg-[#561C08]/20 flex items-center justify-center">
               <button
                 onClick={() => navigate('/about')}
-                className="w-16 h-16 rounded-full bg-[#FCFAF6]/90 backdrop-blur-md text-[#2C2926] flex items-center justify-center shadow-luxury hover:scale-110 transition-transform hover:bg-[#A77B43] hover:text-[#FCFAF6]"
+                className="w-16 h-16 rounded-full bg-white/90 backdrop-blur-md text-[#561C08] flex items-center justify-center shadow-md hover:scale-110 transition-transform hover:bg-[#561C08] hover:text-white"
                 aria-label="Play boutique film"
               >
                 <Play size={22} className="ml-1 fill-current" />
@@ -606,22 +605,22 @@ export const HomePage: React.FC = () => {
           </div>
 
           <div className="lg:col-span-4 space-y-5">
-            <span className="text-[11px] font-sans font-bold tracking-[0.25em] uppercase text-[#8B6335]">
-              MORE THAN FASHION
+            <span className="text-[11px] font-heading font-bold tracking-[0.25em] uppercase text-[#561C08]">
+              WEAR YOUR STORY WITH ALLURA
             </span>
 
-            <h2 className="font-serif text-3xl sm:text-4xl text-[#2C2926] font-normal leading-tight uppercase">
+            <h2 className="font-heading text-3xl sm:text-4xl text-[#000000] font-bold leading-tight uppercase">
               THE ALLURA EXPERIENCE
             </h2>
 
-            <p className="text-xs sm:text-sm text-[#746A60] font-sans leading-relaxed">
-              A curated destination for modern women who appreciate modesty, timeless elegance, quality and individuality. From everyday essentials to statement pieces, Allura brings you thoughtfully selected fashion for every occasion.
+            <p className="text-xs sm:text-sm text-[#561C08] font-body leading-relaxed font-normal">
+              A curated destination for modern women who appreciate modesty, timeless elegance, quality and individuality. From everyday essentials to statement pieces, Allura brings you thoughtfully selected fashion for every celebration.
             </p>
 
             <div className="pt-2">
               <Link
                 to="/about"
-                className="inline-flex items-center gap-2 bg-[#8B6335] hover:bg-[#342A25] text-[#FCFAF6] text-xs font-sans font-bold tracking-[0.25em] uppercase py-3.5 px-6 rounded-sm transition-all duration-300 shadow-xs"
+                className="inline-flex items-center gap-2 bg-[#561C08] hover:bg-[#3D1406] text-white text-xs font-heading font-bold tracking-[0.25em] uppercase py-3.5 px-6 rounded-xl transition-all duration-300 shadow-md"
               >
                 <span>OUR STORY</span>
                 <ArrowRight size={14} />
@@ -629,44 +628,44 @@ export const HomePage: React.FC = () => {
             </div>
           </div>
 
-          <div className="lg:col-span-3 space-y-6 lg:border-l lg:border-[#DED2C1] lg:pl-8">
+          <div className="lg:col-span-3 space-y-6 lg:border-l lg:border-[#561C08]/15 lg:pl-8">
             <div className="flex items-start gap-4">
-              <div className="w-10 h-10 rounded-full bg-[#EFE5D5] flex items-center justify-center text-[#8B6335] flex-shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-[#561C08] flex-shrink-0 border border-[#561C08]/15 shadow-xs">
                 <Diamond size={18} />
               </div>
               <div>
-                <h4 className="font-serif text-sm font-semibold tracking-wider uppercase text-[#2C2926]">
-                  MODEST LUXURY
+                <h4 className="font-heading text-sm font-bold tracking-wider uppercase text-[#000000]">
+                  WARM LUXURY
                 </h4>
-                <p className="text-xs text-[#746A60] font-sans mt-0.5">
+                <p className="text-xs text-[#561C08] font-body mt-0.5 font-medium">
                   Handcrafted styles for every you
                 </p>
               </div>
             </div>
 
             <div className="flex items-start gap-4">
-              <div className="w-10 h-10 rounded-full bg-[#EFE5D5] flex items-center justify-center text-[#8B6335] flex-shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-[#561C08] flex-shrink-0 border border-[#561C08]/15 shadow-xs">
                 <Feather size={18} />
               </div>
               <div>
-                <h4 className="font-serif text-sm font-semibold tracking-wider uppercase text-[#2C2926]">
+                <h4 className="font-heading text-sm font-bold tracking-wider uppercase text-[#000000]">
                   PREMIUM FABRICS
                 </h4>
-                <p className="text-xs text-[#746A60] font-sans mt-0.5">
+                <p className="text-xs text-[#561C08] font-body mt-0.5 font-medium">
                   Pure georgette, silk & organza
                 </p>
               </div>
             </div>
 
             <div className="flex items-start gap-4">
-              <div className="w-10 h-10 rounded-full bg-[#EFE5D5] flex items-center justify-center text-[#8B6335] flex-shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-[#561C08] flex-shrink-0 border border-[#561C08]/15 shadow-xs">
                 <Heart size={18} />
               </div>
               <div>
-                <h4 className="font-serif text-sm font-semibold tracking-wider uppercase text-[#2C2926]">
+                <h4 className="font-heading text-sm font-bold tracking-wider uppercase text-[#000000]">
                   MADE FOR YOUR MOMENTS
                 </h4>
-                <p className="text-xs text-[#746A60] font-sans mt-0.5">
+                <p className="text-xs text-[#561C08] font-body mt-0.5 font-medium">
                   Modest fashion that feels like you
                 </p>
               </div>

@@ -5,48 +5,48 @@ import { AlluraLogo } from '../common/AlluraLogo';
 
 export const Footer: React.FC = () => {
   return (
-    <footer className="bg-allura-bgSecondary/60 border-t border-allura-border pt-16 pb-24 lg:pb-12 text-allura-text">
+    <footer className="bg-[#561C08] border-t border-[#3D1406] pt-16 pb-24 lg:pb-12 text-[#F7E6C8]">
       <div className="max-w-7xl mx-auto px-6 lg:px-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-10 lg:gap-8 pb-14 border-b border-allura-border/70">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-10 lg:gap-8 pb-14 border-b border-white/15">
           {/* Col 1: Brand & Logo */}
           <div className="lg:col-span-1 flex flex-col items-start space-y-4">
-            <AlluraLogo size="md" showTagline={true} />
-            <p className="text-xs text-allura-muted font-sans leading-relaxed pt-2">
+            <AlluraLogo size="md" variant="light" showTagline={false} />
+            <p className="text-xs text-[#F7E6C8]/80 font-body leading-relaxed pt-2">
               A curated destination for modern women who appreciate elegance, quality and individuality.
             </p>
-            <div className="pt-2 text-xs font-serif italic text-allura-goldDark">
-              "Confidence looks good on you"
+            <div className="pt-2 text-xs font-heading font-bold uppercase tracking-wider text-[#F7E6C8]">
+              WEAR YOUR STORY WITH ALLURA
             </div>
           </div>
 
           {/* Col 2: Shop */}
           <div className="space-y-4">
-            <h4 className="text-[12px] font-sans font-bold tracking-[0.25em] text-allura-darkBrown uppercase">
+            <h4 className="text-[12px] font-heading font-bold tracking-[0.25em] text-white uppercase">
               SHOP
             </h4>
-            <ul className="space-y-2.5 text-xs text-allura-muted font-sans">
+            <ul className="space-y-2.5 text-xs text-[#F7E6C8]/80 font-body font-medium">
               <li>
-                <Link to="/shop" className="hover:text-allura-goldDark transition-colors">
+                <Link to="/shop" className="hover:text-white transition-colors">
                   All Products
                 </Link>
               </li>
               <li>
-                <Link to="/shop?filter=new" className="hover:text-allura-goldDark transition-colors">
+                <Link to="/shop?filter=new" className="hover:text-white transition-colors">
                   New Arrivals
                 </Link>
               </li>
               <li>
-                <Link to="/collections/festive-edit" className="hover:text-allura-goldDark transition-colors">
+                <Link to="/collections/festive-edit" className="hover:text-white transition-colors">
                   Collections
                 </Link>
               </li>
               <li>
-                <Link to="/size-guide" className="hover:text-allura-goldDark transition-colors">
+                <Link to="/size-guide" className="hover:text-white transition-colors">
                   Size Guide
                 </Link>
               </li>
               <li>
-                <Link to="/lookbook" className="hover:text-allura-goldDark transition-colors">
+                <Link to="/lookbook" className="hover:text-white transition-colors">
                   Lookbook
                 </Link>
               </li>
@@ -55,64 +55,64 @@ export const Footer: React.FC = () => {
 
           {/* Col 3: About */}
           <div className="space-y-4">
-            <h4 className="text-[12px] font-sans font-bold tracking-[0.25em] text-allura-darkBrown uppercase">
+            <h4 className="text-[12px] font-heading font-bold tracking-[0.25em] text-white uppercase">
               ABOUT
             </h4>
-            <ul className="space-y-2.5 text-xs text-allura-muted font-sans">
+            <ul className="space-y-2.5 text-xs text-[#F7E6C8]/80 font-body font-medium">
               <li>
-                <Link to="/about" className="hover:text-allura-goldDark transition-colors">
+                <Link to="/about" className="hover:text-white transition-colors">
                   Our Story
                 </Link>
               </li>
               <li>
-                <Link to="/contact" className="hover:text-allura-goldDark transition-colors">
+                <Link to="/contact" className="hover:text-white transition-colors">
                   Contact Us
                 </Link>
               </li>
               <li>
-                <Link to="/contact#location" className="hover:text-allura-goldDark transition-colors">
+                <Link to="/contact#location" className="hover:text-white transition-colors">
                   Store Location
                 </Link>
               </li>
               <li>
-                <Link to="/about#craftsmanship" className="hover:text-allura-goldDark transition-colors">
+                <Link to="/about#craftsmanship" className="hover:text-white transition-colors">
                   Craftsmanship
                 </Link>
               </li>
               <li>
-                <span className="text-allura-muted/70 cursor-not-allowed">Careers (Coming Soon)</span>
+                <span className="text-[#F7E6C8]/50 cursor-not-allowed">Careers (Coming Soon)</span>
               </li>
             </ul>
           </div>
 
           {/* Col 4: Customer Care */}
           <div className="space-y-4">
-            <h4 className="text-[12px] font-sans font-bold tracking-[0.25em] text-allura-darkBrown uppercase">
+            <h4 className="text-[12px] font-heading font-bold tracking-[0.25em] text-white uppercase">
               CUSTOMER CARE
             </h4>
-            <ul className="space-y-2.5 text-xs text-allura-muted font-sans">
+            <ul className="space-y-2.5 text-xs text-[#F7E6C8]/80 font-body font-medium">
               <li>
-                <Link to="/account" className="hover:text-allura-goldDark transition-colors">
+                <Link to="/account" className="hover:text-white transition-colors">
                   Track Order
                 </Link>
               </li>
               <li>
-                <Link to="/shipping-returns" className="hover:text-allura-goldDark transition-colors">
+                <Link to="/shipping-returns" className="hover:text-white transition-colors">
                   Shipping Policy
                 </Link>
               </li>
               <li>
-                <Link to="/shipping-returns#exchange" className="hover:text-allura-goldDark transition-colors">
+                <Link to="/shipping-returns#exchange" className="hover:text-white transition-colors">
                   Exchange & Returns
                 </Link>
               </li>
               <li>
-                <Link to="/shipping-returns#faqs" className="hover:text-allura-goldDark transition-colors">
+                <Link to="/shipping-returns#faqs" className="hover:text-white transition-colors">
                   FAQs
                 </Link>
               </li>
               <li>
-                <Link to="/shipping-returns#terms" className="hover:text-allura-goldDark transition-colors">
+                <Link to="/shipping-returns#terms" className="hover:text-white transition-colors">
                   Terms & Conditions
                 </Link>
               </li>
@@ -121,24 +121,24 @@ export const Footer: React.FC = () => {
 
           {/* Col 5: Get In Touch */}
           <div className="space-y-4">
-            <h4 className="text-[12px] font-sans font-bold tracking-[0.25em] text-allura-darkBrown uppercase">
+            <h4 className="text-[12px] font-heading font-bold tracking-[0.25em] text-white uppercase">
               GET IN TOUCH
             </h4>
-            <ul className="space-y-3 text-xs text-allura-muted font-sans">
+            <ul className="space-y-3 text-xs text-[#F7E6C8]/80 font-body">
               <li className="flex items-center gap-2.5">
-                <Phone size={14} className="text-allura-gold flex-shrink-0" />
-                <a href="tel:+919037991774" className="hover:text-allura-goldDark transition-colors">
+                <Phone size={14} className="text-[#F7E6C8] flex-shrink-0" />
+                <a href="tel:+919037991774" className="hover:text-white transition-colors">
                   +91 9037991774
                 </a>
               </li>
               <li className="flex items-center gap-2.5">
-                <Phone size={14} className="text-allura-gold flex-shrink-0" />
-                <a href="tel:+919207801775" className="hover:text-allura-goldDark transition-colors">
+                <Phone size={14} className="text-[#F7E6C8] flex-shrink-0" />
+                <a href="tel:+919207801775" className="hover:text-white transition-colors">
                   +91 9207801775
                 </a>
               </li>
               <li className="flex items-start gap-2.5">
-                <MapPin size={14} className="text-allura-gold flex-shrink-0 mt-0.5" />
+                <MapPin size={14} className="text-[#F7E6C8] flex-shrink-0 mt-0.5" />
                 <span className="leading-snug">OOTY ROAD, PERINTHALMANNA, KERALA</span>
               </li>
             </ul>
@@ -149,7 +149,7 @@ export const Footer: React.FC = () => {
                 href="https://www.instagram.com/alluraboutiqueofficial?stkn=MWl1Ymx3NTNqdTc2dg=="
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-8 h-8 rounded-full bg-allura-card border border-allura-border flex items-center justify-center text-allura-muted hover:text-allura-gold hover:border-allura-gold transition-all"
+                className="w-8 h-8 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-[#F7E6C8] hover:text-white hover:bg-white/20 transition-all"
                 aria-label="Allura Boutique Instagram"
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -162,7 +162,7 @@ export const Footer: React.FC = () => {
                 href="https://facebook.com"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-8 h-8 rounded-full bg-allura-card border border-allura-border flex items-center justify-center text-allura-muted hover:text-allura-gold hover:border-allura-gold transition-all"
+                className="w-8 h-8 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-[#F7E6C8] hover:text-white hover:bg-white/20 transition-all"
                 aria-label="Allura Boutique Facebook"
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -173,7 +173,7 @@ export const Footer: React.FC = () => {
                 href="https://youtube.com"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-8 h-8 rounded-full bg-allura-card border border-allura-border flex items-center justify-center text-allura-muted hover:text-allura-gold hover:border-allura-gold transition-all"
+                className="w-8 h-8 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-[#F7E6C8] hover:text-white hover:bg-white/20 transition-all"
                 aria-label="Allura Boutique YouTube"
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -185,7 +185,7 @@ export const Footer: React.FC = () => {
                 href="https://pinterest.com"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-8 h-8 rounded-full bg-allura-card border border-allura-border flex items-center justify-center text-allura-muted hover:text-allura-gold hover:border-allura-gold transition-all"
+                className="w-8 h-8 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-[#F7E6C8] hover:text-white hover:bg-white/20 transition-all"
                 aria-label="Allura Boutique Pinterest"
               >
                 <Share2 size={14} />
@@ -195,15 +195,15 @@ export const Footer: React.FC = () => {
         </div>
 
         {/* Bottom Rights Bar */}
-        <div className="pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-[11px] font-sans text-allura-muted tracking-wide">
+        <div className="pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-[11px] font-body text-[#F7E6C8]/70 tracking-wide">
           <p>© 2026 Allura Boutique. All rights reserved.</p>
           <div className="flex items-center gap-4">
-            <Link to="/admin" className="text-allura-goldDark hover:text-allura-gold font-semibold uppercase tracking-wider text-[10px]">
+            <Link to="/admin" className="text-[#F7E6C8] hover:text-white font-heading font-bold uppercase tracking-wider text-[11px]">
               Staff / Admin Portal →
             </Link>
             <span className="opacity-40">•</span>
-            <p className="flex items-center gap-1.5 font-serif italic text-xs">
-              Designed for the modern you.
+            <p className="flex items-center gap-1.5 font-heading font-semibold uppercase text-xs text-[#F7E6C8]">
+              WEAR YOUR STORY WITH ALLURA
             </p>
           </div>
         </div>

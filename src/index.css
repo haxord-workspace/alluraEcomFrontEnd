@@ -3,25 +3,27 @@
 
 @layer base {
   :root {
-    --bg-primary: #F7F1E7;
-    --bg-secondary: #EFE5D5;
-    --bg-card: #FCFAF6;
-    --text-primary: #2C2926;
-    --text-secondary: #746A60;
-    --accent-gold: #A77B43;
-    --accent-gold-dark: #8B6335;
-    --border-color: #DED2C1;
+    --bg-primary: #F7E6C8;
+    --bg-secondary: #FFFFFF;
+    --bg-card: #FFFFFF;
+    --text-primary: #000000;
+    --text-secondary: #561C08;
+    --brand-brown: #561C08;
+    --brand-cream: #F7E6C8;
+    --border-color: rgba(86, 28, 8, 0.15);
   }
 
   html {
     scroll-behavior: smooth;
     -webkit-tap-highlight-color: transparent;
+    font-family: 'Quicksand', 'Poppins', sans-serif;
   }
 
   body {
-    background-color: var(--bg-primary);
-    color: var(--text-primary);
+    background-color: #F7E6C8;
+    color: #000000;
     overflow-x: hidden;
+    font-family: 'Quicksand', 'Poppins', sans-serif;
   }
 }
 
@@ -31,14 +33,14 @@
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #F7F1E7;
+  background: #F7E6C8;
 }
 ::-webkit-scrollbar-thumb {
-  background: #DED2C1;
+  background: rgba(86, 28, 8, 0.25);
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #A77B43;
+  background: #561C08;
 }
 
 /* Arched image styling */

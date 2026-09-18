@@ -40,7 +40,7 @@ export const DesktopHeader: React.FC = () => {
   ];
 
   return (
-    <header className="hidden lg:block sticky top-0 z-40 bg-[#FCFAF6] border-b border-[#DED2C1] shadow-xs transition-all duration-200">
+    <header className="hidden lg:block sticky top-0 z-40 bg-[#FFFFFF] border-b border-[#561C08]/15 shadow-xs transition-all duration-200">
       <div className="max-w-7xl mx-auto px-6 xl:px-8 h-20 flex items-center justify-between gap-4">
         {/* Left Navigation (30% width) */}
         <nav className="flex items-center gap-6 xl:gap-8 flex-1 justify-start">
@@ -55,8 +55,8 @@ export const DesktopHeader: React.FC = () => {
               >
                 <Link
                   to={link.to}
-                  className={`text-[12px] tracking-[0.2em] font-sans font-medium flex items-center gap-1 transition-colors py-2 ${
-                    isActive ? 'text-[#8B6335] font-bold' : 'text-[#2C2926] hover:text-[#A77B43]'
+                  className={`text-[12px] tracking-[0.2em] font-heading font-medium flex items-center gap-1 transition-colors py-2 ${
+                    isActive ? 'text-[#561C08] font-bold' : 'text-[#000000] hover:text-[#561C08]'
                   }`}
                 >
                   {link.label}
@@ -64,7 +64,7 @@ export const DesktopHeader: React.FC = () => {
                     <ChevronDown
                       size={11}
                       className={`transition-transform duration-200 opacity-60 ${
-                        activeDropdown === link.label ? 'rotate-180 text-[#A77B43]' : ''
+                        activeDropdown === link.label ? 'rotate-180 text-[#561C08]' : ''
                       }`}
                     />
                   )}
@@ -72,13 +72,13 @@ export const DesktopHeader: React.FC = () => {
 
                 {/* Dropdown */}
                 {link.hasDropdown && activeDropdown === link.label && (
-                  <div className="absolute top-full left-0 w-48 bg-[#FCFAF6] border border-[#DED2C1] rounded-sm shadow-luxury py-2 animate-fade-in z-50">
+                  <div className="absolute top-full left-0 w-48 bg-[#FFFFFF] border border-[#561C08]/15 rounded-xl shadow-md py-2 animate-fade-in z-50">
                     {link.items?.map(item => (
                       <Link
                         key={item.label}
                         to={item.to}
                         onClick={() => setActiveDropdown(null)}
-                        className="block px-4 py-2 text-xs font-sans text-[#2C2926] hover:bg-[#EFE5D5]/60 hover:text-[#8B6335] transition-colors"
+                        className="block px-4 py-2.5 text-xs font-body text-[#000000] hover:bg-[#F7E6C8] hover:text-[#561C08] transition-colors font-medium"
                       >
                         {item.label}
                       </Link>
@@ -100,48 +100,48 @@ export const DesktopHeader: React.FC = () => {
           {/* Search Pill Input matching Reference */}
           <button
             onClick={() => setIsSearchOpen(true)}
-            className="flex items-center gap-2.5 bg-[#F2EDE4] hover:bg-[#EAE2D5] border border-[#DED2C1] rounded-full px-4 py-2 text-xs text-[#746A60] hover:text-[#2C2926] transition-all w-52 xl:w-60 justify-start group"
+            className="flex items-center gap-2.5 bg-[#F5F5F5] hover:bg-[#F7E6C8] border border-[#561C08]/15 rounded-full px-4 py-2 text-xs font-body text-[#561C08] transition-colors w-48 xl:w-56"
+            aria-label="Search boutique collection"
           >
-            <Search size={14} className="text-[#A77B43] flex-shrink-0" />
-            <span className="truncate text-xs font-sans">Search for dresses, sets, ...</span>
+            <Search size={14} className="text-[#561C08]" />
+            <span className="truncate text-[11px] font-medium">Search dresses, sets...</span>
           </button>
 
           {/* Account */}
           <Link
             to="/account"
-            className="text-[#2C2926] hover:text-[#A77B43] transition-colors p-1"
-            title="My Account"
-            aria-label="Account"
+            className="text-[#000000] hover:text-[#561C08] transition-colors p-1 relative"
+            aria-label="Account profile"
           >
-            <UserRound size={20} strokeWidth={1.7} />
+            <UserRound size={20} />
           </Link>
 
           {/* Wishlist */}
           <Link
             to="/wishlist"
-            className="text-[#2C2926] hover:text-[#A77B43] transition-colors relative p-1"
-            title="Wishlist"
-            aria-label="Wishlist"
+            className="text-[#000000] hover:text-[#561C08] transition-colors p-1 relative"
+            aria-label={`Wishlist with ${wishlist.length} items`}
           >
-            <Heart size={20} strokeWidth={1.7} />
+            <Heart size={20} />
             {wishlist.length > 0 && (
-              <span className="absolute -top-1 -right-1 bg-[#A77B43] text-[#FCFAF6] text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">
+              <span className="absolute -top-1 -right-1.5 w-4 h-4 rounded-full bg-[#561C08] text-white text-[9px] font-bold flex items-center justify-center">
                 {wishlist.length}
               </span>
             )}
           </Link>
 
-          {/* Cart Bag */}
+          {/* Cart Trigger */}
           <button
             onClick={() => setIsCartOpen(true)}
-            className="text-[#2C2926] hover:text-[#A77B43] transition-colors relative p-1 group"
-            title="Shopping Bag"
-            aria-label="Shopping Bag"
+            className="text-[#000000] hover:text-[#561C08] transition-colors p-1 relative"
+            aria-label={`Cart drawer with ${cartCount} items`}
           >
-            <ShoppingBag size={21} strokeWidth={1.7} />
-            <span className="absolute -top-1.5 -right-1.5 bg-[#342A25] text-[#FCFAF6] text-[10px] font-semibold rounded-full w-4 h-4 flex items-center justify-center leading-none group-hover:bg-[#A77B43] transition-colors">
-              {cartCount}
-            </span>
+            <ShoppingBag size={20} />
+            {cartCount > 0 && (
+              <span className="absolute -top-1 -right-1.5 w-4 h-4 rounded-full bg-[#561C08] text-white text-[9px] font-bold flex items-center justify-center">
+                {cartCount}
+              </span>
+            )}
           </button>
         </div>
       </div>
