@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import {
   CheckCircle2,
   CreditCard,
@@ -14,8 +14,7 @@ import { AlluraLogo } from '../components/common/AlluraLogo';
 import type { CartItem } from '../types';
 
 export const CheckoutPage: React.FC = () => {
-  const { cart, cartSubtotal, freeShippingRemaining, clearCart, formatPrice } = useShop();
-  const navigate = useNavigate();
+  const { cart, cartSubtotal, freeShippingRemaining, formatPrice, placeOrder } = useShop();
 
   const [email, setEmail] = useState('ananya.kerala@example.com');
   const [phone, setPhone] = useState('+91 98471 23456');
@@ -51,17 +50,39 @@ export const CheckoutPage: React.FC = () => {
     'Thiruvananthapuram',
   ];
 
+  const [createdOrderObj, setCreatedOrderObj] = useState<any>(null);
+
   const handlePlaceOrder = (e: React.FormEvent) => {
     e.preventDefault();
-    const orderId = `ALR-${Math.floor(100000 + Math.random() * 900000)}`;
-    setOrderNumber(orderId);
+    const created = placeOrder({
+      customer: {
+        id: 'cust-1',
+        name: `${firstName} ${lastName}`,
+        email,
+        phone,
+      },
+      shippingAddress: {
+        id: 'addr-new',
+        name: `${firstName} ${lastName}`,
+        phone,
+        addressLine1: address,
+        city,
+        district,
+        state: 'Kerala',
+        pincode,
+        type: 'Home',
+      },
+      paymentMethod: paymentMethod === 'upi' ? 'UPI' : paymentMethod === 'card' ? 'Card' : 'COD',
+    });
+
+    setCreatedOrderObj(created);
+    setOrderNumber(created.orderNumber);
     setIsOrderPlaced(true);
-    clearCart();
   };
 
   if (isOrderPlaced) {
     return (
-      <div className="max-w-2xl mx-auto px-6 py-16 text-center space-y-6">
+      <div className="max-w-2xl mx-auto px-6 py-16 text-center space-y-6 animate-slide-up">
         <div className="w-20 h-20 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 mx-auto animate-pulse-subtle">
           <CheckCircle2 size={40} />
         </div>
@@ -97,20 +118,28 @@ export const CheckoutPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="pt-4 flex flex-col sm:flex-row gap-3 justify-center">
-          <button
-            onClick={() => navigate('/shop')}
-            className="bg-allura-goldDark hover:bg-allura-darkBrown text-allura-card text-xs font-sans font-bold tracking-[0.2em] uppercase py-3.5 px-8 rounded-sm transition-all"
+        <div className="pt-4 flex flex-wrap gap-3 justify-center">
+          {createdOrderObj && (
+            <Link
+              to={`/account/orders/${createdOrderObj.id}/tracking`}
+              className="bg-allura-goldDark hover:bg-allura-darkBrown text-allura-card text-xs font-sans font-bold tracking-[0.2em] uppercase py-3.5 px-6 rounded-xl transition-all flex items-center gap-2 shadow-sm"
+            >
+              <span>TRACK LIVE SHIPMENT</span>
+            </Link>
+          )}
+          <Link
+            to="/account/orders"
+            className="border border-allura-border hover:bg-allura-bgSecondary text-allura-text text-xs font-sans font-bold tracking-[0.2em] uppercase py-3.5 px-6 rounded-xl transition-all"
           >
-            CONTINUE BROWSING
-          </button>
+            MY ORDERS
+          </Link>
           <a
             href={`https://wa.me/919037991774?text=Hello%20Allura%2C%20I%20have%20placed%20order%20${orderNumber}.%20Please%20confirm%20tracking%20details.`}
             target="_blank"
             rel="noopener noreferrer"
-            className="bg-[#25D366] text-white text-xs font-sans font-bold tracking-[0.2em] uppercase py-3.5 px-6 rounded-sm transition-all flex items-center justify-center gap-2"
+            className="bg-[#25D366] text-white text-xs font-sans font-bold tracking-[0.2em] uppercase py-3.5 px-6 rounded-xl transition-all flex items-center justify-center gap-2 shadow-sm"
           >
-            <span>TRACK ON WHATSAPP</span>
+            <span>WHATSAPP CONCIERGE</span>
           </a>
         </div>
       </div>
