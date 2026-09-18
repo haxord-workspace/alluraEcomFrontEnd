@@ -228,7 +228,14 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   });
 
   const [promotions, setPromotions] = useState<Promotion[]>(mockPromotionsData);
-  const [banners, setBanners] = useState<Banner[]>(mockBannersData);
+  const [banners, setBanners] = useState<Banner[]>(() => {
+    try {
+      const saved = localStorage.getItem('allura_banners');
+      return saved ? JSON.parse(saved) : mockBannersData;
+    } catch {
+      return mockBannersData;
+    }
+  });
   const [abandonedCarts, setAbandonedCarts] = useState<AbandonedCart[]>(mockAbandonedCartsData);
 
   // Customers
@@ -315,6 +322,10 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   useEffect(() => {
     localStorage.setItem('allura_admin_permissions', JSON.stringify(permissionsMatrix));
   }, [permissionsMatrix]);
+
+  useEffect(() => {
+    localStorage.setItem('allura_banners', JSON.stringify(banners));
+  }, [banners]);
 
   // Logging
   const logAdminAction = useCallback((

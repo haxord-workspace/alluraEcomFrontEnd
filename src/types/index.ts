@@ -349,15 +349,22 @@ export interface Banner {
   id: string;
   title: string;
   headline: string;
+  subtitle?: string;
   description: string;
+  badge?: string;
+  eyebrow?: string;
+  offerPill?: string;
   ctaText: string;
   targetUrl: string;
+  secondaryCtaText?: string;
+  secondaryTargetUrl?: string;
   desktopImage: string;
-  mobileImage: string;
-  startDate: string;
-  endDate: string;
+  mobileImage?: string;
+  startDate?: string;
+  endDate?: string;
   status: 'Active' | 'Scheduled' | 'Draft';
   position: 'Hero' | 'Editorial' | 'Secondary' | 'Announcement';
+  displayOrder?: number;
 }
 
 export interface AbandonedCart {

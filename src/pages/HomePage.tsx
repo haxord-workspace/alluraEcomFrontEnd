@@ -21,22 +21,31 @@ import { productsData } from '../data/products';
 import { ProductCard } from '../components/ui/ProductCard';
 import { OccasionCard } from '../components/ui/OccasionCard';
 import { AlluraCircleSection } from '../components/ui/AlluraCircleSection';
+import { useAdmin } from '../context/AdminContext';
 
 export const HomePage: React.FC = () => {
   const navigate = useNavigate();
+  const { banners } = useAdmin();
   const [currentSlide, setCurrentSlide] = useState(0);
   const touchStartX = useRef<number | null>(null);
   const touchEndX = useRef<number | null>(null);
 
-  const heroSlides = [
+  // Active Hero Banners from Admin
+  const activeHeroBanners = (banners || []).filter(
+    b => b.position === 'Hero' && b.status === 'Active'
+  );
+
+  const fallbackSlides = [
     {
       id: 'slide-1',
       badge: 'PERINTHALMANNA ATELIER',
       eyebrow: 'FESTIVE \'26 COLLECTION • HANDCRAFTED',
       headingLines: ['HANDCRAFTED', 'MODEST & ETHNIC', 'COUTURE'],
+      title: 'HANDCRAFTED MODEST & ETHNIC COUTURE',
+      subtitle: 'Heirloom Kasavu zari, pure silk weaves, and graceful modest silhouettes tailored for your most cherished celebrations.',
       description: 'Heirloom Kasavu zari, pure silk weaves, and graceful modest silhouettes tailored for your most cherished celebrations.',
       offerPill: 'Use Code FESTIVE15 for 15% Off • Free Kerala Express Delivery > ₹2,999',
-      primaryCta: 'EXPLORE COLLECTION',
+      primaryCta: 'SHOP NOW',
       primaryLink: '/shop',
       secondaryCta: 'AI LUXURY STYLIST',
       secondaryLink: '/ai-assistant',
@@ -56,9 +65,11 @@ export const HomePage: React.FC = () => {
       badge: 'ROYAL HERITAGE WEAVES',
       eyebrow: 'BESPOKE BRIDAL & HEIRLOOM ZARI',
       headingLines: ['BESPOKE', 'ZARDOZI &', 'SILK WEAVES'],
+      title: 'BESPOKE ZARDOZI & SILK WEAVES',
+      subtitle: 'Intricate metallic needlework and ceremonial crimson lehengas woven by Kerala master artisans with custom blouse tailoring.',
       description: 'Intricate metallic needlework and ceremonial crimson lehengas woven by Kerala master artisans with custom blouse tailoring.',
       offerPill: 'Complimentary Bridal Concierge • Custom Blouse Stitching Available',
-      primaryCta: 'EXPLORE BRIDAL EDIT',
+      primaryCta: 'SHOP BRIDAL',
       primaryLink: '/collections/bridal-edit',
       secondaryCta: 'WHATSAPP CONCIERGE',
       secondaryLink: 'https://wa.me/919037991774',
@@ -78,9 +89,11 @@ export const HomePage: React.FC = () => {
       badge: 'CONTEMPORARY MINIMALISM',
       eyebrow: 'REFINED LIVING • EVERYDAY LUXURY',
       headingLines: ['EFFORTLESS', 'MODEST', 'SILHOUETTES'],
+      title: 'EFFORTLESS MODEST SILHOUETTES',
+      subtitle: 'Micro-pleated co-ords and tiered dresses crafted with breathable ease and subtle gold trims for timeless elegance.',
       description: 'Micro-pleated co-ords and tiered dresses crafted with breathable ease and subtle gold trims for timeless elegance.',
       offerPill: '48-Hour Dispatch Across Kerala • 7-Day Hassle-Free Doorstep Exchanges',
-      primaryCta: 'DISCOVER MODEST WEAR',
+      primaryCta: 'SHOP MODEST WEAR',
       primaryLink: '/collections/modest-wear',
       secondaryCta: 'VIEW LOOKBOOK',
       secondaryLink: '/lookbook',
@@ -96,6 +109,34 @@ export const HomePage: React.FC = () => {
       quote: 'TIMELESS DRAPES, REFINED LIVING',
     },
   ];
+
+  // Dynamic slides populated from Admin Context (with fallback)
+  const heroSlides = activeHeroBanners.length > 0
+    ? activeHeroBanners.map((b, idx) => ({
+        id: b.id,
+        badge: b.badge || 'PERINTHALMANNA ATELIER',
+        eyebrow: b.eyebrow || 'CURATED ATELIER WEAR',
+        headingLines: (b.headline || b.title).split('\n'),
+        title: b.headline || b.title,
+        subtitle: b.subtitle || b.description,
+        description: b.subtitle || b.description,
+        offerPill: b.offerPill || 'Complimentary Kerala Express Delivery > ₹2,999',
+        primaryCta: b.ctaText || 'SHOP NOW',
+        primaryLink: b.targetUrl || '/shop',
+        secondaryCta: b.secondaryCtaText || 'AI LUXURY STYLIST',
+        secondaryLink: b.secondaryTargetUrl || '/ai-assistant',
+        image: b.desktopImage || `/images/hero-banners/slide-${(idx % 3) + 1}.jpeg`,
+        quickPills: [
+          { label: '✨ Pure Kasavu', path: '/shop' },
+          { label: '👗 Modest Co-ords', path: '/collections/modest-wear' },
+          { label: '🌸 Festive Anarkalis', path: '/shop' },
+          { label: '👰 Bridal Edit', path: '/collections/bridal-edit' },
+        ],
+        socialProof: 'Over 10,000+ patrons styled across Kerala & GCC',
+        rightTags: ['MODEST WEAR', 'ETHNIC COUTURE', 'FESTIVE SETS'],
+        quote: 'MODESTY IS THE HIGHEST FORM OF ELEGANCE',
+      }))
+    : fallbackSlides;
 
   useEffect(() => {
     const timer = setInterval(() => {
