@@ -15,6 +15,7 @@ import { useAdmin } from '../../context/AdminContext';
 import { useShop } from '../../context/ShopContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { ConfirmModal } from '../../components/common/ConfirmModal';
+import { ImageUploadDropzone } from '../../components/admin/ImageUploadDropzone';
 import type { Banner } from '../../types';
 
 export const AdminBannersPage: React.FC = () => {
@@ -551,44 +552,49 @@ export const AdminBannersPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Image Presets & URL */}
-              <div>
-                <label className="block text-[10px] uppercase font-bold text-stone-700 mb-1.5">
-                  High-Resolution Banner Photography
-                </label>
-                
-                {/* Preset quick selector pills */}
-                <div className="flex flex-wrap gap-2 mb-2">
-                  {imagePresets.map(preset => (
-                    <button
-                      key={preset.url}
-                      type="button"
-                      onClick={() => {
-                        setDesktopImage(preset.url);
-                        setMobileImage(preset.url);
-                      }}
-                      className={`px-2.5 py-1 rounded-lg text-[10px] font-sans border transition-all ${
-                        desktopImage === preset.url
-                          ? 'bg-stone-900 text-white font-bold border-stone-900'
-                          : 'bg-stone-50 text-stone-700 border-stone-200 hover:bg-stone-100'
-                      }`}
-                    >
-                      {preset.label}
-                    </button>
-                  ))}
-                </div>
-
-                <input
-                  type="text"
+              {/* Image Upload & Presets Section */}
+              <div className="space-y-4 pt-2 border-t border-stone-100">
+                <ImageUploadDropzone
+                  label="Desktop Banner Photography"
                   required
                   value={desktopImage}
-                  onChange={e => {
-                    setDesktopImage(e.target.value);
-                    if (!mobileImage) setMobileImage(e.target.value);
+                  onChange={(val) => {
+                    setDesktopImage(val);
+                    if (!mobileImage || mobileImage === desktopImage) {
+                      setMobileImage(val);
+                    }
                   }}
-                  placeholder="Image URL or Path (e.g. /images/hero-banners/slide-1.jpeg)"
-                  className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl text-xs font-mono text-stone-800"
+                  aspectRatioLabel="Recommended: 1920×800px (16:9 or 21:9 Wide)"
+                  presets={imagePresets}
+                  helperText="Upload any high-res banner directly from your computer/device or choose from presets. It automatically syncs to the customer storefront."
                 />
+
+                {/* Optional Mobile Image Upload */}
+                <div className="pt-2">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[10px] uppercase font-bold text-stone-600">
+                      Mobile Viewport Image (Optional Portrait Crop)
+                    </span>
+                    {mobileImage !== desktopImage && (
+                      <button
+                        type="button"
+                        onClick={() => setMobileImage(desktopImage)}
+                        className="text-[10px] text-[#561C08] font-bold hover:underline"
+                      >
+                        Reset to Desktop Image
+                      </button>
+                    )}
+                  </div>
+                  
+                  <ImageUploadDropzone
+                    label="Mobile Banner Photography"
+                    value={mobileImage}
+                    onChange={(val) => setMobileImage(val)}
+                    aspectRatioLabel="Recommended: 800×1000px (Portrait or Square)"
+                    presets={imagePresets}
+                    helperText="If omitted or identical, the desktop banner image will be used automatically on mobile viewports."
+                  />
+                </div>
               </div>
 
               {/* Form Buttons */}

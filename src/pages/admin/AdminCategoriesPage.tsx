@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Plus, Edit3 } from 'lucide-react';
 import { useAdmin } from '../../context/AdminContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
+import { ImageUploadDropzone } from '../../components/admin/ImageUploadDropzone';
 
 export const AdminCategoriesPage: React.FC = () => {
   const { products } = useAdmin();
@@ -17,6 +18,7 @@ export const AdminCategoriesPage: React.FC = () => {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [newCatName, setNewCatName] = useState('');
   const [newCatSlug, setNewCatSlug] = useState('');
+  const [newCatImage, setNewCatImage] = useState('/images/best-sellers/classic-cream-anarkali.jpeg');
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,11 +29,12 @@ export const AdminCategoriesPage: React.FC = () => {
       slug: newCatSlug || newCatName.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
       order: categories.length + 1,
       status: 'Active',
-      image: '/images/best-sellers/classic-cream-anarkali.jpeg',
+      image: newCatImage || '/images/best-sellers/classic-cream-anarkali.jpeg',
     };
     setCategories([...categories, added]);
     setNewCatName('');
     setNewCatSlug('');
+    setNewCatImage('/images/best-sellers/classic-cream-anarkali.jpeg');
     setIsCreateOpen(false);
   };
 
@@ -142,6 +145,20 @@ export const AdminCategoriesPage: React.FC = () => {
                   value={newCatSlug}
                   onChange={e => setNewCatSlug(e.target.value)}
                   className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl font-mono"
+                />
+              </div>
+              <div className="pt-2">
+                <ImageUploadDropzone
+                  label="Category Cover & Banner Image"
+                  value={newCatImage}
+                  onChange={setNewCatImage}
+                  aspectRatioLabel="Recommended: 400×500px"
+                  presets={[
+                    { label: 'Ethnic Anarkali', url: '/images/best-sellers/classic-cream-anarkali.jpeg' },
+                    { label: 'Modest Embroidered', url: '/images/best-sellers/aura-cream-embroidered.jpeg' },
+                    { label: 'Blush Elegance', url: '/images/best-sellers/blush-modest-elegance.jpeg' },
+                    { label: 'Emerald Festive Silk', url: '/images/best-sellers/emerald-festive-silk.jpeg' },
+                  ]}
                 />
               </div>
               <div className="flex justify-end gap-2 pt-3">
