@@ -424,9 +424,9 @@ export const HomePage: React.FC = () => {
 
       {/* 2. SHOP BY OCCASION (5 Arched Cards) */}
       <section className="max-w-7xl mx-auto px-6 lg:px-8">
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-8 sm:mb-12 border-b border-[#DED2C1]/60 pb-4">
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-8 sm:mb-12 border-b border-[#561C08]/15 pb-4">
           <div>
-            <span className="text-[11px] font-sans font-bold tracking-[0.25em] uppercase text-[#8B6335] block mb-1">
+            <span className="text-[11px] font-heading font-bold tracking-[0.25em] uppercase text-[#561C08] block mb-1">
               FIND YOUR LOOK
             </span>
             <h2 className="font-heading text-2xl sm:text-4xl text-[#000000] font-bold uppercase tracking-tight">
