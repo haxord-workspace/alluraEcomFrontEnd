@@ -8,7 +8,8 @@ import {
   Sparkles, 
   Tag, 
   ArrowRight, 
-  ExternalLink 
+  ExternalLink,
+  RotateCcw 
 } from 'lucide-react';
 import { useAdmin } from '../../context/AdminContext';
 import { useShop } from '../../context/ShopContext';
@@ -17,7 +18,7 @@ import { ConfirmModal } from '../../components/common/ConfirmModal';
 import type { Banner } from '../../types';
 
 export const AdminBannersPage: React.FC = () => {
-  const { banners, addBanner, updateBanner, deleteBanner, hasPermission } = useAdmin();
+  const { banners, addBanner, updateBanner, deleteBanner, resetBannersToDefault, hasPermission } = useAdmin();
   const { showToast } = useShop();
 
   const [selectedViewport, setSelectedViewport] = useState<'desktop' | 'mobile'>('desktop');
@@ -46,7 +47,9 @@ export const AdminBannersPage: React.FC = () => {
     { label: 'Slide 1 — Ivory Anarkali', url: '/images/hero-banners/slide-1.jpeg' },
     { label: 'Slide 2 — Royal Crimson Bridal', url: '/images/hero-banners/slide-2.jpeg' },
     { label: 'Slide 3 — Modest Pleated Set', url: '/images/hero-banners/slide-3.jpeg' },
-    { label: 'Editorial Autumn', url: '/images/editorial-banners/editorial-autumn-desktop.jpg' },
+    { label: 'Slide 4 — Festive Zari Weave', url: '/images/hero-banners/slide-4.jpeg' },
+    { label: 'Editorial 1 — New Arrivals', url: '/images/editorial-banners/new-arrivals.jpeg' },
+    { label: 'Editorial 2 — Allura Collection', url: '/images/editorial-banners/allura-collection.jpeg' },
   ];
 
   const handleOpenCreate = () => {
@@ -179,13 +182,23 @@ export const AdminBannersPage: React.FC = () => {
             </button>
           </div>
 
+          <button
+            type="button"
+            onClick={resetBannersToDefault}
+            className="px-3.5 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl text-xs font-sans font-semibold transition-colors flex items-center gap-1.5 border border-stone-200"
+            title="Reset all marketing banners to default boutique photography and high-conversion copy"
+          >
+            <RotateCcw size={13} />
+            <span className="hidden sm:inline">Reset Defaults</span>
+          </button>
+
           {hasPermission('marketing', 'create') && (
             <button
               onClick={handleOpenCreate}
               className="px-4 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-xl text-xs font-sans font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 shadow-sm"
             >
               <Plus size={14} />
-              <span>Create Hero Slide</span>
+              <span>Create Slide / Banner</span>
             </button>
           )}
         </div>

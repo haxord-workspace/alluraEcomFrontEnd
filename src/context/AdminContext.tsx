@@ -97,6 +97,7 @@ interface AdminContextType {
   addBanner: (banner: Omit<Banner, 'id'>) => Banner;
   updateBanner: (id: string, updates: Partial<Banner>) => void;
   deleteBanner: (id: string) => void;
+  resetBannersToDefault: () => void;
   abandonedCarts: AbandonedCart[];
   sendCartReminder: (id: string, channel: 'WhatsApp' | 'Email') => void;
 
@@ -231,7 +232,34 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [banners, setBanners] = useState<Banner[]>(() => {
     try {
       const saved = localStorage.getItem('allura_banners');
-      return saved ? JSON.parse(saved) : mockBannersData;
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // Normalize legacy cached banners
+          return parsed.map((b: Partial<Banner>, idx: number) => ({
+            id: b.id || `ban-${Date.now()}-${idx}`,
+            title: b.title || b.headline || `Luxury Couture Slide ${idx + 1}`,
+            headline: b.headline || b.title || 'HANDCRAFTED MODEST & ETHNIC COUTURE',
+            subtitle: b.subtitle || b.description || 'Heirloom Kasavu zari, pure silk weaves, and graceful modest silhouettes.',
+            description: b.description || b.subtitle || 'Heirloom Kasavu zari, pure silk weaves, and graceful modest silhouettes.',
+            badge: b.badge || 'PERINTHALMANNA ATELIER',
+            eyebrow: b.eyebrow || 'FESTIVE \'26 COLLECTION • HANDCRAFTED',
+            offerPill: b.offerPill || 'Use Code FESTIVE15 for 15% Off • Free Kerala Express Delivery > ₹2,999',
+            ctaText: b.ctaText || 'SHOP NOW',
+            targetUrl: b.targetUrl || '/shop',
+            secondaryCtaText: b.secondaryCtaText || 'AI LUXURY STYLIST',
+            secondaryTargetUrl: b.secondaryTargetUrl || '/ai-assistant',
+            desktopImage: b.desktopImage || `/images/hero-banners/slide-${(idx % 3) + 1}.jpeg`,
+            mobileImage: b.mobileImage || b.desktopImage || `/images/hero-banners/slide-${(idx % 3) + 1}.jpeg`,
+            startDate: b.startDate || '2026-08-01',
+            endDate: b.endDate || '2026-12-31',
+            status: b.status || 'Active',
+            position: b.position || (idx < 3 ? 'Hero' : 'Editorial'),
+            displayOrder: b.displayOrder || idx + 1,
+          }));
+        }
+      }
+      return mockBannersData;
     } catch {
       return mockBannersData;
     }
@@ -655,6 +683,12 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     showToast('Banner deleted', 'info');
   };
 
+  const resetBannersToDefault = () => {
+    setBanners(mockBannersData);
+    localStorage.setItem('allura_banners', JSON.stringify(mockBannersData));
+    showToast('Marketing & Hero Banners reset to atelier defaults', 'gold');
+  };
+
   const sendCartReminder = (id: string, channel: 'WhatsApp' | 'Email') => {
     setAbandonedCarts(prev =>
       prev.map(c => {
@@ -777,6 +811,7 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         addBanner,
         updateBanner,
         deleteBanner,
+        resetBannersToDefault,
         abandonedCarts,
         sendCartReminder,
         cmsPages,

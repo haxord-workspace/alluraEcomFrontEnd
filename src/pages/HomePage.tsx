@@ -32,7 +32,14 @@ export const HomePage: React.FC = () => {
 
   // Active Hero Banners from Admin
   const activeHeroBanners = (banners || []).filter(
-    b => b.position === 'Hero' && b.status === 'Active'
+    b => (b.position?.toLowerCase() === 'hero' || !b.position) && 
+         (b.status?.toLowerCase() === 'active' || b.status === 'Active' || (b as any).isActive === true)
+  );
+
+  // Active Editorial Banners from Admin
+  const activeEditorialBanners = (banners || []).filter(
+    b => b.position?.toLowerCase() === 'editorial' && 
+         (b.status?.toLowerCase() === 'active' || b.status === 'Active' || (b as any).isActive === true)
   );
 
   const fallbackSlides = [
@@ -112,30 +119,37 @@ export const HomePage: React.FC = () => {
 
   // Dynamic slides populated from Admin Context (with fallback)
   const heroSlides = activeHeroBanners.length > 0
-    ? activeHeroBanners.map((b, idx) => ({
-        id: b.id,
-        badge: b.badge || 'PERINTHALMANNA ATELIER',
-        eyebrow: b.eyebrow || 'CURATED ATELIER WEAR',
-        headingLines: (b.headline || b.title).split('\n'),
-        title: b.headline || b.title,
-        subtitle: b.subtitle || b.description,
-        description: b.subtitle || b.description,
-        offerPill: b.offerPill || 'Complimentary Kerala Express Delivery > ₹2,999',
-        primaryCta: b.ctaText || 'SHOP NOW',
-        primaryLink: b.targetUrl || '/shop',
-        secondaryCta: b.secondaryCtaText || 'AI LUXURY STYLIST',
-        secondaryLink: b.secondaryTargetUrl || '/ai-assistant',
-        image: b.desktopImage || `/images/hero-banners/slide-${(idx % 3) + 1}.jpeg`,
-        quickPills: [
-          { label: '✨ Pure Kasavu', path: '/shop' },
-          { label: '👗 Modest Co-ords', path: '/collections/modest-wear' },
-          { label: '🌸 Festive Anarkalis', path: '/shop' },
-          { label: '👰 Bridal Edit', path: '/collections/bridal-edit' },
-        ],
-        socialProof: 'Over 10,000+ patrons styled across Kerala & GCC',
-        rightTags: ['MODEST WEAR', 'ETHNIC COUTURE', 'FESTIVE SETS'],
-        quote: 'MODESTY IS THE HIGHEST FORM OF ELEGANCE',
-      }))
+    ? activeHeroBanners.map((b, idx) => {
+        const fullTitle = b.headline || b.title || 'HANDCRAFTED MODEST & ETHNIC COUTURE';
+        const headingLines = fullTitle.includes('\n') 
+          ? fullTitle.split('\n').filter(Boolean)
+          : [fullTitle];
+
+        return {
+          id: b.id,
+          badge: b.badge || 'PERINTHALMANNA ATELIER',
+          eyebrow: b.eyebrow || 'CURATED ATELIER WEAR',
+          headingLines,
+          title: fullTitle,
+          subtitle: b.subtitle || b.description || 'Heirloom Kasavu zari, pure silk weaves, and graceful modest silhouettes.',
+          description: b.subtitle || b.description || 'Heirloom Kasavu zari, pure silk weaves, and graceful modest silhouettes.',
+          offerPill: b.offerPill || 'Complimentary Kerala Express Delivery > ₹2,999',
+          primaryCta: b.ctaText || 'SHOP NOW',
+          primaryLink: b.targetUrl || '/shop',
+          secondaryCta: b.secondaryCtaText || 'AI LUXURY STYLIST',
+          secondaryLink: b.secondaryTargetUrl || '/ai-assistant',
+          image: b.desktopImage || `/images/hero-banners/slide-${(idx % 3) + 1}.jpeg`,
+          quickPills: [
+            { label: '✨ Pure Kasavu', path: '/shop' },
+            { label: '👗 Modest Co-ords', path: '/collections/modest-wear' },
+            { label: '🌸 Festive Anarkalis', path: '/shop' },
+            { label: '👰 Bridal Edit', path: '/collections/bridal-edit' },
+          ],
+          socialProof: 'Over 10,000+ patrons styled across Kerala & GCC',
+          rightTags: ['MODEST WEAR', 'ETHNIC COUTURE', 'FESTIVE SETS'],
+          quote: 'MODESTY IS THE HIGHEST FORM OF ELEGANCE',
+        };
+      })
     : fallbackSlides;
 
   useEffect(() => {
@@ -436,60 +450,66 @@ export const HomePage: React.FC = () => {
         </div>
       </section>
 
-      {/* 3. EDITORIAL SPLIT BANNERS */}
+      {/* 3. EDITORIAL SPLIT BANNERS (Dynamic from Admin) */}
       <section className="max-w-7xl mx-auto px-6 lg:px-8">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8">
-          {/* Banner 1: New Arrivals */}
-          <div className="relative aspect-[16/10] sm:aspect-[16/9] rounded-lg overflow-hidden group shadow-subtle border border-[#DED2C1]">
-            <img
-              src="/images/editorial-banners/new-arrivals.jpeg"
-              alt="New Arrivals"
-              className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-700"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-[#342A25]/90 via-[#342A25]/30 to-transparent flex flex-col justify-end p-6 sm:p-8 text-[#FCFAF6]">
-              <h3 className="font-serif text-2xl sm:text-3xl font-medium tracking-wide">
-                NEW ARRIVALS
-              </h3>
-              <p className="text-xs font-sans text-[#EFE5D5] mt-1.5 max-w-xs">
-                Fresh modest styles, handpicked for your wardrobe.
-              </p>
-              <div className="pt-4">
-                <Link
-                  to="/shop?filter=new"
-                  className="inline-flex items-center gap-2 bg-[#8B6335] hover:bg-[#342A25] text-[#FCFAF6] text-[11px] font-sans font-bold tracking-[0.2em] uppercase py-2.5 px-5 rounded-sm transition-all duration-300"
-                >
-                  <span>SHOP NOW</span>
-                  <ArrowRight size={13} />
-                </Link>
+          {(activeEditorialBanners.length > 0 ? activeEditorialBanners.slice(0, 2) : [
+            {
+              id: 'ed-1',
+              title: 'NEW ARRIVALS',
+              headline: 'NEW ARRIVALS',
+              subtitle: 'Fresh modest styles, handpicked for your wardrobe.',
+              description: 'Fresh modest styles, handpicked for your wardrobe.',
+              ctaText: 'SHOP NOW',
+              targetUrl: '/shop?filter=new',
+              desktopImage: '/images/editorial-banners/new-arrivals.jpeg',
+              badge: 'FRESH DROPS'
+            },
+            {
+              id: 'ed-2',
+              title: 'THE ALLURA COLLECTION',
+              headline: 'THE ALLURA COLLECTION',
+              subtitle: 'Curated modest couture for discerning women.',
+              description: 'Curated modest couture for discerning women.',
+              ctaText: 'EXPLORE',
+              targetUrl: '/collections/festive-curation',
+              desktopImage: '/images/editorial-banners/allura-collection.jpeg',
+              badge: 'SIGNATURE EDIT'
+            }
+          ]).map(banner => (
+            <div
+              key={banner.id}
+              className="relative aspect-[16/10] sm:aspect-[16/9] rounded-2xl overflow-hidden group shadow-subtle border border-[#DED2C1]"
+            >
+              <img
+                src={banner.desktopImage || '/images/editorial-banners/new-arrivals.jpeg'}
+                alt={banner.headline || banner.title}
+                className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-700"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-[#2C2926]/90 via-[#2C2926]/40 to-transparent flex flex-col justify-end p-6 sm:p-8 text-[#FCFAF6]">
+                {banner.badge && (
+                  <span className="inline-block text-[10px] font-sans font-bold uppercase tracking-[0.2em] text-[#A77B43] mb-1">
+                    {banner.badge}
+                  </span>
+                )}
+                <h3 className="font-serif text-2xl sm:text-3xl font-medium tracking-wide text-[#FCFAF6]">
+                  {banner.headline || banner.title}
+                </h3>
+                <p className="text-xs font-sans text-[#EFE5D5] mt-1.5 max-w-xs leading-relaxed">
+                  {banner.subtitle || banner.description}
+                </p>
+                <div className="pt-4">
+                  <Link
+                    to={banner.targetUrl || '/shop'}
+                    className="inline-flex items-center gap-2 bg-[#8B6335] hover:bg-[#2C2926] text-[#FCFAF6] text-[11px] font-sans font-bold tracking-[0.2em] uppercase py-2.5 px-5 rounded-xl transition-all duration-300 shadow-xs group/btn"
+                  >
+                    <span>{banner.ctaText || 'SHOP NOW'}</span>
+                    <ArrowRight size={13} className="group-hover/btn:translate-x-1 transition-transform" />
+                  </Link>
+                </div>
               </div>
             </div>
-          </div>
-
-          {/* Banner 2: The Allura Collection */}
-          <div className="relative aspect-[16/10] sm:aspect-[16/9] rounded-lg overflow-hidden group shadow-subtle border border-[#DED2C1]">
-            <img
-              src="/images/editorial-banners/allura-collection.jpeg"
-              alt="The Allura Collection"
-              className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-700"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-[#342A25]/90 via-[#342A25]/30 to-transparent flex flex-col justify-end p-6 sm:p-8 text-[#FCFAF6]">
-              <h3 className="font-serif text-2xl sm:text-3xl font-medium tracking-wide">
-                THE ALLURA COLLECTION
-              </h3>
-              <p className="text-xs font-sans text-[#EFE5D5] mt-1.5 max-w-xs">
-                Curated modest couture for discerning women.
-              </p>
-              <div className="pt-4">
-                <Link
-                  to="/collections/festive-edit"
-                  className="inline-flex items-center gap-2 bg-[#8B6335] hover:bg-[#342A25] text-[#FCFAF6] text-[11px] font-sans font-bold tracking-[0.2em] uppercase py-2.5 px-5 rounded-sm transition-all duration-300"
-                >
-                  <span>EXPLORE</span>
-                  <ArrowRight size={13} />
-                </Link>
-              </div>
-            </div>
-          </div>
+          ))}
         </div>
       </section>
 

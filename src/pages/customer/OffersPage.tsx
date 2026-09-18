@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { Tag, Sparkles, Copy, Check, ArrowRight } from 'lucide-react';
 import { useShop } from '../../context/ShopContext';
-import { mockCouponsData, mockPromotionsData } from '../../data/mockCoupons';
+import { useAdmin } from '../../context/AdminContext';
 import { Link, useNavigate } from 'react-router-dom';
 
 export const OffersPage: React.FC = () => {
   const { applyCoupon, appliedCoupon, formatPrice, showToast } = useShop();
+  const { coupons, promotions } = useAdmin();
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const navigate = useNavigate();
 
@@ -20,6 +21,9 @@ export const OffersPage: React.FC = () => {
     applyCoupon(code);
     navigate('/shop');
   };
+
+  const activePromos = promotions && promotions.length > 0 ? promotions : [];
+  const activeCoupons = (coupons || []).filter(c => c.status === 'Active');
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-16 space-y-12">
@@ -38,7 +42,7 @@ export const OffersPage: React.FC = () => {
 
       {/* Active Promotion Banners */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {mockPromotionsData.map(promo => (
+        {activePromos.map(promo => (
           <div
             key={promo.id}
             className="bg-gradient-to-br from-allura-bgSecondary to-allura-card border border-allura-border rounded-2xl p-6 sm:p-8 shadow-subtle flex flex-col justify-between space-y-6 relative overflow-hidden"
@@ -83,7 +87,7 @@ export const OffersPage: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {mockCouponsData.map(coupon => {
+          {activeCoupons.map(coupon => {
             const isApplied = appliedCoupon?.code === coupon.code;
 
             return (
