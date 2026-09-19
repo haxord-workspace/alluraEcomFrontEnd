@@ -104,7 +104,7 @@ export const HomePage: React.FC = () => {
       primaryLink: '/collections/modest-wear',
       secondaryCta: 'VIEW LOOKBOOK',
       secondaryLink: '/lookbook',
-      image: '/images/hero-banners/slide-3.jpeg',
+      image: '/images/hero-banners/hero-4k.jpg',
       quickPills: [
         { label: '✨ Pleated Co-ords', path: '/collections/modest-wear' },
         { label: '🌿 Breathable Linens', path: '/shop' },
@@ -138,7 +138,7 @@ export const HomePage: React.FC = () => {
           primaryLink: b.targetUrl || '/shop',
           secondaryCta: b.secondaryCtaText || 'AI LUXURY STYLIST',
           secondaryLink: b.secondaryTargetUrl || '/ai-assistant',
-          image: b.desktopImage || `/images/hero-banners/slide-${(idx % 3) + 1}.jpeg`,
+          image: b.desktopImage || (idx === 0 ? '/images/hero-banners/hero-4k.jpg' : `/images/hero-banners/slide-${(idx % 3) + 1}.jpeg`),
           quickPills: [
             { label: '✨ Pure Kasavu', path: '/shop' },
             { label: '👗 Modest Co-ords', path: '/collections/modest-wear' },
@@ -216,11 +216,7 @@ export const HomePage: React.FC = () => {
                 }}
               />
 
-              {/* Multi-layered responsive brand gradients for crisp contrast */}
-              {/* Desktop lateral gradient */}
-              <div className="absolute inset-0 hidden sm:block bg-gradient-to-r from-[#F7E6C8]/98 via-[#F7E6C8]/80 to-transparent lg:from-[#F7E6C8]/98 lg:via-[#F7E6C8]/60" />
-              {/* Mobile bottom-to-top gradient */}
-              <div className="absolute inset-0 sm:hidden bg-gradient-to-t from-[#F7E6C8] via-[#F7E6C8]/92 to-[#F7E6C8]/30" />
+              {/* Removed gradient overlays for a clear image */}
 
               {/* Content Container (Layered above gradients) */}
               <div className="max-w-7xl mx-auto h-full px-5 sm:px-6 lg:px-8 relative z-30 flex items-center justify-between pb-8 sm:pb-0">
