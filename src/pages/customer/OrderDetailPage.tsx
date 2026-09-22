@@ -241,14 +241,14 @@ export const OrderDetailPage: React.FC = () => {
               <span>Delivery Address</span>
             </h3>
             <div className="text-xs font-sans text-allura-muted leading-relaxed">
-              <p className="font-bold text-allura-text">{order.shippingAddress.name}</p>
+              <p className="font-bold text-allura-text">{order.shippingAddress.fullName}</p>
               <p>{order.shippingAddress.addressLine1}</p>
               {order.shippingAddress.addressLine2 && <p>{order.shippingAddress.addressLine2}</p>}
               <p>
-                {order.shippingAddress.city}, {order.shippingAddress.district} - {order.shippingAddress.pincode}
+                {order.shippingAddress.city}, {order.shippingAddress.state} - {order.shippingAddress.postalCode}
               </p>
-              <p>{order.shippingAddress.state}, India</p>
-              <p className="pt-1">Phone: <strong className="text-allura-text">{order.shippingAddress.phone}</strong></p>
+              <p>{order.shippingAddress.country}</p>
+              <p className="pt-1">Phone: <strong className="text-allura-text">{order.shippingAddress.phone.countryCode} {order.shippingAddress.phone.number}</strong></p>
             </div>
           </div>
 

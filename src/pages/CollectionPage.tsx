@@ -1,16 +1,17 @@
 import React from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { collectionsData } from '../data/collections';
-import { productsData } from '../data/products';
+import { useShop } from '../context/ShopContext';
 import { ProductCard } from '../components/ui/ProductCard';
 import { ArrowRight } from 'lucide-react';
 
 export const CollectionPage: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
+  const { products } = useShop();
 
   const currentCollection = collectionsData.find(c => c.slug === slug) || collectionsData[0];
 
-  const collectionProducts = productsData.filter(p => {
+  const collectionProducts = products.filter(p => {
     if (slug === 'bridal-edit') return p.occasion === 'Bridal' || p.price > 12000;
     if (slug === 'festive-edit') return p.occasion === 'Festive';
     if (slug === 'party-wear') return p.occasion === 'Party Wear';

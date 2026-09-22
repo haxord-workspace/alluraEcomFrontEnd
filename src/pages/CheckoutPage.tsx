@@ -14,7 +14,7 @@ import { AlluraLogo } from '../components/common/AlluraLogo';
 import type { CartItem } from '../types';
 
 export const CheckoutPage: React.FC = () => {
-  const { cart, cartSubtotal, freeShippingRemaining, formatPrice, placeOrder } = useShop();
+  const { customer, addCustomerAddress, cart, cartSubtotal, freeShippingRemaining, formatPrice, placeOrder } = useShop();
 
   const [email, setEmail] = useState('ananya.kerala@example.com');
   const [phone, setPhone] = useState('+91 98471 23456');
@@ -22,10 +22,12 @@ export const CheckoutPage: React.FC = () => {
   const [lastName, setLastName] = useState('Menon');
   const [address, setAddress] = useState('Near Jubilee Hospital, Ooty Road');
   const [city, setCity] = useState('Perinthalmanna');
-  const [district, setDistrict] = useState('Malappuram');
-  const [pincode, setPincode] = useState('679322');
+  const [state, setState] = useState('Kerala');
+  const [postalCode, setPostalCode] = useState('679322');
   const [deliveryMethod, setDeliveryMethod] = useState<'standard' | 'pickup'>('standard');
   const [paymentMethod, setPaymentMethod] = useState<'upi' | 'card' | 'cod'>('upi');
+
+  const [saveAddress, setSaveAddress] = useState(false);
 
   const [isOrderPlaced, setIsOrderPlaced] = useState(false);
   const [orderNumber, setOrderNumber] = useState('');
@@ -33,27 +35,33 @@ export const CheckoutPage: React.FC = () => {
   const finalShipping = deliveryMethod === 'pickup' ? 0 : (freeShippingRemaining === 0 ? 0 : 150);
   const finalTotal = cartSubtotal + finalShipping;
 
-  const keralaDistricts = [
-    'Malappuram',
-    'Kozhikode',
-    'Palakkad',
-    'Thrissur',
-    'Ernakulam',
-    'Wayanad',
-    'Kannur',
-    'Kasaragod',
-    'Kottayam',
-    'Alappuzha',
-    'Idukki',
-    'Pathanamthitta',
-    'Kollam',
-    'Thiruvananthapuram',
-  ];
-
   const [createdOrderObj, setCreatedOrderObj] = useState<any>(null);
 
-  const handlePlaceOrder = (e: React.FormEvent) => {
+  const handlePlaceOrder = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (saveAddress && customer) {
+      try {
+        await addCustomerAddress({
+          label: 'Saved from Checkout',
+          fullName: `${firstName} ${lastName}`,
+          phone: {
+            countryCode: '+91',
+            number: phone.replace('+91 ', ''),
+          },
+          addressLine1: address,
+          city,
+          state,
+          postalCode,
+          country: 'India',
+          isDefaultShipping: customer.addresses.length === 0,
+          isDefaultBilling: customer.addresses.length === 0,
+        });
+      } catch (err) {
+        // error handled by context
+      }
+    }
+
     const created = placeOrder({
       customer: {
         id: 'cust-1',
@@ -63,14 +71,19 @@ export const CheckoutPage: React.FC = () => {
       },
       shippingAddress: {
         id: 'addr-new',
-        name: `${firstName} ${lastName}`,
-        phone,
+        label: 'Home',
+        fullName: `${firstName} ${lastName}`,
+        phone: {
+          countryCode: '+91',
+          number: phone.replace('+91 ', ''),
+        },
         addressLine1: address,
         city,
-        district,
-        state: 'Kerala',
-        pincode,
-        type: 'Home',
+        state,
+        postalCode,
+        country: 'India',
+        isDefaultShipping: true,
+        isDefaultBilling: true,
       },
       paymentMethod: paymentMethod === 'upi' ? 'UPI' : paymentMethod === 'card' ? 'Card' : 'COD',
     });
@@ -107,7 +120,7 @@ export const CheckoutPage: React.FC = () => {
           </div>
 
           <div className="text-xs font-sans text-allura-muted space-y-1">
-            <p><strong>Deliver To:</strong> {firstName} {lastName}, {address}, {city}, {district} - {pincode}</p>
+            <p><strong>Deliver To:</strong> {firstName} {lastName}, {address}, {city}, {state} - {postalCode}</p>
             <p><strong>Contact:</strong> {phone} • {email}</p>
             <p><strong>Total Paid:</strong> <strong className="text-allura-darkBrown">{formatPrice(finalTotal)}</strong></p>
           </div>
@@ -220,6 +233,34 @@ export const CheckoutPage: React.FC = () => {
               2. Shipping Address
             </h3>
 
+            {customer && customer.addresses && customer.addresses.length > 0 && (
+              <div className="mb-4 bg-allura-bgSecondary/40 p-4 rounded-xl border border-allura-border">
+                <label className="text-[10px] font-bold text-allura-darkBrown uppercase mb-2 block tracking-wider">Quick Fill from Saved Addresses</label>
+                <div className="flex flex-wrap gap-2">
+                  {customer.addresses.map(addr => (
+                    <button
+                      key={addr.id}
+                      type="button"
+                      onClick={() => {
+                        const names = addr.fullName.split(' ');
+                        setFirstName(names[0] || '');
+                        setLastName(names.slice(1).join(' ') || '');
+                        setPhone(addr.phone.number);
+                        setAddress(addr.addressLine1);
+                        setCity(addr.city);
+                        setState(addr.state);
+                        setPostalCode(addr.postalCode);
+                      }}
+                      className="px-3 py-1.5 border border-allura-gold/30 bg-allura-bg rounded-lg text-xs font-sans text-allura-text hover:bg-allura-gold/10 transition-colors"
+                    >
+                      <span className="font-semibold text-allura-goldDark mr-1">{addr.label}:</span>
+                      {addr.city}, {addr.state}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1">
                 <label className="text-xs font-bold text-allura-darkBrown uppercase">First Name *</label>
@@ -267,29 +308,42 @@ export const CheckoutPage: React.FC = () => {
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-bold text-allura-darkBrown uppercase">District</label>
-                <select
-                  value={district}
-                  onChange={e => setDistrict(e.target.value)}
+                <label className="text-xs font-bold text-allura-darkBrown uppercase">State</label>
+                <input
+                  type="text"
+                  value={state}
+                  onChange={e => setState(e.target.value)}
+                  required
                   className="w-full bg-allura-bg border border-allura-border rounded p-3 text-xs text-allura-text focus:outline-none focus:border-allura-gold"
-                >
-                  {keralaDistricts.map(d => (
-                    <option key={d} value={d}>{d}</option>
-                  ))}
-                </select>
+                />
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-bold text-allura-darkBrown uppercase">Pincode</label>
+                <label className="text-xs font-bold text-allura-darkBrown uppercase">Postal Code</label>
                 <input
                   type="text"
-                  value={pincode}
-                  onChange={e => setPincode(e.target.value)}
+                  value={postalCode}
+                  onChange={e => setPostalCode(e.target.value)}
                   required
                   className="w-full bg-allura-bg border border-allura-border rounded p-3 text-xs text-allura-text focus:outline-none focus:border-allura-gold"
                 />
               </div>
             </div>
+
+            {customer && (
+              <div className="flex items-center gap-2 pt-2">
+                <input 
+                  type="checkbox" 
+                  id="saveAddress" 
+                  checked={saveAddress} 
+                  onChange={e => setSaveAddress(e.target.checked)}
+                  className="accent-allura-goldDark w-4 h-4 rounded border-allura-border cursor-pointer"
+                />
+                <label htmlFor="saveAddress" className="text-xs font-sans text-allura-text cursor-pointer">
+                  Save this address to my account for future orders
+                </label>
+              </div>
+            )}
           </div>
 
           {/* Section 3: Delivery Options */}

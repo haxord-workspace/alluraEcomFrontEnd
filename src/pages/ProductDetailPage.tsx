@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   Heart,
@@ -14,21 +14,24 @@ import {
   Minus,
   Ruler,
   Share2,
+  Sparkles,
 } from 'lucide-react';
-import { productsData } from '../data/products';
 import { useShop } from '../context/ShopContext';
+import { getStoreProductBySlug } from '../service/store';
 import { ProductCard } from '../components/ui/ProductCard';
 import { BottomSheet } from '../components/modals/BottomSheet';
+import type { Product } from '../types';
 
 export const ProductDetailPage: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
-  const { addToCart, toggleWishlist, isInWishlist, formatPrice, showToast } = useShop();
+  const { products, addToCart, toggleWishlist, isInWishlist, formatPrice, showToast } = useShop();
 
-  const product = productsData.find(p => p.slug === slug) || productsData[0];
-  const inWishlist = isInWishlist(product.id);
+  const [product, setProduct] = useState<Product | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
 
-  const [selectedSize, setSelectedSize] = useState(product.sizes[0] || 'M');
+  const [selectedSize, setSelectedSize] = useState('M');
   const [selectedColorIdx, setSelectedColorIdx] = useState(0);
   const [activeImageIdx, setActiveImageIdx] = useState(0);
   const [quantity, setQuantity] = useState(1);
@@ -41,17 +44,72 @@ export const ProductDetailPage: React.FC = () => {
     exchange: false,
   });
 
+  useEffect(() => {
+    if (!slug) return;
+    let cancelled = false;
+    setIsLoading(true);
+    setNotFound(false);
+
+    getStoreProductBySlug(slug)
+      .then(fetched => {
+        if (cancelled) return;
+        setProduct(fetched);
+        setSelectedSize(fetched.sizes[0] || 'M');
+        setSelectedColorIdx(0);
+        setActiveImageIdx(0);
+        setQuantity(1);
+      })
+      .catch(() => {
+        if (!cancelled) setNotFound(true);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [slug]);
+
   const toggleAccordion = (key: string) => {
     setOpenAccordions(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
+  if (isLoading) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 text-center">
+        <div className="w-6 h-6 border-2 border-allura-goldDark border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+        <p className="text-xs font-sans text-allura-muted">Loading product...</p>
+      </div>
+    );
+  }
+
+  if (notFound || !product) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 text-center space-y-4">
+        <div className="w-16 h-16 rounded-full bg-allura-bgSecondary flex items-center justify-center text-allura-gold mx-auto">
+          <Sparkles size={24} />
+        </div>
+        <h1 className="font-serif text-2xl text-allura-text font-normal">Product not found</h1>
+        <p className="text-xs text-allura-muted max-w-sm mx-auto">
+          This piece may have sold out or is no longer part of our atelier edit.
+        </p>
+        <Link
+          to="/shop"
+          className="inline-block bg-allura-goldDark text-allura-card text-xs font-sans font-bold tracking-[0.2em] uppercase py-2.5 px-5 rounded-sm transition-all"
+        >
+          BROWSE THE SHOP
+        </Link>
+      </div>
+    );
+  }
+
+  const inWishlist = isInWishlist(product.id);
   const currentColor = product.colors[selectedColorIdx] || product.colors[0];
 
   const galleryImages = [
     product.images.primary,
     product.images.secondary,
     ...(product.images.gallery || []),
-  ].filter((v, i, a) => a.indexOf(v) === i);
+  ].filter(Boolean).filter((v, i, a) => a.indexOf(v) === i);
 
   const handleAddToCart = () => {
     addToCart(product, selectedSize, currentColor, quantity);
@@ -81,7 +139,7 @@ export const ProductDetailPage: React.FC = () => {
     }
   };
 
-  const relatedProducts = productsData
+  const relatedProducts = products
     .filter(p => p.id !== product.id && (p.category === product.category || p.occasion === product.occasion))
     .slice(0, 4);
 

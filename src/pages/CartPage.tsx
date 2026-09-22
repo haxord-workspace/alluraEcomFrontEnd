@@ -12,12 +12,12 @@ import {
   MessageCircle,
 } from 'lucide-react';
 import { useShop } from '../context/ShopContext';
-import { productsData } from '../data/products';
 import { ProductCard } from '../components/ui/ProductCard';
 import type { CartItem, Product } from '../types';
 
 export const CartPage: React.FC = () => {
   const {
+    products,
     cart,
     removeFromCart,
     updateQuantity,
@@ -49,7 +49,7 @@ export const CartPage: React.FC = () => {
 
   const finalTotal = cartSubtotal - discount + (freeShippingRemaining === 0 ? 0 : 150);
 
-  const recommendedItems = productsData.filter(
+  const recommendedItems = products.filter(
     (p: Product) => !cart.some((c: CartItem) => c.product.id === p.id)
   ).slice(0, 4);
 

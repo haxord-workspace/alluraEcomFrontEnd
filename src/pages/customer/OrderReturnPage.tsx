@@ -378,7 +378,7 @@ export const OrderReturnPage: React.FC = () => {
               <p><strong>Reason:</strong> {reason}</p>
               {reasonDetail && <p><strong>Notes:</strong> {reasonDetail}</p>}
               <p><strong>Preference:</strong> {preference} {preference === 'Exchange for different size' && `(Replacement Size: ${exchangeSize})`}</p>
-              <p><strong>Pickup Address:</strong> {order.shippingAddress.addressLine1}, {order.shippingAddress.city} - {order.shippingAddress.pincode}</p>
+              <p><strong>Pickup Address:</strong> {order.shippingAddress.addressLine1}, {order.shippingAddress.city} - {order.shippingAddress.postalCode}</p>
             </div>
 
             <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs font-sans text-amber-900 flex items-center gap-2">

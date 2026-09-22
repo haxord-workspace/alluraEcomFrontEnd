@@ -136,10 +136,10 @@ export const AdminCustomerDetailPage: React.FC = () => {
             <div className="space-y-3">
               {customer.addresses.map(addr => (
                 <div key={addr.id} className="p-3 bg-stone-50 rounded-xl space-y-1">
-                  <span className="text-[10px] font-bold uppercase text-stone-400">{addr.type}</span>
-                  <p className="font-bold text-stone-800">{addr.name}</p>
+                  <span className="text-[10px] font-bold uppercase text-stone-400">{addr.label}</span>
+                  <p className="font-bold text-stone-800">{addr.fullName}</p>
                   <p className="text-stone-600 leading-relaxed">
-                    {addr.addressLine1}, {addr.city}, {addr.district} - {addr.pincode}
+                    {addr.addressLine1}, {addr.city}, {addr.state} - {addr.postalCode}
                   </p>
                 </div>
               ))}

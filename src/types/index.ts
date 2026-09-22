@@ -14,6 +14,35 @@ export type ProductCategory =
   | 'Bottoms'
   | 'Accessories';
 
+export interface Category {
+  id: string;
+  name: string;
+  slug: string;
+  status: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED' | string;
+  image?: { url: string } | string; // backend sends object {url}, keep string fallback for local presets
+  order?: number;
+}
+
+/** Backend-schema product type used exclusively in the Admin portal */
+export interface AdminProduct {
+  id: string;
+  name: string;
+  sku: string;
+  description?: string;
+  shortDescription?: string;
+  categoryId?: string;
+  pricing: {
+    mrp: number;
+    sellingPrice: number;
+    currency: string;
+  };
+  status: 'ACTIVE' | 'DRAFT' | 'ARCHIVED';
+  images?: { url: string; isPrimary?: boolean }[];
+  createdAt?: string;
+  updatedAt?: string;
+  [key: string]: any;
+}
+
 export type OccasionType = 'Bridal' | 'Festive' | 'Party Wear' | 'Modest Wear' | 'Ethnic' | 'Contemporary' | 'Reception';
 
 export interface ProductColor {
@@ -60,6 +89,7 @@ export interface Product {
   originalPrice?: number;
   costPrice?: number;
   category: ProductCategory | string;
+  categoryId?: string;
   subcategory?: string;
   occasion: OccasionType | string;
   gender?: 'Women' | 'Unisex' | 'Girls';
@@ -176,17 +206,21 @@ export interface CustomerProfile {
 
 export interface SavedAddress {
   id: string;
-  name: string;
-  phone: string;
+  label: string; // was type
+  fullName: string; // was name
+  phone: {
+    countryCode: string;
+    number: string;
+  };
   addressLine1: string;
   addressLine2?: string;
   landmark?: string;
   city: string;
-  district: string;
   state: string;
-  pincode: string;
-  isDefault?: boolean;
-  type: 'Home' | 'Work' | 'Boutique Pickup';
+  postalCode: string; // was pincode
+  country: string;
+  isDefaultShipping: boolean;
+  isDefaultBilling: boolean;
 }
 
 // Order & Shipment Management

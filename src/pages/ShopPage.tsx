@@ -1,11 +1,12 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { SlidersHorizontal, ArrowUpDown, Check, RotateCcw, Sparkles } from 'lucide-react';
-import { productsData } from '../data/products';
+import { useShop } from '../context/ShopContext';
 import { ProductCard } from '../components/ui/ProductCard';
 import { BottomSheet } from '../components/modals/BottomSheet';
 
 export const ShopPage: React.FC = () => {
+  const { products, categories, isLoadingProducts } = useShop();
   const [searchParams, setSearchParams] = useSearchParams();
   const filterParam = searchParams.get('filter');
   const catParam = searchParams.get('category');
@@ -30,7 +31,7 @@ export const ShopPage: React.FC = () => {
     if (filterParam === 'new') setSortBy('newest');
   }, [catParam, occParam, filterParam]);
 
-  const categories = ['All', 'Ethnic Wear', 'Modest Wear', 'Party Wear'];
+  const categoryOptions = ['All', ...categories.map(c => c.name)];
   const occasions = ['All', 'Bridal', 'Festive', 'Party Wear', 'Modest Wear', 'Ethnic'];
   const sizes = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
   const colors = [
@@ -75,7 +76,7 @@ export const ShopPage: React.FC = () => {
     inStockOnly;
 
   const filteredProducts = useMemo(() => {
-    let result = [...productsData];
+    let result = [...products];
 
     if (filterParam === 'bestseller') {
       result = result.filter(p => p.isBestSeller);
@@ -130,6 +131,7 @@ export const ShopPage: React.FC = () => {
 
     return result;
   }, [
+    products,
     selectedCategory,
     selectedOccasion,
     selectedSizes,
@@ -157,7 +159,7 @@ export const ShopPage: React.FC = () => {
 
       {/* Horizontal Category Chips Bar */}
       <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-3 mb-8 border-b border-allura-border/60">
-        {categories.map(cat => (
+        {categoryOptions.map(cat => (
           <button
             key={cat}
             onClick={() => setSelectedCategory(cat)}
@@ -341,7 +343,12 @@ export const ShopPage: React.FC = () => {
             </div>
           </div>
 
-          {filteredProducts.length === 0 ? (
+          {isLoadingProducts ? (
+            <div className="py-20 text-center space-y-3">
+              <div className="w-6 h-6 border-2 border-allura-goldDark border-t-transparent rounded-full animate-spin mx-auto" />
+              <p className="text-xs font-sans text-allura-muted">Loading the atelier catalog...</p>
+            </div>
+          ) : filteredProducts.length === 0 ? (
             <div className="py-20 text-center space-y-4 bg-allura-card rounded-xl border border-allura-border p-8">
               <div className="w-16 h-16 rounded-full bg-allura-bgSecondary flex items-center justify-center text-allura-gold mx-auto">
                 <Sparkles size={24} />
@@ -400,7 +407,7 @@ export const ShopPage: React.FC = () => {
               Category
             </h4>
             <div className="grid grid-cols-2 gap-2">
-              {categories.map(cat => (
+              {categoryOptions.map(cat => (
                 <button
                   key={cat}
                   onClick={() => setSelectedCategory(cat)}

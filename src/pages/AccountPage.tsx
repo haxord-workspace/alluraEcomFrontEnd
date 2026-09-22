@@ -10,7 +10,8 @@ import {
   ArrowRight, 
   Plus, 
   FileText, 
-  Truck 
+  Truck,
+  LogOut
 } from 'lucide-react';
 import { useShop } from '../context/ShopContext';
 import { StatusBadge } from '../components/common/StatusBadge';
@@ -26,8 +27,9 @@ export const AccountPage: React.FC = () => {
     formatPrice,
     invoiceOrder,
     setInvoiceOrder,
-    completeProfile,
-    showToast,
+    logoutCustomer,
+    addCustomerAddress,
+    deleteCustomerAddress,
   } = useShop();
 
   const [activeTab, setActiveTab] = useState<'overview' | 'orders' | 'addresses' | 'sizes' | 'notifications'>('overview');
@@ -35,31 +37,41 @@ export const AccountPage: React.FC = () => {
   // Address edit modal simulation
   const [isAddAddressOpen, setIsAddAddressOpen] = useState(false);
   const [newAddress, setNewAddress] = useState({
-    name: customer?.name || '',
-    phone: customer?.phone || '',
+    label: 'Home',
+    fullName: customer?.name || '',
+    phone: {
+      countryCode: '+91',
+      number: customer?.phone?.replace('+91 ', '') || '',
+    },
     addressLine1: '',
+    addressLine2: '',
+    landmark: '',
     city: 'Perinthalmanna',
-    district: 'Malappuram',
     state: 'Kerala',
-    pincode: '679322',
-    type: 'Home' as const,
+    postalCode: '679322',
+    country: 'India',
+    isDefaultShipping: false,
+    isDefaultBilling: false,
   });
 
   const recentOrder = orders[0];
 
-  const handleAddAddress = (e: React.FormEvent) => {
+  const handleAddAddress = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!customer) return;
-    const added = {
-      id: `addr-${Date.now()}`,
-      ...newAddress,
-      isDefault: customer.addresses.length === 0,
-    };
-    completeProfile({
-      addresses: [...customer.addresses, added],
-    });
-    setIsAddAddressOpen(false);
-    showToast('New delivery address saved', 'success');
+    
+    const isFirst = customer.addresses.length === 0;
+    try {
+      await addCustomerAddress({
+        ...newAddress,
+        isDefaultShipping: isFirst || newAddress.isDefaultShipping,
+        isDefaultBilling: isFirst || newAddress.isDefaultBilling,
+      });
+      setIsAddAddressOpen(false);
+      // Reset form (optional)
+    } catch (e) {
+      // handled by context
+    }
   };
 
   return (
@@ -104,6 +116,21 @@ export const AccountPage: React.FC = () => {
           >
             Edit Profile
           </Link>
+
+          <Link
+            to="/account/addresses"
+            className="px-4 py-2.5 rounded-xl border border-allura-border text-xs font-sans font-semibold text-allura-muted hover:text-allura-text hover:bg-allura-bgSecondary transition-colors"
+          >
+            Manage Addresses
+          </Link>
+
+          <button
+            onClick={() => logoutCustomer()}
+            className="px-4 py-2.5 rounded-xl border border-red-200 text-xs font-sans font-bold text-red-600 hover:bg-red-50 transition-colors flex items-center gap-2"
+          >
+            <LogOut size={15} />
+            <span>Logout</span>
+          </button>
         </div>
       </div>
 
@@ -308,26 +335,35 @@ export const AccountPage: React.FC = () => {
             {customer?.addresses.map(addr => (
               <div
                 key={addr.id}
-                className="bg-allura-card border border-allura-border rounded-2xl p-5 shadow-subtle space-y-3 relative"
+                className="bg-allura-card border border-allura-border rounded-2xl p-5 shadow-subtle space-y-3 relative group"
               >
                 <div className="flex justify-between items-center">
                   <span className="text-[10px] font-sans font-bold uppercase tracking-wider bg-allura-bgSecondary px-2 py-0.5 rounded text-allura-darkBrown">
-                    {addr.type}
+                    {addr.label}
                   </span>
-                  {addr.isDefault && (
+                  {addr.isDefaultShipping && (
                     <span className="text-[10px] font-sans font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded">
-                      Default Address
+                      Default Shipping
                     </span>
                   )}
                 </div>
 
                 <div className="text-xs font-sans text-allura-muted space-y-1">
-                  <p className="font-bold text-allura-text text-sm">{addr.name}</p>
+                  <p className="font-bold text-allura-text text-sm">{addr.fullName}</p>
                   <p>{addr.addressLine1}</p>
                   {addr.addressLine2 && <p>{addr.addressLine2}</p>}
-                  <p>{addr.city}, {addr.district} - {addr.pincode}</p>
-                  <p>{addr.state}, India</p>
-                  <p className="pt-1 text-allura-text">Phone: {addr.phone}</p>
+                  <p>{addr.city} - {addr.postalCode}</p>
+                  <p>{addr.state}, {addr.country}</p>
+                  <p className="pt-1 text-allura-text">Phone: {addr.phone.countryCode} {addr.phone.number}</p>
+                </div>
+                
+                <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity flex gap-2">
+                  <button 
+                    onClick={() => deleteCustomerAddress(addr.id)}
+                    className="text-xs font-sans text-red-500 hover:underline"
+                  >
+                    Delete
+                  </button>
                 </div>
               </div>
             ))}
@@ -344,18 +380,21 @@ export const AccountPage: React.FC = () => {
                     <input
                       type="text"
                       required
-                      value={newAddress.name}
-                      onChange={e => setNewAddress({ ...newAddress, name: e.target.value })}
+                      value={newAddress.fullName}
+                      onChange={e => setNewAddress({ ...newAddress, fullName: e.target.value })}
                       className="w-full p-2.5 bg-allura-bg border border-allura-border rounded-xl"
                     />
                   </div>
                   <div>
-                    <label className="block font-bold text-allura-muted uppercase text-[10px] mb-1">Phone</label>
+                    <label className="block font-bold text-allura-muted uppercase text-[10px] mb-1">Phone Number</label>
                     <input
                       type="tel"
                       required
-                      value={newAddress.phone}
-                      onChange={e => setNewAddress({ ...newAddress, phone: e.target.value })}
+                      value={newAddress.phone.number}
+                      onChange={e => setNewAddress({ 
+                        ...newAddress, 
+                        phone: { ...newAddress.phone, number: e.target.value } 
+                      })}
                       className="w-full p-2.5 bg-allura-bg border border-allura-border rounded-xl"
                     />
                   </div>
@@ -382,12 +421,12 @@ export const AccountPage: React.FC = () => {
                       />
                     </div>
                     <div>
-                      <label className="block font-bold text-allura-muted uppercase text-[10px] mb-1">Pincode</label>
+                      <label className="block font-bold text-allura-muted uppercase text-[10px] mb-1">Pincode / Postal Code</label>
                       <input
                         type="text"
                         required
-                        value={newAddress.pincode}
-                        onChange={e => setNewAddress({ ...newAddress, pincode: e.target.value })}
+                        value={newAddress.postalCode}
+                        onChange={e => setNewAddress({ ...newAddress, postalCode: e.target.value })}
                         className="w-full p-2.5 bg-allura-bg border border-allura-border rounded-xl"
                       />
                     </div>

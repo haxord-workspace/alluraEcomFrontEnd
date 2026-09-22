@@ -17,7 +17,7 @@ export const AdminShippingPage: React.FC = () => {
     orderNumber: o.orderNumber,
     customerName: o.customer.name,
     city: `${o.shippingAddress.city}, ${o.shippingAddress.state}`,
-    pincode: o.shippingAddress.pincode,
+    postalCode: o.shippingAddress.postalCode,
     courier: o.tracking?.courier || 'Delhivery Luxury Express',
     awb: o.tracking?.awb || 'Pending Generation',
     status: o.orderStatus === 'Pending' || o.orderStatus === 'Processing' ? 'Ready to Ship' : o.orderStatus,
@@ -115,7 +115,7 @@ export const AdminShippingPage: React.FC = () => {
                   </td>
                   <td className="p-4 text-stone-700">
                     <p className="font-medium">{s.city}</p>
-                    <p className="text-[10px] text-stone-400 font-mono">PIN: {s.pincode}</p>
+                    <p className="text-[10px] text-stone-400 font-mono">PIN: {s.postalCode}</p>
                   </td>
                   <td className="p-4 font-medium text-stone-800">{s.courier}</td>
                   <td className="p-4 font-mono font-bold text-stone-900">

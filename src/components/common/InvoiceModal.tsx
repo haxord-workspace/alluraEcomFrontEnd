@@ -85,12 +85,12 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, onClose }) =>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 p-4 rounded-xl bg-stone-50 border border-stone-100 text-xs font-sans">
           <div>
             <p className="font-bold text-stone-900 uppercase tracking-wider text-[11px] mb-1">Billed & Delivered To:</p>
-            <p className="font-semibold text-stone-800">{order.shippingAddress.name}</p>
+            <p className="font-semibold text-stone-800">{order.shippingAddress.fullName}</p>
             <p className="text-stone-600 leading-relaxed">
               {order.shippingAddress.addressLine1}, {order.shippingAddress.addressLine2 && `${order.shippingAddress.addressLine2}, `}
-              {order.shippingAddress.city}, {order.shippingAddress.district} - {order.shippingAddress.pincode}<br />
-              State: {order.shippingAddress.state} (Code: 32)<br />
-              Contact: {order.shippingAddress.phone}
+              {order.shippingAddress.city}, {order.shippingAddress.state} - {order.shippingAddress.postalCode}<br />
+              Country: {order.shippingAddress.country}<br />
+              Contact: {order.shippingAddress.phone.countryCode} {order.shippingAddress.phone.number}
             </p>
           </div>
 

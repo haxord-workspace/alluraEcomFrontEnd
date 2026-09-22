@@ -15,6 +15,7 @@ import { CartDrawer } from './components/modals/CartDrawer';
 import { SearchModal } from './components/modals/SearchModal';
 import { QuickViewModal } from './components/modals/QuickViewModal';
 import { ToastContainer } from './components/common/ToastContainer';
+import { ProtectedRoute } from './components/common/ProtectedRoute';
 import { AlluraAIAssistant } from './components/customer/AlluraAIAssistant';
 
 // Storefront Core Pages
@@ -34,6 +35,7 @@ import { ShippingReturnsPage } from './pages/ShippingReturnsPage';
 
 // Customer Flow Pages
 import { AuthPage } from './pages/customer/AuthPage';
+import { AccountAddressesPage } from './pages/customer/AccountAddressesPage';
 import { AccountOrdersPage } from './pages/customer/AccountOrdersPage';
 import { OrderDetailPage } from './pages/customer/OrderDetailPage';
 import { OrderTrackingPage } from './pages/customer/OrderTrackingPage';
@@ -174,10 +176,10 @@ export const AppContent: React.FC = () => {
           <Route path="/lookbook" element={<LookbookPage />} />
           <Route path="/about" element={<AboutPage />} />
           <Route path="/contact" element={<ContactPage />} />
-          <Route path="/cart" element={<CartPage />} />
-          <Route path="/checkout" element={<CheckoutPage />} />
-          <Route path="/wishlist" element={<WishlistPage />} />
-          <Route path="/account" element={<AccountPage />} />
+          <Route path="/cart" element={<ProtectedRoute><CartPage /></ProtectedRoute>} />
+          <Route path="/checkout" element={<ProtectedRoute><CheckoutPage /></ProtectedRoute>} />
+          <Route path="/wishlist" element={<ProtectedRoute><WishlistPage /></ProtectedRoute>} />
+          <Route path="/account" element={<ProtectedRoute><AccountPage /></ProtectedRoute>} />
           <Route path="/size-guide" element={<SizeGuidePage />} />
           <Route path="/shipping-returns" element={<ShippingReturnsPage />} />
 
@@ -185,11 +187,12 @@ export const AppContent: React.FC = () => {
           <Route path="/auth" element={<AuthPage />} />
           <Route path="/auth/login" element={<AuthPage />} />
           <Route path="/auth/complete-profile" element={<AuthPage />} />
-          <Route path="/account/orders" element={<AccountOrdersPage />} />
-          <Route path="/account/orders/:orderId" element={<OrderDetailPage />} />
-          <Route path="/account/orders/:orderId/tracking" element={<OrderTrackingPage />} />
-          <Route path="/account/orders/:orderId/return" element={<OrderReturnPage />} />
-          <Route path="/account/notifications" element={<NotificationsPage />} />
+          <Route path="/account/addresses" element={<ProtectedRoute><AccountAddressesPage /></ProtectedRoute>} />
+          <Route path="/account/orders" element={<ProtectedRoute><AccountOrdersPage /></ProtectedRoute>} />
+          <Route path="/account/orders/:orderId" element={<ProtectedRoute><OrderDetailPage /></ProtectedRoute>} />
+          <Route path="/account/orders/:orderId/tracking" element={<ProtectedRoute><OrderTrackingPage /></ProtectedRoute>} />
+          <Route path="/account/orders/:orderId/return" element={<ProtectedRoute><OrderReturnPage /></ProtectedRoute>} />
+          <Route path="/account/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
           <Route path="/offers" element={<OffersPage />} />
           <Route path="/faq" element={<FaqPage />} />
           <Route path="/ai-assistant" element={<AIAssistantPage />} />

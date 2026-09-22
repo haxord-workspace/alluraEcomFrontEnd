@@ -2,11 +2,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, X, Sparkles, ArrowRight, TrendingUp } from 'lucide-react';
 import { useShop } from '../../context/ShopContext';
-import { productsData } from '../../data/products';
 import type { Product } from '../../types';
 
 export const SearchModal: React.FC = () => {
-  const { isSearchOpen, setIsSearchOpen, formatPrice } = useShop();
+  const { products, isSearchOpen, setIsSearchOpen, formatPrice } = useShop();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Product[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -38,7 +37,7 @@ export const SearchModal: React.FC = () => {
     }
 
     const q = query.toLowerCase();
-    const filtered = productsData.filter(
+    const filtered = products.filter(
       p =>
         p.name.toLowerCase().includes(q) ||
         p.category.toLowerCase().includes(q) ||
@@ -47,7 +46,7 @@ export const SearchModal: React.FC = () => {
         p.colors.some(c => c.name.toLowerCase().includes(q))
     );
     setResults(filtered);
-  }, [query]);
+  }, [query, products]);
 
   if (!isSearchOpen) return null;
 

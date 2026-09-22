@@ -36,6 +36,14 @@ import {
 import { mockFaqsData } from '../data/mockFaqs';
 import { mockAIKnowledgeData } from '../data/mockAIKnowledge';
 import { useShop } from './ShopContext';
+import { useSelector, useDispatch } from 'react-redux';
+import type { RootState, AppDispatch } from '../store';
+import {
+  loginAdmin,
+  logoutAdmin,
+  fetchAdminProfile,
+  getAdminAccessToken,
+} from '../store/slices/adminAuthSlice';
 
 interface AdminContextType {
   // Admin Session & Roles
@@ -143,11 +151,18 @@ const AdminContext = createContext<AdminContextType | undefined>(undefined);
 
 export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { showToast } = useShop();
+  const dispatch = useDispatch<AppDispatch>();
 
-  // Admin Session
-  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
-    return localStorage.getItem('allura_admin_auth') === 'true';
-  });
+  // Admin auth state lives in Redux
+  const isAdminAuthenticated = useSelector((state: RootState) => state.adminAuth.isAuthenticated);
+
+  // On mount: restore session via /admin/auth/me if access token cookie exists
+  useEffect(() => {
+    if (getAdminAccessToken() && !isAdminAuthenticated) {
+      dispatch(fetchAdminProfile());
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [adminUsers] = useState<AdminUser[]>(() => {
     try {
@@ -314,10 +329,7 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     },
   ]);
 
-  // Sync to localStorage
-  useEffect(() => {
-    localStorage.setItem('allura_admin_auth', isAdminAuthenticated ? 'true' : 'false');
-  }, [isAdminAuthenticated]);
+  // Note: admin auth state is managed by Redux (adminAuthSlice) — no need to sync here
 
   useEffect(() => {
     localStorage.setItem('allura_current_admin', JSON.stringify(currentAdmin));
@@ -404,17 +416,22 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return !!mod[action];
   };
 
-  // Auth
-  const adminLogin = async (_email: string, _pass: string): Promise<boolean> => {
-    await new Promise(resolve => setTimeout(resolve, 600));
-    setIsAdminAuthenticated(true);
-    logAdminAction('Logged In', 'Security', 'Admin Portal Session Started');
-    showToast('Admin access granted', 'gold');
-    return true;
+  // Auth — dispatches to Redux thunks which handle cookies + API
+  const adminLogin = async (email: string, pass: string): Promise<boolean> => {
+    const result = await dispatch(loginAdmin({ email, password: pass }));
+    if (loginAdmin.fulfilled.match(result)) {
+      logAdminAction('Logged In', 'Security', 'Admin Portal Session Started');
+      showToast('Admin access granted', 'gold');
+      return true;
+    } else {
+      const msg = (result.payload as string) || 'Login failed. Please check your credentials.';
+      showToast(msg, 'error');
+      return false;
+    }
   };
 
-  const adminLogout = () => {
-    setIsAdminAuthenticated(false);
+  const adminLogout = async () => {
+    await dispatch(logoutAdmin());
     showToast('Logged out of Admin Portal', 'info');
   };
 

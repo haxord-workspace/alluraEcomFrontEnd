@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type {
   Product,
   CartItem,
@@ -9,10 +10,13 @@ import type {
   Coupon,
   AIMessage,
   ReturnRequest,
+  Category,
 } from '../types';
-import { productsData } from '../data/products';
-import { mockOrdersData, mockReturnRequestsData } from '../data/mockOrders';
-import { mockCustomersData } from '../data/mockCustomers';
+import { login, register, logout } from '../service/auth';
+import type { LoginData, RegisterData } from '../service/auth';
+import { getStoreProducts, getStoreCategories } from '../service/store';
+import { getAddresses, addAddress, updateAddress, deleteAddress } from '../service/address';
+import type { SavedAddress } from '../types';
 import { mockCouponsData } from '../data/mockCoupons';
 
 interface ToastNotification {
@@ -24,7 +28,9 @@ interface ToastNotification {
 interface ShopContextType {
   // Products
   products: Product[];
-  
+  categories: Category[];
+  isLoadingProducts: boolean;
+
   // Cart & Wishlist
   cart: CartItem[];
   wishlist: string[];
@@ -54,9 +60,16 @@ interface ShopContextType {
   // Customer Auth & Profile
   customer: CustomerProfile | null;
   isAuthenticated: boolean;
-  loginWithGoogle: () => Promise<void>;
+  loginUser: (data: LoginData) => Promise<void>;
+  registerUser: (data: RegisterData) => Promise<void>;
   completeProfile: (profile: Partial<CustomerProfile>) => void;
-  logoutCustomer: () => void;
+  logoutCustomer: () => Promise<void>;
+
+  // Address Management
+  fetchCustomerAddresses: () => Promise<void>;
+  addCustomerAddress: (data: Omit<SavedAddress, 'id'>) => Promise<void>;
+  updateCustomerAddress: (id: string, data: Partial<SavedAddress>) => Promise<void>;
+  deleteCustomerAddress: (id: string) => Promise<void>;
 
   // Orders & Returns
   orders: Order[];
@@ -143,22 +156,64 @@ const INITIAL_AI_MESSAGES: AIMessage[] = [
     timestamp: 'Just now',
   },
 ];
+import { useAppDispatch } from '../store/hooks';
+import { fetchCustomerProfile } from '../store/slices/authSlice';
+import { fetchCart } from '../store/slices/cartSlice';
+import { fetchWishlist } from '../store/slices/wishlistSlice';
+import { fetchOrders } from '../store/slices/orderSlice';
 
 export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [products] = useState<Product[]>(productsData);
+  const dispatch = useAppDispatch();
+
+  useEffect(() => {
+    // When the application loads (i.e. Redux state is gone on refresh),
+    // we call the provided approximate APIs to restore the state.
+    dispatch(fetchCustomerProfile());
+    dispatch(fetchCart());
+    dispatch(fetchWishlist());
+    dispatch(fetchOrders());
+  }, [dispatch]);
+  const navigate = useNavigate();
+  const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [isLoadingProducts, setIsLoadingProducts] = useState(true);
+
+  // Load the real storefront catalog on mount: categories first so product
+  // category names can be resolved from the raw categoryId the list endpoint returns.
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadCatalog = async () => {
+      setIsLoadingProducts(true);
+      try {
+        const fetchedCategories = await getStoreCategories();
+        if (cancelled) return;
+        setCategories(fetchedCategories);
+
+        const categoryMap = fetchedCategories.reduce<Record<string, string>>((acc, cat) => {
+          acc[cat.id] = cat.name;
+          return acc;
+        }, {});
+
+        const { products: fetchedProducts } = await getStoreProducts({ limit: 100 }, categoryMap);
+        if (cancelled) return;
+        setProducts(fetchedProducts);
+      } catch (e) {
+        console.error('Failed to load storefront catalog:', e);
+      } finally {
+        if (!cancelled) setIsLoadingProducts(false);
+      }
+    };
+
+    loadCatalog();
+    return () => { cancelled = true; };
+  }, []);
 
   // Cart state
   const [cart, setCart] = useState<CartItem[]>(() => {
     try {
       const saved = localStorage.getItem('allura_cart');
-      return saved ? JSON.parse(saved) : [
-        {
-          product: productsData[0],
-          selectedSize: 'M',
-          selectedColor: productsData[0].colors[0],
-          quantity: 1,
-        }
-      ];
+      return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
     }
@@ -168,7 +223,7 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [wishlist, setWishlist] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem('allura_wishlist');
-      return saved ? JSON.parse(saved) : [productsData[0].id, productsData[1].id];
+      return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
     }
@@ -178,9 +233,9 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [recentlyViewed, setRecentlyViewed] = useState<Product[]>(() => {
     try {
       const saved = localStorage.getItem('allura_recently_viewed');
-      return saved ? JSON.parse(saved) : [productsData[0], productsData[1], productsData[2]];
+      return saved ? JSON.parse(saved) : [];
     } catch {
-      return [productsData[0], productsData[1]];
+      return [];
     }
   });
 
@@ -188,9 +243,9 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [customer, setCustomer] = useState<CustomerProfile | null>(() => {
     try {
       const saved = localStorage.getItem('allura_customer');
-      return saved ? JSON.parse(saved) : mockCustomersData[0];
+      return saved ? JSON.parse(saved) : null;
     } catch {
-      return mockCustomersData[0];
+      return null;
     }
   });
 
@@ -198,9 +253,9 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [orders, setOrders] = useState<Order[]>(() => {
     try {
       const saved = localStorage.getItem('allura_orders');
-      return saved ? JSON.parse(saved) : mockOrdersData;
+      return saved ? JSON.parse(saved) : [];
     } catch {
-      return mockOrdersData;
+      return [];
     }
   });
 
@@ -208,9 +263,9 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [returns, setReturns] = useState<ReturnRequest[]>(() => {
     try {
       const saved = localStorage.getItem('allura_returns');
-      return saved ? JSON.parse(saved) : mockReturnRequestsData;
+      return saved ? JSON.parse(saved) : [];
     } catch {
-      return mockReturnRequestsData;
+      return [];
     }
   });
 
@@ -253,6 +308,8 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
   const [invoiceOrder, setInvoiceOrder] = useState<Order | null>(null);
   const [toasts, setToasts] = useState<ToastNotification[]>([]);
+  
+  const isAuthenticated = !!customer;
 
   // Sync state to localStorage
   useEffect(() => {
@@ -347,6 +404,10 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const addToCart = useCallback((product: Product, size: string, color: ProductColor, quantity = 1) => {
+    if (!customer) {
+      navigate('/auth/login');
+      return;
+    }
     setCart(prev => {
       const existingIndex = prev.findIndex(
         item => item.product.id === product.id && item.selectedSize === size && item.selectedColor.name === color.name
@@ -362,7 +423,7 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
     addRecentlyViewed(product);
     showToast(`Added ${product.name} (${size}) to your Bag`, 'gold');
     setIsCartOpen(true);
-  }, [addRecentlyViewed, showToast]);
+  }, [addRecentlyViewed, showToast, customer, navigate]);
 
   const removeFromCart = useCallback((productId: string, size: string, colorName: string) => {
     setCart(prev =>
@@ -393,6 +454,10 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const toggleWishlist = useCallback((product: Product) => {
+    if (!customer) {
+      navigate('/auth/login');
+      return;
+    }
     const exists = wishlist.includes(product.id);
     if (exists) {
       setWishlist(prev => prev.filter(id => id !== product.id));
@@ -401,7 +466,7 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setWishlist(prev => [...prev, product.id]);
       showToast(`Added to your Wishlist ❤️`, 'gold');
     }
-  }, [wishlist, showToast]);
+  }, [wishlist, showToast, customer, navigate]);
 
   const isInWishlist = useCallback((productId: string) => wishlist.includes(productId), [wishlist]);
 
@@ -446,10 +511,78 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [showToast]);
 
   // Customer Auth
-  const loginWithGoogle = async () => {
-    await new Promise(resolve => setTimeout(resolve, 800));
-    setCustomer(mockCustomersData[0]);
-    showToast(`Welcome back, ${mockCustomersData[0].name}`, 'gold');
+  const loginUser = async (data: LoginData) => {
+    try {
+      const response = await login(data);
+      if (response.token) {
+        document.cookie = `token=${response.token}; path=/; max-age=86400; SameSite=Strict`;
+      } else if (response.data?.accessToken) {
+        document.cookie = `token=${response.data.accessToken}; path=/; max-age=86400; SameSite=Strict`;
+      }
+      
+      if (response.refreshToken) {
+        document.cookie = `refreshToken=${response.refreshToken}; path=/; max-age=604800; SameSite=Strict`;
+      } else if (response.data?.refreshToken) {
+        document.cookie = `refreshToken=${response.data.refreshToken}; path=/; max-age=604800; SameSite=Strict`;
+      }
+      
+      const userProfile: CustomerProfile = response.user || {
+        id: `usr-${Date.now()}`,
+        name: data.email.split('@')[0],
+        email: data.email,
+        phone: '',
+        addresses: [],
+        orders: [],
+      };
+      setCustomer(userProfile);
+      showToast(`Welcome back, ${userProfile.name}`, 'gold');
+    } catch (error: any) {
+      let errorMessage = 'Login failed. Please check your credentials.';
+      if (error.response?.data?.error?.details?.[0]?.message) {
+        errorMessage = error.response.data.error.details[0].message;
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      }
+      showToast(errorMessage, 'error');
+      throw error;
+    }
+  };
+
+  const registerUser = async (data: RegisterData) => {
+    try {
+      const response = await register(data);
+      if (response.token) {
+        document.cookie = `token=${response.token}; path=/; max-age=86400; SameSite=Strict`;
+      } else if (response.data?.accessToken) {
+        document.cookie = `token=${response.data.accessToken}; path=/; max-age=86400; SameSite=Strict`;
+      }
+
+      if (response.refreshToken) {
+        document.cookie = `refreshToken=${response.refreshToken}; path=/; max-age=604800; SameSite=Strict`;
+      } else if (response.data?.refreshToken) {
+        document.cookie = `refreshToken=${response.data.refreshToken}; path=/; max-age=604800; SameSite=Strict`;
+      }
+      
+      const userProfile: CustomerProfile = response.user || {
+        id: `usr-${Date.now()}`,
+        name: data.name || data.email.split('@')[0],
+        email: data.email,
+        phone: '',
+        addresses: [],
+        orders: [],
+      };
+      setCustomer(userProfile);
+      showToast(`Welcome to Allura, ${userProfile.name}!`, 'gold');
+    } catch (error: any) {
+      let errorMessage = 'Registration failed.';
+      if (error.response?.data?.error?.details?.[0]?.message) {
+        errorMessage = error.response.data.error.details[0].message;
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      }
+      showToast(errorMessage, 'error');
+      throw error;
+    }
   };
 
   const completeProfile = (profile: Partial<CustomerProfile>) => {
@@ -459,9 +592,88 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const logoutCustomer = () => {
+  const logoutCustomer = async () => {
+    try {
+      await logout();
+    } catch (e) {
+      console.warn('Logout API call failed, still clearing local state', e);
+    }
+    document.cookie = 'token=; path=/; max-age=0; SameSite=Strict';
+    document.cookie = 'refreshToken=; path=/; max-age=0; SameSite=Strict';
     setCustomer(null);
     showToast('Logged out of customer session', 'info');
+  };
+
+  const getApiErrorMessage = (error: any, defaultMsg: string) => {
+    if (error.response?.data?.error?.details?.[0]?.message) {
+      return error.response.data.error.details[0].message;
+    }
+    if (error.response?.data?.message) {
+      return error.response.data.message;
+    }
+    return defaultMsg;
+  };
+
+  // Address API Handlers
+  const fetchCustomerAddresses = async () => {
+    if (!customer) return;
+    try {
+      const addresses = await getAddresses();
+      setCustomer((prev) => prev ? { ...prev, addresses } : prev);
+    } catch (error) {
+      console.error('Failed to fetch addresses:', error);
+    }
+  };
+
+  const addCustomerAddress = async (data: Omit<SavedAddress, 'id'>) => {
+    if (!customer) return;
+    try {
+      const newAddress = await addAddress(data);
+      setCustomer((prev) => {
+        if (!prev) return prev;
+        return { ...prev, addresses: [...prev.addresses, newAddress] };
+      });
+      showToast('Address saved successfully', 'success');
+    } catch (error) {
+      showToast(getApiErrorMessage(error, 'Failed to save address'), 'error');
+      throw error;
+    }
+  };
+
+  const updateCustomerAddress = async (id: string, data: Partial<SavedAddress>) => {
+    if (!customer) return;
+    try {
+      const updated = await updateAddress(id, data);
+      setCustomer((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          addresses: prev.addresses.map((a) => (a.id === id ? updated : a)),
+        };
+      });
+      showToast('Address updated successfully', 'success');
+    } catch (error) {
+      showToast(getApiErrorMessage(error, 'Failed to update address'), 'error');
+      throw error;
+    }
+  };
+
+  const deleteCustomerAddress = async (id: string) => {
+    if (!customer) return;
+    try {
+      await deleteAddress(id);
+      setCustomer((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          addresses: prev.addresses.filter((a) => a.id !== id),
+        };
+      });
+      showToast('Address deleted successfully', 'info');
+    } catch (error) {
+      showToast(getApiErrorMessage(error, 'Failed to delete address'), 'error');
+      throw error;
+    }
   };
 
   // Orders
@@ -480,14 +692,19 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
       },
       shippingAddress: orderData.shippingAddress || customer?.addresses[0] || {
         id: 'addr-temp',
-        name: 'Ananya Menon',
-        phone: '+91 98471 23456',
+        label: 'Home',
+        fullName: 'Ananya Menon',
+        phone: {
+          countryCode: '+91',
+          number: '98471 23456',
+        },
         addressLine1: 'Near Jubilee Hospital',
         city: 'Perinthalmanna',
-        district: 'Malappuram',
         state: 'Kerala',
-        pincode: '679322',
-        type: 'Home',
+        postalCode: '679322',
+        country: 'India',
+        isDefaultShipping: true,
+        isDefaultBilling: true,
       },
       items: cart.map(item => ({
         product: item.product,
@@ -610,13 +827,13 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     if (lower.includes('wedding') || lower.includes('reception') || lower.includes('bridal') || lower.includes('festive') || lower.includes('occasion')) {
       replyText = "For wedding celebrations and festive receptions, I highly recommend these opulent handcrafted silhouettes featuring authentic zari and scalloped organza dupattas:";
-      suggested = productsData.filter(p => p.occasion === 'Festive' || p.category === 'Ethnic Wear').slice(0, 3);
+      suggested = products.filter(p => p.occasion === 'Festive' || p.category === 'Ethnic Wear').slice(0, 3);
     } else if (lower.includes('black') || lower.includes('dress') || lower.includes('modest') || lower.includes('pleated')) {
       replyText = "Here are our most coveted modest ensembles with graceful draping and premium wrinkle-resistant crepes:";
-      suggested = productsData.filter(p => p.category === 'Modest Wear' || p.name.toLowerCase().includes('cream') || p.name.toLowerCase().includes('blush')).slice(0, 3);
+      suggested = products.filter(p => p.category === 'Modest Wear' || p.name.toLowerCase().includes('cream') || p.name.toLowerCase().includes('blush')).slice(0, 3);
     } else if (lower.includes('3000') || lower.includes('under 3000') || lower.includes('6000') || lower.includes('under 6000') || lower.includes('affordable')) {
       replyText = "Here are exquisite pieces that fit seamlessly within your budget without compromising on fabric purity:";
-      suggested = productsData.filter(p => p.price <= 6500).slice(0, 3);
+      suggested = products.filter(p => p.price <= 6500).slice(0, 3);
     } else if (lower.includes('size') || lower.includes('sizing') || lower.includes('fit') || lower.includes('36')) {
       replyText = "Allura silhouettes are tailored with true-to-size modest proportions and include a generous 2-inch inner margin for easy bespoke adjustments. For a bust size of 36 inches, Size M will offer the most graceful silhouette.";
     } else if (lower.includes('order') || lower.includes('where is') || lower.includes('track') || lower.includes('849201') || lower.includes('alr-ord')) {
@@ -632,7 +849,7 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
       replyText = "We offer a seamless 7-day doorstep return and size exchange service across India. You can submit an exchange request directly from your Account Orders page or WhatsApp our concierge.";
     } else {
       replyText = "Here are a few of our most beloved best-sellers from the current season atelier edit:";
-      suggested = productsData.slice(0, 3);
+      suggested = products.slice(0, 3);
     }
 
     const aiReply: AIMessage = {
@@ -661,6 +878,8 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
     <ShopContext.Provider
       value={{
         products,
+        categories,
+        isLoadingProducts,
         cart,
         wishlist,
         addToCart,
@@ -682,10 +901,15 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
         removeCoupon,
         finalOrderTotal,
         customer,
-        isAuthenticated: !!customer,
-        loginWithGoogle,
+        isAuthenticated,
+        loginUser,
+        registerUser,
         completeProfile,
         logoutCustomer,
+        fetchCustomerAddresses,
+        addCustomerAddress,
+        updateCustomerAddress,
+        deleteCustomerAddress,
         orders,
         placeOrder,
         getOrderById,

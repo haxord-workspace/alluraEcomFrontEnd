@@ -267,8 +267,8 @@ export const AdminOrderDetailPage: React.FC = () => {
               <span className="text-[10px] font-bold uppercase text-stone-400">Delivery Address</span>
               <p className="text-stone-800 leading-relaxed pt-1">
                 {order.shippingAddress.addressLine1}<br />
-                {order.shippingAddress.city}, {order.shippingAddress.district} - {order.shippingAddress.pincode}<br />
-                {order.shippingAddress.state}, India
+                {order.shippingAddress.city}, {order.shippingAddress.state} - {order.shippingAddress.postalCode}<br />
+                {order.shippingAddress.country}
               </p>
             </div>
           </div>

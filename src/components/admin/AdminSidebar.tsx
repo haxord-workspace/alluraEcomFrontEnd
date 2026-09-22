@@ -130,10 +130,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                   <Package size={15} />
                   {!isCollapsed && <span>All Products</span>}
                 </NavLink>
-                <NavLink to="/admin/products/new" className={navLinkClass}>
-                  <Package size={15} className="text-emerald-700" />
-                  {!isCollapsed && <span>Add Product</span>}
-                </NavLink>
+              
                 <NavLink to="/admin/categories" className={navLinkClass}>
                   <Layers size={15} />
                   {!isCollapsed && <span>Categories</span>}

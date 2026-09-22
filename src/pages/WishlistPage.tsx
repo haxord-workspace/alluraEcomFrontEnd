@@ -2,14 +2,13 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { Heart, ShoppingBag, ArrowRight } from 'lucide-react';
 import { useShop } from '../context/ShopContext';
-import { productsData } from '../data/products';
 import { ProductCard } from '../components/ui/ProductCard';
 import type { Product } from '../types';
 
 export const WishlistPage: React.FC = () => {
-  const { wishlist, addToCart } = useShop();
+  const { products, wishlist, addToCart } = useShop();
 
-  const wishlistProducts = productsData.filter((p: Product) => wishlist.includes(p.id));
+  const wishlistProducts = products.filter((p: Product) => wishlist.includes(p.id));
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-16 space-y-12">

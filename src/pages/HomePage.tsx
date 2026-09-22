@@ -8,24 +8,22 @@ import {
   ShieldCheck, 
   RefreshCw, 
   MessageSquare, 
-  Sparkles, 
-  Tag, 
-  Star,
   Play,
   Diamond,
   Feather,
   Heart
 } from 'lucide-react';
 import { occasionsData } from '../data/occasions';
-import { productsData } from '../data/products';
 import { ProductCard } from '../components/ui/ProductCard';
 import { OccasionCard } from '../components/ui/OccasionCard';
 import { AlluraCircleSection } from '../components/ui/AlluraCircleSection';
 import { useAdmin } from '../context/AdminContext';
+import { useShop } from '../context/ShopContext';
 
 export const HomePage: React.FC = () => {
   const navigate = useNavigate();
   const { banners } = useAdmin();
+  const { products, categories } = useShop();
   const [currentSlide, setCurrentSlide] = useState(0);
   const touchStartX = useRef<number | null>(null);
   const touchEndX = useRef<number | null>(null);
@@ -184,7 +182,10 @@ export const HomePage: React.FC = () => {
     touchEndX.current = null;
   };
 
-  const bestSellers = productsData.slice(0, 4);
+  const bestSellers = (products.filter(p => p.isBestSeller).length > 0
+    ? products.filter(p => p.isBestSeller)
+    : products
+  ).slice(0, 4);
 
   return (
     <div className="space-y-12 sm:space-y-20">
@@ -210,33 +211,22 @@ export const HomePage: React.FC = () => {
               <img
                 src={slide.image}
                 alt={slide.headingLines.join(' ')}
-                className="w-full h-full object-cover object-[center_20%] sm:object-[center_top] transition-transform duration-[8500ms] ease-out"
+                className="absolute inset-0 w-full h-full object-cover object-[center_20%] sm:object-[center_top] transition-transform duration-[8500ms] ease-out z-0"
                 style={{
                   transform: isActive ? 'scale(1.04)' : 'scale(1)',
                 }}
               />
 
-              {/* Removed gradient overlays for a clear image */}
+              {/* No Gradient Overlay */}
 
               {/* Content Container (Layered above gradients) */}
-              <div className="max-w-7xl mx-auto h-full px-5 sm:px-6 lg:px-8 relative z-30 flex items-center justify-between pb-8 sm:pb-0">
+              <div className="max-w-7xl mx-auto h-full px-5 sm:px-6 lg:px-8 relative z-30 flex items-end justify-between w-full pb-24 sm:pb-32">
                 
                 {/* Left High-Conversion Copy & Actions */}
                 <div className="max-w-xl space-y-4 pt-4 sm:pt-0">
                   
-                  {/* Top Eyebrow & Brand Tagline */}
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#561C08]/10 border border-[#561C08]/25 text-[10px] sm:text-[11px] font-heading font-bold tracking-[0.18em] uppercase text-[#561C08]">
-                      <Sparkles size={11} className="text-[#561C08]" />
-                      <span>{slide.badge}</span>
-                    </span>
-                    <span className="text-[11px] font-body font-semibold text-[#561C08] tracking-widest uppercase">
-                      WEAR YOUR STORY WITH ALLURA
-                    </span>
-                  </div>
-
                   {/* Main High-Impact Typography Heading */}
-                  <h1 className="font-heading text-3xl sm:text-5xl lg:text-[54px] text-[#000000] font-bold leading-[1.08] tracking-tight uppercase">
+                  <h1 className="font-heading text-3xl sm:text-5xl lg:text-[54px] text-white font-bold leading-[1.08] tracking-tight uppercase">
                     {slide.headingLines.map((line, lIdx) => (
                       <span key={lIdx} className="block">
                         {line}
@@ -245,103 +235,19 @@ export const HomePage: React.FC = () => {
                   </h1>
 
                   {/* Benefit-Driven Narrative Subtext */}
-                  <p className="text-xs sm:text-sm text-[#561C08] font-body max-w-lg leading-relaxed font-medium line-clamp-3 sm:line-clamp-none">
+                  <p className="text-xs sm:text-sm text-[#F7E6C8] font-body max-w-lg leading-relaxed font-normal line-clamp-3 sm:line-clamp-none">
                     {slide.description}
                   </p>
 
-                  {/* Incentive / Coupon Offer Pill */}
-                  <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-white border border-[#561C08]/20 text-[11px] font-body text-[#561C08] shadow-xs font-semibold">
-                    <Tag size={12} className="text-[#561C08] flex-shrink-0" />
-                    <span className="font-semibold truncate">{slide.offerPill}</span>
-                  </div>
-
-                  {/* Dual Call-to-Action Buttons */}
+                  {/* Call-to-Action Button */}
                   <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
                     <Link
                       to={slide.primaryLink}
-                      className="inline-flex items-center justify-center gap-2 bg-[#561C08] hover:bg-[#3D1406] text-white text-xs font-heading font-bold tracking-[0.2em] uppercase py-4 px-8 rounded-xl shadow-md transition-all duration-300 group text-center"
+                      className="inline-flex items-center justify-center gap-2 bg-[#F7E6C8] hover:bg-white text-[#561C08] text-xs font-heading font-bold tracking-[0.2em] uppercase py-4 px-8 rounded-xl shadow-md transition-all duration-300 group text-center"
                     >
                       <span>{slide.primaryCta}</span>
                       <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
                     </Link>
-
-                    {slide.secondaryLink.startsWith('http') ? (
-                      <a
-                        href={slide.secondaryLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center justify-center gap-2 bg-white hover:bg-[#561C08]/10 text-[#561C08] border-2 border-[#561C08] text-xs font-heading font-bold tracking-[0.16em] uppercase py-3.5 px-6 rounded-xl shadow-xs transition-all text-center"
-                      >
-                        <MessageSquare size={14} className="text-[#561C08]" />
-                        <span>{slide.secondaryCta}</span>
-                      </a>
-                    ) : (
-                      <Link
-                        to={slide.secondaryLink}
-                        className="inline-flex items-center justify-center gap-2 bg-white hover:bg-[#561C08]/10 text-[#561C08] border-2 border-[#561C08] text-xs font-heading font-bold tracking-[0.16em] uppercase py-3.5 px-6 rounded-xl shadow-xs transition-all text-center"
-                      >
-                        <Sparkles size={14} className="text-[#561C08]" />
-                        <span>{slide.secondaryCta}</span>
-                      </Link>
-                    )}
-                  </div>
-
-                  {/* Quick-Jump Trend Category Pills */}
-                  <div className="pt-2 hidden sm:flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
-                    <span className="text-[10px] uppercase font-bold tracking-wider text-[#561C08] whitespace-nowrap">
-                      Trending:
-                    </span>
-                    {slide.quickPills.map(pill => (
-                      <Link
-                        key={pill.label}
-                        to={pill.path}
-                        className="px-3 py-1 rounded-full bg-white hover:bg-[#561C08] text-[#561C08] hover:text-white border border-[#561C08]/20 text-[11px] font-body font-semibold whitespace-nowrap transition-colors shadow-xs"
-                      >
-                        {pill.label}
-                      </Link>
-                    ))}
-                  </div>
-
-                  {/* Mobile & Desktop Slide Indicators */}
-                  <div className="flex items-center justify-between sm:justify-start gap-6 pt-3">
-                    <div className="flex items-center gap-4">
-                      {heroSlides.map((_, i) => (
-                        <button
-                          key={i}
-                          onClick={() => setCurrentSlide(i)}
-                          className={`text-xs font-heading tracking-widest font-bold transition-all relative pb-1 ${
-                            currentSlide === i ? 'text-[#561C08]' : 'text-[#561C08]/40 hover:text-[#561C08]'
-                          }`}
-                        >
-                          0{i + 1}
-                          {currentSlide === i && (
-                            <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#561C08] rounded-full animate-fade-in" />
-                          )}
-                        </button>
-                      ))}
-                    </div>
-
-                    <span className="text-[11px] font-body text-[#561C08] italic hidden sm:inline font-medium">
-                      {slide.socialProof}
-                    </span>
-                  </div>
-
-                </div>
-
-                {/* Right Column (Editorial Quote & Tags for Large Screens) */}
-                <div className="hidden lg:flex flex-col items-end text-right space-y-4 max-w-xs pr-4">
-                  <div className="space-y-1 text-xs font-heading tracking-[0.22em] uppercase text-[#561C08] font-bold">
-                    {slide.rightTags.map(tag => (
-                      <div key={tag}>{tag}</div>
-                    ))}
-                  </div>
-                  <div className="w-16 h-[2px] bg-[#561C08]" />
-                  <div className="font-heading font-medium text-sm text-[#561C08] tracking-wide max-w-[210px] leading-snug uppercase">
-                    WEAR YOUR STORY WITH ALLURA
-                  </div>
-                  <div className="pt-2 flex items-center gap-1.5 text-[11px] text-[#561C08] font-body font-bold">
-                    <Star size={12} fill="#561C08" className="text-[#561C08]" />
-                    <span>Perinthalmanna Atelier</span>
                   </div>
                 </div>
 
@@ -444,6 +350,53 @@ export const HomePage: React.FC = () => {
           ))}
         </div>
       </section>
+
+      {/* 2B. SHOP BY CATEGORY (Live from Catalog) */}
+      {categories.length > 0 && (
+        <section className="max-w-7xl mx-auto px-6 lg:px-8">
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-8 sm:mb-12 border-b border-[#561C08]/15 pb-4">
+            <div>
+              <span className="text-[11px] font-heading font-bold tracking-[0.25em] uppercase text-[#561C08] block mb-1">
+                BROWSE THE COLLECTION
+              </span>
+              <h2 className="font-heading text-2xl sm:text-4xl text-[#000000] font-bold uppercase tracking-tight">
+                SHOP BY CATEGORY
+              </h2>
+            </div>
+            <Link
+              to="/shop"
+              className="inline-flex items-center gap-1.5 text-xs font-heading font-bold tracking-[0.2em] text-[#561C08] hover:text-[#3D1406] transition-colors mt-3 sm:mt-0 uppercase"
+            >
+              <span>VIEW ALL</span>
+              <ArrowRight size={14} />
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 sm:gap-6">
+            {categories.slice(0, 5).map(cat => {
+              const imageUrl = typeof cat.image === 'string' ? cat.image : cat.image?.url;
+              return (
+                <Link
+                  key={cat.id}
+                  to={`/shop?category=${encodeURIComponent(cat.name)}`}
+                  className="group relative aspect-[3/4] rounded-2xl overflow-hidden border border-[#561C08]/15 shadow-xs"
+                >
+                  <img
+                    src={imageUrl || '/images/best-sellers/classic-cream-anarkali.jpeg'}
+                    alt={cat.name}
+                    className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#561C08]/85 via-[#561C08]/20 to-transparent flex items-end justify-center p-3 text-center">
+                    <h4 className="font-heading text-xs sm:text-sm font-bold tracking-wider uppercase text-white">
+                      {cat.name}
+                    </h4>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {/* 3. EDITORIAL SPLIT BANNERS (Dynamic from Admin) */}
       <section className="max-w-7xl mx-auto px-6 lg:px-8">

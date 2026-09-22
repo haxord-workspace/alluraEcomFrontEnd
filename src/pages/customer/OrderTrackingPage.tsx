@@ -107,7 +107,7 @@ export const OrderTrackingPage: React.FC = () => {
               DESTINATION
             </span>
             <p className="text-xs font-sans font-semibold text-allura-text mt-1">
-              {order.shippingAddress.city}, {order.shippingAddress.state} ({order.shippingAddress.pincode})
+              {order.shippingAddress.city}, {order.shippingAddress.state} ({order.shippingAddress.postalCode})
             </p>
           </div>
         </div>

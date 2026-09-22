@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Lock, Mail, ShieldCheck, ArrowRight } from 'lucide-react';
+import { Lock, Unlock, Mail, ShieldCheck, ArrowRight } from 'lucide-react';
 import { useAdmin } from '../../context/AdminContext';
 import { AlluraLogo } from '../../components/common/AlluraLogo';
 
@@ -8,10 +8,11 @@ export const AdminLoginPage: React.FC = () => {
   const { adminLogin, isAdminAuthenticated } = useAdmin();
   const navigate = useNavigate();
 
-  const [email, setEmail] = useState('shamil@alluraboutique.in');
-  const [password, setPassword] = useState('••••••••••••');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
+  const [showPassword, setShowPassword] = useState(false);
 
   // If already authenticated, go to dashboard
   if (isAdminAuthenticated) {
@@ -27,7 +28,7 @@ export const AdminLoginPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-stone-900 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-stone-100 flex items-center justify-center p-4">
       <div className="bg-white border border-stone-200 rounded-3xl w-full max-w-md p-8 sm:p-10 shadow-2xl space-y-6 animate-slide-up text-stone-900">
         
         {/* Brand Header */}
@@ -69,10 +70,23 @@ export const AdminLoginPage: React.FC = () => {
               </span>
             </div>
             <div className="relative">
-              <Lock size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" />
+              {showPassword ? (
+                <Unlock 
+                  size={15} 
+                  className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400 cursor-pointer hover:text-stone-700 transition-colors" 
+                  onClick={() => setShowPassword(false)}
+                />
+              ) : (
+                <Lock 
+                  size={15} 
+                  className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400 cursor-pointer hover:text-stone-700 transition-colors" 
+                  onClick={() => setShowPassword(true)}
+                />
+              )}
               <input
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 required
+                placeholder='••••••••••••'
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 className="w-full pl-10 pr-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-stone-900 focus:outline-none focus:border-stone-800"
