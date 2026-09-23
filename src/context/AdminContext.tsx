@@ -42,7 +42,6 @@ import {
   loginAdmin,
   logoutAdmin,
   fetchAdminProfile,
-  getAdminAccessToken,
 } from '../store/slices/adminAuthSlice';
 
 interface AdminContextType {
@@ -156,9 +155,14 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // Admin auth state lives in Redux
   const isAdminAuthenticated = useSelector((state: RootState) => state.adminAuth.isAuthenticated);
 
-  // On mount: restore session via /admin/auth/me if access token cookie exists
+  // On mount: always attempt to restore the admin session via /auth/me.
+  // Don't gate this on the access-token cookie's presence — it's short-lived
+  // and may have already expired while the httpOnly refresh cookie is still
+  // valid, in which case adminApi's response interceptor silently refreshes
+  // it on the 401. Skipping this call whenever the cookie was already gone
+  // is what caused admins to be bounced to /admin/login after being away.
   useEffect(() => {
-    if (getAdminAccessToken() && !isAdminAuthenticated) {
+    if (!isAdminAuthenticated) {
       dispatch(fetchAdminProfile());
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps

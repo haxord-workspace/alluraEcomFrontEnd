@@ -54,8 +54,16 @@ adminApi.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config as AxiosRequestConfig & { _retry?: boolean };
 
+    // Never run the refresh dance for the auth endpoints themselves — a 401
+    // from /auth/login means "wrong credentials", not "expired session", and
+    // retrying it after a (futile) refresh attempt would just mask the real
+    // error and waste a round trip on every failed login attempt.
+    const isAuthEndpoint = /\/auth\/(login|refresh|register|logout)$/.test(
+      originalRequest.url || ''
+    );
+
     // Only attempt refresh on 401 and if we haven't already retried this request
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    if (error.response?.status === 401 && !originalRequest._retry && !isAuthEndpoint) {
       if (isRefreshing) {
         // Another refresh is already in flight — queue this request
         return new Promise((resolve, reject) => {
@@ -97,23 +105,23 @@ adminApi.interceptors.response.use(
           return adminApi(originalRequest);
         }
       } catch (refreshError) {
-        // Refresh failed — session is dead, clear everything and redirect
+        // Refresh failed — there's no valid session (or never was one, e.g.
+        // a fresh visit to /admin/login itself). Just clear local state and
+        // let it reject; AdminLayout's own <Navigate> already redirects
+        // unauthenticated visitors to /admin/login client-side. A forced
+        // `window.location.href` reload here used to retrigger the mount-time
+        // session check, which 401s again, which reloads again — an infinite
+        // reload loop that also stomped on in-progress login submissions.
         processQueue(refreshError, null);
         clearAdminAccessToken();
 
         // Dynamically import store to avoid circular dep, then dispatch clearAdmin
         import('../store').then(({ store }) => {
-          import('./adminApi').then(() => {
-            import('../store/slices/adminAuthSlice').then(({ clearAdmin }) => {
-              store.dispatch(clearAdmin());
-            });
+          import('../store/slices/adminAuthSlice').then(({ clearAdmin }) => {
+            store.dispatch(clearAdmin());
           });
         });
 
-        // Redirect to admin login
-        if (typeof window !== 'undefined') {
-          window.location.href = '/admin/login';
-        }
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;

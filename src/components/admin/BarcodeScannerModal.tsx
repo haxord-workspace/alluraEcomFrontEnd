@@ -1,44 +1,73 @@
-import React, { useState } from 'react';
-import { Camera, X, Scan, CheckCircle2, ArrowRight } from 'lucide-react';
-import { useAdmin } from '../../context/AdminContext';
+import React, { useState, useEffect, useRef } from 'react';
+import { Camera, X, Scan, CheckCircle2, XCircle, ArrowRight, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import type { Product } from '../../types';
+import { scanBarcode } from '../../service/barcode';
+import { getAdminProducts } from '../../service/adminProducts';
+import type { AdminProduct, AdminProductVariant } from '../../types';
 
 interface BarcodeScannerModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onProductDetected?: (product: Product) => void;
+  onVariantDetected?: (variant: AdminProductVariant) => void;
 }
 
 export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
   isOpen,
   onClose,
-  onProductDetected,
+  onVariantDetected,
 }) => {
-  const { products } = useAdmin();
   const navigate = useNavigate();
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  const [isScanning, setIsScanning] = useState(true);
-  const [detectedProduct, setDetectedProduct] = useState<Product | null>(null);
+  const [value, setValue] = useState('');
+  const [isScanning, setIsScanning] = useState(false);
+  const [detectedVariant, setDetectedVariant] = useState<AdminProductVariant | null>(null);
+  const [notFound, setNotFound] = useState(false);
+  const [products, setProducts] = useState<AdminProduct[]>([]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setValue('');
+    setDetectedVariant(null);
+    setNotFound(false);
+    getAdminProducts().then(setProducts).catch(() => {});
+    setTimeout(() => inputRef.current?.focus(), 100);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
-  const handleSimulateScan = () => {
+  const handleScan = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = value.trim();
+    if (!trimmed) return;
     setIsScanning(true);
-    setTimeout(() => {
-      const sample = products[0];
-      setDetectedProduct(sample);
-      setIsScanning(false);
-      if (onProductDetected) {
-        onProductDetected(sample);
+    setNotFound(false);
+    setDetectedVariant(null);
+    try {
+      const variant = await scanBarcode(trimmed);
+      if (variant) {
+        setDetectedVariant(variant);
+        onVariantDetected?.(variant);
+      } else {
+        setNotFound(true);
       }
-    }, 1200);
+    } catch (err) {
+      console.error('Barcode scan failed:', err);
+      setNotFound(true);
+    } finally {
+      setIsScanning(false);
+    }
   };
 
   const handleReset = () => {
-    setDetectedProduct(null);
-    setIsScanning(true);
+    setDetectedVariant(null);
+    setNotFound(false);
+    setValue('');
+    setTimeout(() => inputRef.current?.focus(), 50);
   };
+
+  const product = detectedVariant ? products.find(p => p.id === detectedVariant.productId) : null;
+  const primaryImage = product?.images?.find(img => img.isPrimary)?.url || product?.images?.[0]?.url;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-allura-darkBrown/70 backdrop-blur-sm animate-fade-in">
@@ -59,57 +88,64 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
           </button>
         </div>
 
-        {/* Viewfinder Camera Box */}
+        {/* Viewfinder Box */}
         <div className="p-6 text-center space-y-4">
           <div className="relative w-full h-64 bg-stone-950 rounded-2xl overflow-hidden flex flex-col items-center justify-center border-2 border-dashed border-allura-gold/50 shadow-inner">
-            {/* Viewfinder Grid overlay */}
             <div className="absolute inset-8 border-2 border-allura-gold/80 rounded-xl pointer-events-none">
-              {/* Corner markers */}
               <span className="absolute -top-1 -left-1 w-4 h-4 border-t-2 border-l-2 border-white" />
               <span className="absolute -top-1 -right-1 w-4 h-4 border-t-2 border-r-2 border-white" />
               <span className="absolute -bottom-1 -left-1 w-4 h-4 border-b-2 border-l-2 border-white" />
               <span className="absolute -bottom-1 -right-1 w-4 h-4 border-b-2 border-r-2 border-white" />
             </div>
 
-            {/* Red laser animated line */}
-            {isScanning && !detectedProduct && (
+            {isScanning && (
               <div className="absolute left-8 right-8 h-0.5 bg-rose-500 shadow-[0_0_12px_#f43f5e] animate-pulse" />
             )}
 
-            {!detectedProduct ? (
-              <div className="space-y-2 z-10 text-stone-300 px-4">
-                <Scan size={36} className="mx-auto text-allura-gold animate-bounce" />
-                <p className="text-xs font-sans font-medium">
-                  Align camera with garment barcode / EAN-13 label
-                </p>
-                <p className="text-[10px] text-stone-500 font-mono">
-                  Optical Lens active • Auto-focusing...
-                </p>
-              </div>
-            ) : (
+            {detectedVariant ? (
               <div className="space-y-2 z-10 text-emerald-400">
                 <CheckCircle2 size={40} className="mx-auto" />
-                <p className="text-xs font-sans font-bold">BARCODE DETECTED (EAN-13)</p>
-                <p className="text-xs font-mono text-white">8901234567890</p>
+                <p className="text-xs font-sans font-bold">VARIANT MATCHED</p>
+                <p className="text-xs font-mono text-white">{detectedVariant.barcode?.value}</p>
+              </div>
+            ) : notFound ? (
+              <div className="space-y-2 z-10 text-rose-400">
+                <XCircle size={40} className="mx-auto" />
+                <p className="text-xs font-sans font-bold">NO VARIANT FOUND</p>
+                <p className="text-xs font-mono text-white">{value}</p>
+              </div>
+            ) : (
+              <div className="space-y-2 z-10 text-stone-300 px-4">
+                <Scan size={36} className={`mx-auto text-allura-gold ${isScanning ? 'animate-pulse' : 'animate-bounce'}`} />
+                <p className="text-xs font-sans font-medium">
+                  Scan with a connected barcode reader, or type the value below
+                </p>
+                <p className="text-[10px] text-stone-500 font-mono">
+                  Hardware scanners type into the field automatically
+                </p>
               </div>
             )}
           </div>
 
-          {/* Detected product preview */}
-          {detectedProduct ? (
+          {/* Detected variant preview */}
+          {detectedVariant ? (
             <div className="bg-white border border-emerald-300 rounded-xl p-4 flex items-center justify-between gap-4 text-left animate-slide-up">
               <div className="flex items-center gap-3">
-                <img
-                  src={detectedProduct.images.primary}
-                  alt={detectedProduct.name}
-                  className="w-14 h-18 object-cover rounded-lg bg-stone-100"
-                />
+                {primaryImage ? (
+                  <img src={primaryImage} alt={product?.name} className="w-14 h-18 object-cover rounded-lg bg-stone-100" />
+                ) : (
+                  <div className="w-14 h-18 rounded-lg bg-stone-100 flex-shrink-0" />
+                )}
                 <div className="text-xs font-sans space-y-1">
-                  <p className="font-serif text-sm font-bold text-allura-text">{detectedProduct.name}</p>
-                  <p className="text-allura-muted font-mono">SKU: {detectedProduct.sku}</p>
-                  <p className="font-bold text-allura-darkBrown">₹ {detectedProduct.price.toLocaleString('en-IN')}</p>
+                  <p className="font-serif text-sm font-bold text-allura-text">
+                    {product?.name || detectedVariant.productId}
+                  </p>
+                  <p className="text-allura-muted font-mono">SKU: {detectedVariant.sku}</p>
+                  <p className="font-bold text-allura-darkBrown">
+                    {detectedVariant.pricing?.currency} {detectedVariant.pricing?.sellingPrice?.toLocaleString()}
+                  </p>
                   <span className="inline-block text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-semibold">
-                    Stock: {detectedProduct.stockCount || 6} in Atelier
+                    {detectedVariant.attributes?.size} • {detectedVariant.attributes?.color}
                   </span>
                 </div>
               </div>
@@ -119,11 +155,11 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
                   type="button"
                   onClick={() => {
                     onClose();
-                    navigate(`/admin/products/${detectedProduct.id}/edit`);
+                    navigate('/admin/variants');
                   }}
                   className="px-3.5 py-2 bg-allura-darkBrown text-white text-xs font-sans font-bold uppercase rounded-lg hover:bg-allura-softBrown transition-colors flex items-center gap-1.5"
                 >
-                  <span>Edit Product</span>
+                  <span>View Variant</span>
                   <ArrowRight size={12} />
                 </button>
                 <button
@@ -136,16 +172,35 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
               </div>
             </div>
           ) : (
-            <div className="flex justify-center gap-3">
-              <button
-                type="button"
-                onClick={handleSimulateScan}
-                className="px-6 py-2.5 bg-allura-darkBrown hover:bg-allura-softBrown text-white text-xs font-sans font-bold uppercase tracking-wider rounded-xl transition-colors flex items-center gap-2 shadow-sm"
-              >
-                <Scan size={14} />
-                <span>Simulate Optical Scan</span>
-              </button>
-            </div>
+            <form onSubmit={handleScan} className="space-y-3">
+              <input
+                ref={inputRef}
+                type="text"
+                value={value}
+                onChange={e => setValue(e.target.value)}
+                placeholder="Scan or type barcode value..."
+                className="w-full px-4 py-3 text-center font-mono text-sm bg-allura-bg border border-allura-border rounded-xl focus:outline-none focus:border-allura-gold"
+              />
+              <div className="flex justify-center gap-3">
+                {notFound && (
+                  <button
+                    type="button"
+                    onClick={handleReset}
+                    className="px-4 py-2.5 border border-allura-border text-allura-muted text-xs font-sans font-bold uppercase tracking-wider rounded-xl"
+                  >
+                    Try Again
+                  </button>
+                )}
+                <button
+                  type="submit"
+                  disabled={isScanning || !value.trim()}
+                  className="px-6 py-2.5 bg-allura-darkBrown hover:bg-allura-softBrown text-white text-xs font-sans font-bold uppercase tracking-wider rounded-xl transition-colors flex items-center gap-2 shadow-sm disabled:opacity-50"
+                >
+                  {isScanning ? <Loader2 size={14} className="animate-spin" /> : <Scan size={14} />}
+                  <span>{isScanning ? 'Looking up...' : 'Lookup Barcode'}</span>
+                </button>
+              </div>
+            </form>
           )}
         </div>
       </div>

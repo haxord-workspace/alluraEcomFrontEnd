@@ -23,6 +23,31 @@ export interface Category {
   order?: number;
 }
 
+/** Backend-schema collection type used exclusively in the Admin portal */
+export interface AdminCollection {
+  id: string;
+  name: string;
+  slug?: string;
+  status: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED' | string;
+  createdAt?: string;
+  updatedAt?: string;
+  [key: string]: any;
+}
+
+/** Backend-schema product variant type used exclusively in the Admin portal */
+export interface AdminProductVariant {
+  id: string;
+  productId: string;
+  sku: string;
+  barcode?: { value: string; type: string } | null;
+  attributes: { color?: string; size?: string; [key: string]: any };
+  pricing: { mrp: number; sellingPrice: number; currency: string };
+  status: 'ACTIVE' | 'INACTIVE' | string;
+  createdAt?: string;
+  updatedAt?: string;
+  [key: string]: any;
+}
+
 /** Backend-schema product type used exclusively in the Admin portal */
 export interface AdminProduct {
   id: string;

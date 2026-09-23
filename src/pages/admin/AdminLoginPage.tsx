@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Lock, Unlock, Mail, ShieldCheck, ArrowRight } from 'lucide-react';
 import { useAdmin } from '../../context/AdminContext';
@@ -15,16 +15,20 @@ export const AdminLoginPage: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
 
   // If already authenticated, go to dashboard
-  if (isAdminAuthenticated) {
-    navigate('/admin/dashboard');
-  }
+  useEffect(() => {
+    if (isAdminAuthenticated) {
+      navigate('/admin/dashboard');
+    }
+  }, [isAdminAuthenticated, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    await adminLogin(email, password);
+    const success = await adminLogin(email, password);
     setIsLoading(false);
-    navigate('/admin/dashboard');
+    if (success) {
+      navigate('/admin/dashboard');
+    }
   };
 
   return (

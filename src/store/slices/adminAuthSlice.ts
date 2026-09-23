@@ -11,8 +11,10 @@ export const getAdminAccessToken = (): string | null => {
   return null;
 };
 
-export const setAdminAccessToken = (token: string, maxAgeSeconds = 900) => {
-  // 15 min default — short-lived access token
+export const setAdminAccessToken = (token: string, maxAgeSeconds = 86400) => {
+  // Mirrors the backend access token's real lifetime (~24h). The short-lived
+  // security boundary is the httpOnly refresh-token cookie, not this one —
+  // letting this expire early just forces needless silent-refresh churn.
   document.cookie = `${ADMIN_ACCESS_TOKEN_COOKIE}=${token}; path=/; max-age=${maxAgeSeconds}; SameSite=Strict`;
 };
 
@@ -32,10 +34,12 @@ export interface AdminAuthState {
 const initialState: AdminAuthState = {
   admin: null,
   isAuthenticated: false,
-  // If a token cookie exists on first load, start as 'loading' so the
-  // AdminLayout shows a spinner instead of immediately redirecting to login.
-  // AdminContext will dispatch fetchAdminProfile() on mount to resolve this.
-  status: getAdminAccessToken() ? 'loading' : 'idle',
+  // Always start 'loading' — even when the short-lived access token cookie
+  // has already expired, the backend's httpOnly refresh cookie may still be
+  // valid, so AdminLayout must wait for fetchAdminProfile() to resolve
+  // before deciding whether to redirect to login. Gating this on the
+  // access-token cookie's mere presence silently dropped sessions early.
+  status: 'loading',
   error: null,
 };
 
@@ -75,15 +79,14 @@ export const loginAdmin = createAsyncThunk(
 
 /**
  * Restore session: GET /admin/auth/me
- * Called on app startup to check if existing cookie is still valid.
+ * Called unconditionally on app startup. Even without a readable access-token
+ * cookie, this request lets adminApi's response interceptor silently refresh
+ * via the httpOnly refresh-token cookie on a 401 before giving up.
  */
 export const fetchAdminProfile = createAsyncThunk(
   'adminAuth/fetchProfile',
   async (_, { rejectWithValue }) => {
     try {
-      const token = getAdminAccessToken();
-      if (!token) return rejectWithValue('No admin token');
-
       const { default: adminApi } = await import('../../service/adminApi');
       const response = await adminApi.get('/auth/me');
       return response.data?.data || response.data;
