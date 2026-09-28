@@ -1,15 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { 
-  Package, 
-  MapPin, 
-  Scissors, 
-  MessageCircle, 
-  Sparkles, 
-  Bell, 
-  ArrowRight, 
-  Plus, 
-  FileText, 
+import {
+  Package,
+  MapPin,
+  Scissors,
+  MessageCircle,
+  Sparkles,
+  Bell,
+  ArrowRight,
+  Plus,
+  FileText,
   Truck,
   LogOut
 } from 'lucide-react';
@@ -30,7 +30,12 @@ export const AccountPage: React.FC = () => {
     logoutCustomer,
     addCustomerAddress,
     deleteCustomerAddress,
+    refreshOrders,
   } = useShop();
+
+  useEffect(() => {
+    refreshOrders();
+  }, [refreshOrders]);
 
   const [activeTab, setActiveTab] = useState<'overview' | 'orders' | 'addresses' | 'sizes' | 'notifications'>('overview');
 
@@ -59,7 +64,7 @@ export const AccountPage: React.FC = () => {
   const handleAddAddress = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!customer) return;
-    
+
     const isFirst = customer.addresses.length === 0;
     try {
       await addCustomerAddress({
@@ -356,9 +361,9 @@ export const AccountPage: React.FC = () => {
                   <p>{addr.state}, {addr.country}</p>
                   <p className="pt-1 text-allura-text">Phone: {addr.phone.countryCode} {addr.phone.number}</p>
                 </div>
-                
+
                 <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity flex gap-2">
-                  <button 
+                  <button
                     onClick={() => deleteCustomerAddress(addr.id)}
                     className="text-xs font-sans text-red-500 hover:underline"
                   >
@@ -391,9 +396,9 @@ export const AccountPage: React.FC = () => {
                       type="tel"
                       required
                       value={newAddress.phone.number}
-                      onChange={e => setNewAddress({ 
-                        ...newAddress, 
-                        phone: { ...newAddress.phone, number: e.target.value } 
+                      onChange={e => setNewAddress({
+                        ...newAddress,
+                        phone: { ...newAddress.phone, number: e.target.value }
                       })}
                       className="w-full p-2.5 bg-allura-bg border border-allura-border rounded-xl"
                     />

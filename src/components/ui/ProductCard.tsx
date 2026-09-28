@@ -20,7 +20,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, showCategory 
   const handleQuickAdd = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    addToCart(product, product.sizes[0] || 'M', activeColor);
+    addToCart(product, product.sizes[0], activeColor);
   };
 
   const handleQuickView = (e: React.MouseEvent) => {

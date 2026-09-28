@@ -20,7 +20,18 @@ import {
   updateAdminProduct,
   updateAdminProductStatus,
 } from '../../service/adminProducts';
-import type { AdminProduct } from '../../types';
+import {
+  createAdminVariant,
+  updateAdminVariant,
+  deleteAdminVariant,
+  getAdminVariantsByProduct,
+} from '../../service/adminVariants';
+import type { VariantPayload } from '../../service/adminVariants';
+import { ProductVariantsEditor, buildVariantSku } from '../../components/admin/ProductVariantsEditor';
+import { ProductImagesEditor } from '../../components/admin/ProductImagesEditor';
+import type { VariantRow } from '../../components/admin/ProductVariantsEditor';
+import { useShop } from '../../context/ShopContext';
+import type { AdminProduct, AdminProductVariant } from '../../types';
 
 // Default form state
 const EMPTY_FORM = {
@@ -31,10 +42,62 @@ const EMPTY_FORM = {
   categoryId: '',
   pricing: { mrp: 0, sellingPrice: 0, currency: 'INR' },
   status: 'ACTIVE' as AdminProduct['status'],
+  images: [] as { url: string; isPrimary?: boolean }[],
+  variants: [] as VariantRow[],
 };
+
+type ProductPricing = typeof EMPTY_FORM.pricing;
+
+// What we send to the variants API for a row (blank price = inherit the product's)
+const toVariantPayload = (v: VariantRow, productSku: string, pricing: ProductPricing): Omit<VariantPayload, 'productId'> => {
+  const sellingPrice = v.price ?? pricing.sellingPrice;
+  return {
+    sku: v.sku.trim() || buildVariantSku(productSku, v.color, v.size),
+    attributes: {
+      ...(v.color ? { color: v.color } : {}),
+      ...(v.size ? { size: v.size } : {}),
+    },
+    pricing: {
+      mrp: v.mrp ?? Math.max(pricing.mrp, sellingPrice),
+      sellingPrice,
+      currency: pricing.currency,
+    },
+    // Match the Variants page payload (which the backend accepts): only send images when there are some
+    ...(v.images?.length ? { images: v.images } : {}),
+  };
+};
+
+const apiErrorMessage = (err: any, fallback: string): string =>
+  err?.response?.data?.error?.details?.[0]?.message || err?.response?.data?.message || fallback;
+
+// One retry for transient failures (server error, rate limit, network drop)
+const withRetry = async <T,>(fn: () => Promise<T>): Promise<T> => {
+  try {
+    return await fn();
+  } catch (err: any) {
+    const status = err?.response?.status;
+    if (status && status < 500 && status !== 429) throw err;
+    await new Promise(resolve => setTimeout(resolve, 800));
+    return fn();
+  }
+};
+
+const variantLabel = (v: VariantRow, sku: string) => [v.color, v.size].filter(Boolean).join(' / ') || sku;
+
+const toVariantRow = (v: AdminProductVariant, pricing: ProductPricing): VariantRow => ({
+  id: v.id,
+  sku: v.sku || '',
+  color: v.attributes?.color || '',
+  size: v.attributes?.size || '',
+  price: v.pricing?.sellingPrice !== undefined && v.pricing.sellingPrice !== pricing.sellingPrice ? v.pricing.sellingPrice : undefined,
+  mrp: v.pricing?.mrp !== undefined && v.pricing.mrp !== pricing.mrp ? v.pricing.mrp : undefined,
+  images: v.images || [],
+  status: v.status,
+});
 
 export const AdminProductsPage: React.FC = () => {
   const { hasPermission } = useAdmin();
+  const { showToast } = useShop();
 
   // ── API state ──────────────────────────────────────────────────────────────
   const [products, setProducts] = useState<AdminProduct[]>([]);
@@ -56,6 +119,10 @@ export const AdminProductsPage: React.FC = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [formData, setFormData] = useState(EMPTY_FORM);
+  // Snapshot of the variants as loaded, to work out what to create / update / delete on save
+  const [originalVariants, setOriginalVariants] = useState<Record<string, string>>({});
+  const [isLoadingVariants, setIsLoadingVariants] = useState(false);
+  const [saveProgress, setSaveProgress] = useState('');
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
   const fetchProducts = async () => {
@@ -114,6 +181,7 @@ export const AdminProductsPage: React.FC = () => {
   const handleOpenAdd = () => {
     setEditingId(null);
     setFormData(EMPTY_FORM);
+    setOriginalVariants({});
     setIsModalOpen(true);
   };
 
@@ -131,8 +199,80 @@ export const AdminProductsPage: React.FC = () => {
         currency: product.pricing.currency || 'INR',
       },
       status: product.status,
+      images: product.images || [],
+      variants: [],
     });
+    setOriginalVariants({});
     setIsModalOpen(true);
+
+    // Load this product's existing colour / size variants
+    const pricing = { mrp: product.pricing.mrp, sellingPrice: product.pricing.sellingPrice, currency: product.pricing.currency || 'INR' };
+    setIsLoadingVariants(true);
+    getAdminVariantsByProduct(product.id)
+      .then(list => {
+        const rows = list.map(v => toVariantRow(v, pricing));
+        setFormData(prev => ({ ...prev, variants: rows }));
+        setOriginalVariants(
+          Object.fromEntries(rows.map(r => [r.id!, JSON.stringify(toVariantPayload(r, product.sku, pricing))]))
+        );
+      })
+      .catch(err => {
+        console.error('Failed to load variants:', err);
+        showToast('Could not load this product\'s variants', 'error');
+      })
+      .finally(() => setIsLoadingVariants(false));
+  };
+
+  // Creates new rows, patches changed ones and deletes removed ones. Returns the error messages.
+  // Saves variants ONE AT A TIME (the backend fails when several are created for a product in parallel).
+  // Returns the rows with the ids of newly created variants filled in, so a retry never duplicates them.
+  const syncVariants = async (productId: string, productSku: string, pricing: ProductPricing, rows: VariantRow[]) => {
+    const snapshot = { ...originalVariants };
+    const errors: string[] = [];
+    const currentIds = new Set(rows.filter(r => r.id).map(r => r.id!));
+    const toDelete = Object.keys(originalVariants).filter(id => !currentIds.has(id));
+    const toSave = rows.filter(r => !r.id || snapshot[r.id] !== JSON.stringify(toVariantPayload(r, productSku, pricing)));
+    const total = toDelete.length + toSave.length;
+    let done = 0;
+    const tick = () => setSaveProgress(`Saving variants ${++done}/${total}…`);
+
+    for (const id of toDelete) {
+      tick();
+      try {
+        await withRetry(() => deleteAdminVariant(id));
+        delete snapshot[id];
+      } catch (err) {
+        errors.push(`Delete failed: ${apiErrorMessage(err, 'server error')}`);
+      }
+    }
+
+    const nextRows: VariantRow[] = [];
+    for (const r of rows) {
+      const payload = toVariantPayload(r, productSku, pricing);
+      const key = JSON.stringify(payload);
+      if (r.id && snapshot[r.id] === key) {
+        nextRows.push(r);
+        continue;
+      }
+      tick();
+      try {
+        if (!r.id) {
+          const created = await withRetry(() => createAdminVariant({ productId, ...payload, status: 'ACTIVE' }));
+          const row = { ...r, id: created?.id, sku: payload.sku };
+          if (row.id) snapshot[row.id] = key;
+          nextRows.push(row);
+        } else {
+          await withRetry(() => updateAdminVariant(r.id!, payload));
+          snapshot[r.id] = key;
+          nextRows.push(r);
+        }
+      } catch (err) {
+        errors.push(`${variantLabel(r, payload.sku)}: ${apiErrorMessage(err, 'server error')}`);
+        nextRows.push(r);
+      }
+    }
+
+    return { rows: nextRows, snapshot, errors };
   };
 
   // ── Save ───────────────────────────────────────────────────────────────────
@@ -140,18 +280,38 @@ export const AdminProductsPage: React.FC = () => {
     e.preventDefault();
     setIsSaving(true);
     try {
+      const { variants, ...productPayload } = formData;
+
+      let saved: AdminProduct;
       if (editingId) {
-        const updated = await updateAdminProduct(editingId, formData);
-        setProducts(products.map(p => (p.id === editingId ? updated : p)));
+        saved = await updateAdminProduct(editingId, productPayload);
+        setProducts(products.map(p => (p.id === editingId ? saved : p)));
       } else {
-        const created = await createAdminProduct(formData);
-        setProducts([created, ...products]);
+        saved = await createAdminProduct(productPayload);
+        setProducts([saved, ...products]);
       }
+
+      const result = await syncVariants(saved.id, saved.sku || formData.sku, formData.pricing, variants);
+      // Remember what now exists on the server so "Save" again only retries what failed
+      setOriginalVariants(result.snapshot);
+      setFormData(prev => ({ ...prev, variants: result.rows }));
+      if (result.errors.length > 0) {
+        if (!editingId) setEditingId(saved.id);
+        showToast(
+          `Product saved, but ${result.errors.length} variant(s) failed. Click Save again to retry. ${result.errors[0]}`,
+          'error'
+        );
+        return;
+      }
+
+      showToast(editingId ? 'Product updated' : 'Product created', 'success');
       setIsModalOpen(false);
     } catch (err: any) {
       console.error('Failed to save product:', err);
+      showToast(err?.response?.data?.error?.details?.[0]?.message || err?.response?.data?.message || 'Failed to save product', 'error');
     } finally {
       setIsSaving(false);
+      setSaveProgress('');
     }
   };
 
@@ -393,8 +553,8 @@ export const AdminProductsPage: React.FC = () => {
 
       {/* Create / Edit Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-sm">
-          <div className="bg-white border border-stone-200 rounded-2xl w-full max-w-lg p-6 space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex justify-center p-4 bg-stone-900/60 backdrop-blur-sm overflow-y-auto py-10">
+          <div className="bg-white border border-stone-200 rounded-2xl w-full max-w-2xl p-6 space-y-5 shadow-2xl h-max my-auto">
             <h3 className="font-serif text-xl text-stone-900">
               {editingId ? 'Edit Product' : 'Add New Product'}
             </h3>
@@ -501,6 +661,20 @@ export const AdminProductsPage: React.FC = () => {
                 </div>
               </div>
 
+              {/* Images: main + gallery */}
+              <ProductImagesEditor
+                images={formData.images || []}
+                onChange={images => setFormData(prev => ({ ...prev, images }))}
+              />
+
+              {/* Colours & sizes */}
+              <ProductVariantsEditor
+                variants={formData.variants}
+                onChange={variants => setFormData(prev => ({ ...prev, variants }))}
+                productSku={formData.sku}
+                isLoading={isLoadingVariants}
+              />
+
               <div>
                 <label className="block text-[10px] uppercase font-bold text-stone-500 mb-1">Status</label>
                 <select
@@ -527,7 +701,7 @@ export const AdminProductsPage: React.FC = () => {
                   disabled={isSaving}
                   className="px-5 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-xl text-xs font-bold uppercase tracking-wider disabled:opacity-50"
                 >
-                  {isSaving ? 'Saving...' : 'Save Product'}
+                  {isSaving ? saveProgress || 'Saving...' : 'Save Product'}
                 </button>
               </div>
             </form>

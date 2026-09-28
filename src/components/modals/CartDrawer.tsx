@@ -142,8 +142,9 @@ export const CartDrawer: React.FC = () => {
                     </div>
 
                     <div className="text-[11px] text-allura-muted mt-1 flex items-center gap-2">
-                      <span>Size: <strong className="text-allura-text">{item.selectedSize}</strong></span>
-                      <span>•</span>
+                      {item.selectedSize && <span>Size: <strong className="text-allura-text">{item.selectedSize}</strong></span>}
+                      {item.selectedSize && item.selectedColor.name && <span>•</span>}
+                      {item.selectedColor.name && (
                       <span className="flex items-center gap-1">
                         Color:
                         <span
@@ -152,6 +153,7 @@ export const CartDrawer: React.FC = () => {
                         />
                         <strong className="text-allura-text">{item.selectedColor.name}</strong>
                       </span>
+                      )}
                     </div>
 
                     <p className="font-serif text-sm font-semibold text-allura-text mt-1">

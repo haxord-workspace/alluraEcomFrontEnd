@@ -120,9 +120,10 @@ export const QuickViewModal: React.FC = () => {
             </p>
 
             {/* Colors */}
+            {product.colors.length > 0 && (
             <div className="mt-4">
               <span className="text-xs font-semibold text-allura-text">
-                Color: <span className="font-normal text-allura-muted">{currentColor.name}</span>
+                Color: <span className="font-normal text-allura-muted">{currentColor?.name}</span>
               </span>
               <div className="flex items-center gap-2 mt-2">
                 {product.colors.map((c, idx) => (
@@ -142,8 +143,10 @@ export const QuickViewModal: React.FC = () => {
                 ))}
               </div>
             </div>
+            )}
 
             {/* Sizes */}
+            {product.sizes.length > 0 && (
             <div className="mt-4">
               <div className="flex items-center justify-between text-xs">
                 <span className="font-semibold text-allura-text">Select Size</span>
@@ -171,6 +174,7 @@ export const QuickViewModal: React.FC = () => {
                 ))}
               </div>
             </div>
+            )}
           </div>
 
           {/* Action Buttons */}

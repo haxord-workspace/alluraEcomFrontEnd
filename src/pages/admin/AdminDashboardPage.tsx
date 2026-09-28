@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   ArrowUpRight, 
@@ -9,15 +9,41 @@ import {
 import { useAdmin } from '../../context/AdminContext';
 import { mockAnalyticsData } from '../../data/mockAnalytics';
 import { StatusBadge } from '../../components/common/StatusBadge';
+import { getLowStockInventory } from '../../service/adminInventory';
+import type { InventoryRecord } from '../../service/adminInventory';
+import { getAdminOrders } from '../../service/orders';
+import type { Order } from '../../types';
 
 export const AdminDashboardPage: React.FC = () => {
-  const { currentAdmin, orders, products, abandonedCarts } = useAdmin();
+  const { currentAdmin, products, abandonedCarts } = useAdmin();
   const [timeRange, setTimeRange] = useState<'7D' | '30D' | '90D' | '1Y'>('30D');
 
   const { overview, salesChart, funnel } = mockAnalyticsData;
 
-  const lowStockProducts = products.filter(p => (p.stockCount ?? 0) <= 6);
-  const pendingOrders = orders.filter(o => o.orderStatus === 'Processing' || o.orderStatus === 'Pending');
+  const [lowStockItems, setLowStockItems] = useState<InventoryRecord[]>([]);
+
+  useEffect(() => {
+    getLowStockInventory()
+      .then(setLowStockItems)
+      .catch(err => console.error('Failed to load low stock inventory:', err));
+  }, []);
+
+  // Recent orders + counts from the orders API
+  const [recentOrders, setRecentOrders] = useState<Order[]>([]);
+  const [totalOrders, setTotalOrders] = useState(0);
+  const [pendingCount, setPendingCount] = useState(0);
+
+  useEffect(() => {
+    getAdminOrders({ page: 1, limit: 5 })
+      .then(result => {
+        setRecentOrders(result.orders);
+        setTotalOrders(result.total);
+      })
+      .catch(err => console.error('Failed to load recent orders:', err));
+    getAdminOrders({ page: 1, limit: 1, status: 'PENDING' })
+      .then(result => setPendingCount(result.total))
+      .catch(() => {});
+  }, []);
 
   return (
     <div className="space-y-8 pb-12">
@@ -100,9 +126,9 @@ export const AdminDashboardPage: React.FC = () => {
             </div>
           </div>
           <p className="font-serif text-2xl sm:text-3xl font-bold text-stone-900">
-            {orders.length}
+            {totalOrders}
           </p>
-          <p className="text-[11px] font-sans text-amber-700 font-medium">{pendingOrders.length} pending dispatch</p>
+          <p className="text-[11px] font-sans text-amber-700 font-medium">{pendingCount} awaiting confirmation</p>
         </Link>
 
         {/* Customers */}
@@ -135,7 +161,7 @@ export const AdminDashboardPage: React.FC = () => {
           <p className="font-serif text-2xl sm:text-3xl font-bold text-stone-900">
             {products.length}
           </p>
-          <p className="text-[11px] font-sans text-rose-700 font-medium">{lowStockProducts.length} items low on stock</p>
+          <p className="text-[11px] font-sans text-rose-700 font-medium">{lowStockItems.length} items low on stock</p>
         </Link>
       </div>
 
@@ -244,7 +270,12 @@ export const AdminDashboardPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100">
-                {orders.slice(0, 5).map(order => (
+                {recentOrders.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="py-6 text-center text-stone-400">No orders yet.</td>
+                  </tr>
+                )}
+                {recentOrders.map(order => (
                   <tr key={order.id} className="hover:bg-stone-50/60">
                     <td className="py-3">
                       <p className="font-bold text-stone-900 font-serif">{order.orderNumber}</p>
@@ -291,17 +322,24 @@ export const AdminDashboardPage: React.FC = () => {
             </div>
 
             <div className="space-y-3">
-              {lowStockProducts.slice(0, 3).map(p => (
-                <div key={p.id} className="flex items-center justify-between p-2.5 rounded-xl bg-rose-50/50 border border-rose-100 text-xs font-sans">
+              {lowStockItems.length === 0 && (
+                <p className="text-xs text-stone-400 font-sans">No low stock variants right now.</p>
+              )}
+              {lowStockItems.slice(0, 3).map(item => (
+                <div key={item.id || item.variantId} className="flex items-center justify-between p-2.5 rounded-xl bg-rose-50/50 border border-rose-100 text-xs font-sans">
                   <div className="flex items-center gap-2.5">
-                    <img src={p.images.primary} alt={p.name} className="w-9 h-11 object-cover rounded bg-stone-100" />
+                    {item.image ? (
+                      <img src={item.image} alt={item.productName || item.sku} className="w-9 h-11 object-cover rounded bg-stone-100" />
+                    ) : (
+                      <div className="w-9 h-11 rounded bg-stone-100" />
+                    )}
                     <div>
-                      <p className="font-medium text-stone-900 truncate max-w-[130px]">{p.name}</p>
-                      <p className="text-[10px] text-stone-500 font-mono">SKU: {p.sku}</p>
+                      <p className="font-medium text-stone-900 truncate max-w-[130px]">{item.productName || item.sku || 'Variant'}</p>
+                      <p className="text-[10px] text-stone-500 font-mono">SKU: {item.sku || '—'}</p>
                     </div>
                   </div>
                   <span className="font-bold text-rose-800 bg-rose-100 px-2 py-0.5 rounded text-[11px]">
-                    {p.stockCount} left
+                    {item.quantityAvailable} left
                   </span>
                 </div>
               ))}

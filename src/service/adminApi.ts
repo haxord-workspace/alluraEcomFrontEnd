@@ -1,10 +1,12 @@
 import axios from 'axios';
 import type { AxiosRequestConfig } from 'axios';
 import { API_BASE_URL } from './api';
+import { attachRequestGuards } from './requestGuards';
 import {
   getAdminAccessToken,
-  setAdminAccessToken,
-  clearAdminAccessToken,
+  getAdminRefreshToken,
+  storeAdminTokens,
+  clearAdminSession,
 } from '../store/slices/adminAuthSlice';
 
 // Track whether a refresh is already in flight to avoid parallel refreshes
@@ -82,28 +84,26 @@ adminApi.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        // Call refresh endpoint — browser auto-sends httpOnly refresh cookie
+        // POST /auth/refresh requires { refreshToken } in the body
+        const refreshToken = getAdminRefreshToken();
+        if (!refreshToken) throw new Error('No admin refresh token');
+
         const refreshResponse = await axios.post(
           `${API_BASE_URL}/auth/refresh`,
-          {},
+          { refreshToken },
           { withCredentials: true }
         );
 
-        const newToken =
-          refreshResponse.data?.data?.accessToken ||
-          refreshResponse.data?.accessToken ||
-          refreshResponse.data?.data?.token ||
-          refreshResponse.data?.token;
+        // Stores the new access token and, if the backend rotates it, the new refresh token
+        const { accessToken: newToken } = storeAdminTokens(refreshResponse.data);
 
-        if (newToken) {
-          setAdminAccessToken(newToken);
-          processQueue(null, newToken);
+        if (!newToken) throw new Error('Refresh response did not include an access token');
 
-          if (originalRequest.headers) {
-            originalRequest.headers['Authorization'] = `Bearer ${newToken}`;
-          }
-          return adminApi(originalRequest);
+        processQueue(null, newToken);
+        if (originalRequest.headers) {
+          originalRequest.headers['Authorization'] = `Bearer ${newToken}`;
         }
+        return adminApi(originalRequest);
       } catch (refreshError) {
         // Refresh failed — there's no valid session (or never was one, e.g.
         // a fresh visit to /admin/login itself). Just clear local state and
@@ -113,7 +113,7 @@ adminApi.interceptors.response.use(
         // session check, which 401s again, which reloads again — an infinite
         // reload loop that also stomped on in-progress login submissions.
         processQueue(refreshError, null);
-        clearAdminAccessToken();
+        clearAdminSession();
 
         // Dynamically import store to avoid circular dep, then dispatch clearAdmin
         import('../store').then(({ store }) => {
@@ -131,5 +131,7 @@ adminApi.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+attachRequestGuards(adminApi);
 
 export default adminApi;

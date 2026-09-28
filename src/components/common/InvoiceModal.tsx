@@ -122,10 +122,10 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, onClose }) =>
                 <tr key={idx} className="hover:bg-stone-50/50">
                   <td className="py-3 pr-2">
                     <p className="font-medium text-stone-800">{item.product.name}</p>
-                    <p className="text-[11px] text-stone-400">Color: {item.selectedColor.name}</p>
+                    {item.selectedColor?.name && <p className="text-[11px] text-stone-400">Color: {item.selectedColor.name}</p>}
                   </td>
                   <td className="py-3 text-stone-600 font-mono text-[11px]">
-                    {item.sku} ({item.selectedSize})
+                    {item.sku}{item.selectedSize && ` (${item.selectedSize})`}
                   </td>
                   <td className="py-3 text-center text-stone-800">{item.quantity}</td>
                   <td className="py-3 text-right text-stone-800">{formatPrice(item.unitPrice)}</td>

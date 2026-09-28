@@ -75,7 +75,32 @@ export const AdminBarcodesPage: React.FC = () => {
     setBusyId(variantId);
     try {
       const url = await getVariantBarcodePrintImage(variantId);
-      window.open(url, '_blank');
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.write(`
+          <html>
+            <head>
+              <title>Print Barcode</title>
+              <style>
+                body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; }
+                img { max-width: 100%; max-height: 100%; }
+                @media print {
+                  @page { margin: 0; }
+                  body { display: block; height: auto; }
+                  img { width: auto; height: auto; max-width: 100%; }
+                }
+              </style>
+            </head>
+            <body>
+              <img src="${url}" onload="window.print(); window.close();" />
+            </body>
+          </html>
+        `);
+        printWindow.document.close();
+      } else {
+        // Fallback if popup blocker prevented the window
+        window.open(url, '_blank');
+      }
     } catch (err) {
       console.error('Failed to load barcode image:', err);
     } finally {

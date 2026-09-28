@@ -130,6 +130,8 @@ export interface Product {
   colors: ProductColor[];
   sizes: string[];
   variants?: ProductVariant[];
+  /** Backend flag: the product is sold per variant (size / colour), so the cart needs a variantId */
+  hasVariants?: boolean;
   inStock: boolean;
   stockCount?: number;
   images: {
@@ -177,6 +179,11 @@ export interface CollectionItem {
 }
 
 export interface CartItem {
+  /** Server cart line id (used for PATCH / DELETE /cart/items/{itemId}) */
+  id?: string;
+  variantId?: string;
+  /** Price the server charges per unit; falls back to product.price */
+  unitPrice?: number;
   product: Product;
   selectedSize: string;
   selectedColor: ProductColor;
@@ -265,6 +272,9 @@ export type PaymentStatus = 'Pending' | 'Authorized' | 'Captured' | 'Paid' | 'Fa
 
 export interface OrderItem {
   product: Product;
+  variantId?: string;
+  /** False when the order didn't include an image (a placeholder is shown until the catalog fills it in) */
+  hasImage?: boolean;
   selectedSize: string;
   selectedColor: ProductColor;
   quantity: number;
@@ -296,6 +306,10 @@ export interface Order {
   id: string;
   orderNumber: string;
   date: string;
+  /** ISO timestamp from the backend */
+  placedAt?: string;
+  /** Backend status value (e.g. OUT_FOR_DELIVERY), used when sending status updates */
+  rawStatus?: string;
   customer: {
     id: string;
     name: string;

@@ -42,6 +42,7 @@ export interface VariantPayload {
   attributes: { color?: string; size?: string };
   pricing: { mrp: number; sellingPrice: number; currency: string };
   status?: string;
+  images?: { url: string; thumbnailUrl?: string; alt?: string; position?: number; isPrimary?: boolean }[];
 }
 
 /**

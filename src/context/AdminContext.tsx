@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { useLocation } from 'react-router-dom';
 import type {
   Product,
   Order,
@@ -161,12 +162,14 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // valid, in which case adminApi's response interceptor silently refreshes
   // it on the 401. Skipping this call whenever the cookie was already gone
   // is what caused admins to be bounced to /admin/login after being away.
+  // Only needed on admin pages; the storefront never uses the admin session.
+  const isAdminRoute = useLocation().pathname.startsWith('/admin');
   useEffect(() => {
-    if (!isAdminAuthenticated) {
+    if (isAdminRoute && !isAdminAuthenticated) {
       dispatch(fetchAdminProfile());
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isAdminRoute]);
 
   const [adminUsers] = useState<AdminUser[]>(() => {
     try {

@@ -1,25 +1,58 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { 
-  ArrowLeft, 
-  MapPin, 
-  CreditCard, 
-  FileText, 
-  RotateCcw, 
-  MessageCircle, 
-  CheckCircle, 
-  Clock, 
-  Truck
+import {
+  ArrowLeft,
+  MapPin,
+  CreditCard,
+  FileText,
+  RotateCcw,
+  MessageCircle,
+  CheckCircle,
+  Clock,
+  Truck,
+  XCircle
 } from 'lucide-react';
 import { useShop } from '../../context/ShopContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { InvoiceModal } from '../../components/common/InvoiceModal';
+import { useCustomerOrder } from '../../hooks/useCustomerOrder';
+
+const CANCELLABLE = ['Pending', 'Confirmed', 'Processing'];
+const CANCEL_REASONS = [
+  'Ordered by mistake',
+  'Found a better price',
+  'Delivery is taking too long',
+  'Want to change size / colour',
+  'Other',
+];
 
 export const OrderDetailPage: React.FC = () => {
   const { orderId } = useParams<{ orderId: string }>();
-  const { getOrderById, formatPrice, invoiceOrder, setInvoiceOrder } = useShop();
+  const { formatPrice, invoiceOrder, setInvoiceOrder, cancelCustomerOrder } = useShop();
+  const { order, isLoading: isLoadingOrder } = useCustomerOrder(orderId);
 
-  const order = orderId ? getOrderById(orderId) : undefined;
+  const [isCancelOpen, setIsCancelOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState(CANCEL_REASONS[0]);
+  const [cancelNote, setCancelNote] = useState('');
+  const [isCancelling, setIsCancelling] = useState(false);
+
+  const handleCancel = async () => {
+    if (!order) return;
+    setIsCancelling(true);
+    const reason = cancelReason === 'Other' ? cancelNote.trim() || 'Other' : cancelReason;
+    const ok = await cancelCustomerOrder(order.id, reason, cancelReason === 'Other' ? undefined : cancelNote.trim() || undefined);
+    setIsCancelling(false);
+    if (ok) setIsCancelOpen(false);
+  };
+
+  if (isLoadingOrder) {
+    return (
+      <div className="max-w-4xl mx-auto px-4 py-20 flex flex-col items-center gap-3 text-allura-muted">
+        <div className="w-7 h-7 border-2 border-allura-goldDark border-t-transparent rounded-full animate-spin" />
+        <p className="text-xs font-sans uppercase tracking-widest">Loading order…</p>
+      </div>
+    );
+  }
 
   if (!order) {
     return (
@@ -84,6 +117,16 @@ export const OrderDetailPage: React.FC = () => {
             <span>Tax Invoice</span>
           </button>
 
+          {CANCELLABLE.includes(order.orderStatus) && (
+            <button
+              onClick={() => setIsCancelOpen(true)}
+              className="px-4 py-2 border border-rose-200 bg-rose-50 text-rose-700 rounded-xl text-xs font-sans font-bold hover:bg-rose-100 transition-colors flex items-center gap-1.5"
+            >
+              <XCircle size={14} />
+              <span>Cancel Order</span>
+            </button>
+          )}
+
           {order.orderStatus === 'Delivered' && (
             <Link
               to={`/account/orders/${order.id}/return`}
@@ -125,10 +168,10 @@ export const OrderDetailPage: React.FC = () => {
 
       {/* Main Grid: Items & Order Summary */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        
+
         {/* Left 2 Cols: Items & Shipment Details */}
         <div className="lg:col-span-2 space-y-6">
-          
+
           {/* Items card */}
           <div className="bg-allura-card border border-allura-border rounded-2xl p-6 shadow-subtle space-y-4">
             <h3 className="font-serif text-lg text-allura-text font-normal">Ordered Garments ({order.items.length})</h3>
@@ -195,7 +238,7 @@ export const OrderDetailPage: React.FC = () => {
 
         {/* Right Col: Price Breakdown & Delivery Address */}
         <div className="space-y-6">
-          
+
           {/* Price Breakdown */}
           <div className="bg-allura-card border border-allura-border rounded-2xl p-6 shadow-subtle space-y-4">
             <h3 className="font-serif text-lg text-allura-text font-normal">Payment Summary</h3>
@@ -268,6 +311,44 @@ export const OrderDetailPage: React.FC = () => {
       </div>
 
       <InvoiceModal order={invoiceOrder} onClose={() => setInvoiceOrder(null)} />
+
+      {/* Cancel order dialog */}
+      {isCancelOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-allura-darkBrown/60 backdrop-blur-sm">
+          <div className="bg-allura-card border border-allura-border rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl text-xs font-sans">
+            <h3 className="font-serif text-xl text-allura-text">Cancel order {order.orderNumber}?</h3>
+            <p className="text-allura-muted">Tell us why you're cancelling. Any payment made will be refunded to the original method.</p>
+            <div className="space-y-2">
+              {CANCEL_REASONS.map(r => (
+                <label key={r} className="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" name="cancel-reason" checked={cancelReason === r} onChange={() => setCancelReason(r)} className="accent-allura-goldDark" />
+                  <span className="text-allura-text">{r}</span>
+                </label>
+              ))}
+            </div>
+            <textarea
+              rows={2}
+              value={cancelNote}
+              onChange={e => setCancelNote(e.target.value)}
+              placeholder={cancelReason === 'Other' ? 'Please tell us the reason' : 'Anything else? (optional)'}
+              className="w-full p-2.5 bg-allura-bg border border-allura-border rounded-xl resize-none focus:outline-none focus:border-allura-gold"
+            />
+            <div className="flex justify-end gap-2 pt-2">
+              <button type="button" onClick={() => setIsCancelOpen(false)} className="px-4 py-2 border border-allura-border rounded-xl text-allura-muted">
+                Keep Order
+              </button>
+              <button
+                type="button"
+                onClick={handleCancel}
+                disabled={isCancelling || (cancelReason === 'Other' && !cancelNote.trim())}
+                className="px-5 py-2 bg-rose-700 hover:bg-rose-800 text-white rounded-xl font-bold uppercase tracking-wider disabled:opacity-50"
+              >
+                {isCancelling ? 'Cancelling…' : 'Cancel Order'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

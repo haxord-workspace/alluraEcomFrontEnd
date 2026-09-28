@@ -1,14 +1,18 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Heart, ShoppingBag, ArrowRight } from 'lucide-react';
+import { Heart, ShoppingBag, ArrowRight, Loader2, Trash2 } from 'lucide-react';
 import { useShop } from '../context/ShopContext';
 import { ProductCard } from '../components/ui/ProductCard';
 import type { Product } from '../types';
 
 export const WishlistPage: React.FC = () => {
-  const { products, wishlist, addToCart } = useShop();
+  const { wishlistProducts, isWishlistLoading, clearWishlist, addToCart } = useShop();
 
-  const wishlistProducts = products.filter((p: Product) => wishlist.includes(p.id));
+  const handleClearAll = () => {
+    if (window.confirm('Remove all pieces from your Wishlist?')) {
+      clearWishlist();
+    }
+  };
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-16 space-y-12">
@@ -22,9 +26,22 @@ export const WishlistPage: React.FC = () => {
         <p className="text-xs sm:text-sm text-allura-muted font-sans">
           Saved bespoke silhouettes and outfits ready for your next celebration.
         </p>
+        {wishlistProducts.length > 0 && (
+          <button
+            onClick={handleClearAll}
+            className="inline-flex items-center gap-1.5 pt-2 text-[10px] sm:text-xs font-sans font-bold tracking-wider uppercase text-allura-muted hover:text-allura-darkBrown transition-colors"
+          >
+            <Trash2 size={13} />
+            <span>CLEAR ALL</span>
+          </button>
+        )}
       </div>
 
-      {wishlistProducts.length === 0 ? (
+      {isWishlistLoading && wishlistProducts.length === 0 ? (
+        <div className="py-20 flex justify-center text-allura-goldDark">
+          <Loader2 size={28} className="animate-spin" />
+        </div>
+      ) : wishlistProducts.length === 0 ? (
         <div className="py-20 text-center space-y-4 max-w-md mx-auto bg-allura-card rounded-2xl border border-allura-border p-8">
           <div className="w-16 h-16 rounded-full bg-allura-bgSecondary flex items-center justify-center text-allura-gold mx-auto">
             <Heart size={28} />
@@ -51,7 +68,7 @@ export const WishlistPage: React.FC = () => {
             <div key={product.id} className="space-y-2">
               <ProductCard product={product} />
               <button
-                onClick={() => addToCart(product, product.sizes[0] || 'M', product.colors[0])}
+                onClick={() => addToCart(product, product.sizes[0], product.colors[0])}
                 className="w-full bg-allura-darkBrown hover:bg-allura-goldDark text-allura-card text-[10px] sm:text-xs font-sans font-bold tracking-wider uppercase py-2.5 px-3 rounded-sm transition-colors flex items-center justify-center gap-1.5"
               >
                 <ShoppingBag size={13} />

@@ -186,7 +186,7 @@ export const AlluraAIAssistant: React.FC = () => {
                                 <span className="text-stone-300">•</span>
                                 <button
                                   onClick={() => {
-                                    addToCart(p, p.sizes[0] || 'M', p.colors[0]);
+                                    addToCart(p, p.sizes[0], p.colors[0]);
                                   }}
                                   className="text-[11px] font-sans font-bold text-allura-text hover:text-allura-goldDark flex items-center gap-1"
                                 >

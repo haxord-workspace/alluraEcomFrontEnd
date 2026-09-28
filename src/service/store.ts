@@ -1,5 +1,7 @@
 import api from './api';
-import type { Product, ProductColor, Category } from '../types';
+import { colorHex } from '../data/colorPalette';
+import { toNumber } from '../utils/number';
+import type { Product, ProductColor, ProductVariant, Category } from '../types';
 
 // -----------------------------------------------------------------------------
 // Storefront (public, unauthenticated) product & category endpoints
@@ -8,14 +10,33 @@ import type { Product, ProductColor, Category } from '../types';
 // -----------------------------------------------------------------------------
 
 const FALLBACK_IMAGE = '/images/best-sellers/classic-cream-anarkali.jpeg';
-const DEFAULT_COLOR: ProductColor = { name: 'Standard', hex: '#D9C9B4' };
-const DEFAULT_SIZES = ['Free Size'];
+const DEFAULT_HEX = '#D9C9B4';
+
+/** Placeholder for cart lines / products that have no colour option */
+export const NO_COLOR: ProductColor = { name: '', hex: '' };
 
 const mapStatus = (status?: string): Product['status'] => {
   if (status === 'ACTIVE') return 'Active';
   if (status === 'DRAFT') return 'Draft';
   if (status === 'ARCHIVED') return 'Archived';
   return undefined;
+};
+
+// Variants are only present on the detail/slug endpoints; they're needed to add the right SKU to the cart
+const mapStoreVariant = (raw: any): ProductVariant => {
+  const colorAttr = raw.attributes?.color;
+  return {
+    id: raw.id || raw._id,
+    sku: raw.sku || '',
+    barcode: raw.barcode?.value || '',
+    color: typeof colorAttr === 'object' && colorAttr ? colorAttr : colorAttr ? { name: String(colorAttr), hex: colorHex(String(colorAttr)) || DEFAULT_HEX } : NO_COLOR,
+    size: raw.attributes?.size || '',
+    price: toNumber(raw.pricing?.sellingPrice) ?? 0,
+    mrp: toNumber(raw.pricing?.mrp) ?? 0,
+    stockOnHand: raw.stockOnHand ?? raw.inventory?.quantityOnHand ?? 0,
+    stockReserved: raw.stockReserved ?? raw.inventory?.quantityReserved ?? 0,
+    stockAvailable: raw.stockAvailable ?? raw.inventory?.quantityAvailable ?? 0,
+  };
 };
 
 /**
@@ -34,15 +55,26 @@ export const mapStoreProduct = (raw: any, categoryMap?: Record<string, string>):
     (categoryIdRaw && categoryMap?.[categoryIdRaw]) ||
     '';
 
-  const colors: ProductColor[] = Array.isArray(raw.colors) && raw.colors.length > 0 ? raw.colors : [DEFAULT_COLOR];
-  const sizes: string[] = Array.isArray(raw.sizes) && raw.sizes.length > 0 ? raw.sizes : DEFAULT_SIZES;
+  const variants: ProductVariant[] | undefined = Array.isArray(raw.variants) ? raw.variants.map(mapStoreVariant) : undefined;
+
+  // Only show options the backend actually provides (directly, or derived from variants)
+  const colors: ProductColor[] =
+    Array.isArray(raw.colors) && raw.colors.length > 0
+      ? raw.colors
+      : (variants || [])
+          .map(v => v.color)
+          .filter((c, i, all) => c.name && all.findIndex(o => o.name.toLowerCase() === c.name.toLowerCase()) === i);
+  const sizes: string[] =
+    Array.isArray(raw.sizes) && raw.sizes.length > 0
+      ? raw.sizes
+      : (variants || []).map(v => v.size).filter((s, i, all) => s && all.indexOf(s) === i);
 
   return {
     id: raw.id || raw._id,
     slug: raw.slug || raw.id || raw._id,
     name: raw.name,
-    price: raw.pricing?.sellingPrice ?? 0,
-    originalPrice: raw.pricing?.mrp,
+    price: toNumber(raw.pricing?.sellingPrice) ?? 0,
+    originalPrice: toNumber(raw.pricing?.mrp),
     category: categoryName,
     categoryId: categoryIdRaw,
     occasion: raw.occasion || '',
@@ -66,6 +98,8 @@ export const mapStoreProduct = (raw: any, categoryMap?: Record<string, string>):
     stylingTips: raw.stylingTips || '',
     sku: raw.sku || '',
     status: mapStatus(raw.status),
+    variants,
+    hasVariants: !!raw.hasVariants,
   };
 };
 

@@ -54,7 +54,7 @@ export const ProductDetailPage: React.FC = () => {
       .then(fetched => {
         if (cancelled) return;
         setProduct(fetched);
-        setSelectedSize(fetched.sizes[0] || 'M');
+        setSelectedSize(fetched.sizes[0] || '');
         setSelectedColorIdx(0);
         setActiveImageIdx(0);
         setQuantity(1);
@@ -122,7 +122,7 @@ export const ProductDetailPage: React.FC = () => {
 
   const handleWhatsAppEnquiry = () => {
     const text = encodeURIComponent(
-      `Hello Allura Stylist, I am interested in ${product.name} (SKU: ${product.sku}, Price: ${formatPrice(product.price)}, Size: ${selectedSize}, Color: ${currentColor.name}). Can you help me finalize my order?`
+      `Hello Allura Stylist, I am interested in ${product.name} (SKU: ${product.sku}, Price: ${formatPrice(product.price)}, Size: ${selectedSize || 'N/A'}, Color: ${currentColor?.name || 'N/A'}). Can you help me finalize my order?`
     );
     window.open(`https://wa.me/919037991774?text=${text}`, '_blank');
   };
@@ -248,10 +248,11 @@ export const ProductDetailPage: React.FC = () => {
           </p>
 
           {/* Color Selection */}
+          {product.colors.length > 0 && (
           <div className="space-y-2">
             <div className="flex justify-between text-xs">
               <span className="font-bold text-allura-darkBrown uppercase tracking-wider">
-                COLOUR: <span className="font-normal text-allura-muted">{currentColor.name}</span>
+                COLOUR: <span className="font-normal text-allura-muted">{currentColor?.name}</span>
               </span>
             </div>
             <div className="flex items-center gap-3">
@@ -278,8 +279,10 @@ export const ProductDetailPage: React.FC = () => {
               ))}
             </div>
           </div>
+          )}
 
           {/* Size Selection & Size Guide */}
+          {product.sizes.length > 0 && (
           <div className="space-y-2">
             <div className="flex justify-between items-center text-xs">
               <span className="font-bold text-allura-darkBrown uppercase tracking-wider">
@@ -309,6 +312,7 @@ export const ProductDetailPage: React.FC = () => {
               ))}
             </div>
           </div>
+          )}
 
           {/* Quantity */}
           <div className="flex items-center gap-4 pt-1">

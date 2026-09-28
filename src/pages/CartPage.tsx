@@ -25,29 +25,24 @@ export const CartPage: React.FC = () => {
     freeShippingRemaining,
     freeShippingProgress,
     formatPrice,
-    showToast,
+    appliedCoupon,
+    couponDiscount,
+    applyCoupon,
+    removeCoupon,
+    isApplyingCoupon,
   } = useShop();
 
   const [promoCode, setPromoCode] = useState('');
-  const [discount, setDiscount] = useState(0);
-  const [appliedPromo, setAppliedPromo] = useState<string | null>(null);
 
   const navigate = useNavigate();
 
-  const handleApplyPromo = (e: React.FormEvent) => {
+  const handleApplyPromo = async (e: React.FormEvent) => {
     e.preventDefault();
-    const code = promoCode.trim().toUpperCase();
-    if (code === 'ALLURA10' || code === 'FIRST10') {
-      const disc = Math.round(cartSubtotal * 0.1);
-      setDiscount(disc);
-      setAppliedPromo(code);
-      showToast(`Promo code ${code} applied! 10% off.`, 'gold');
-    } else {
-      showToast('Invalid promo code. Try ALLURA10', 'info');
-    }
+    const result = await applyCoupon(promoCode);
+    if (result.success) setPromoCode('');
   };
 
-  const finalTotal = cartSubtotal - discount + (freeShippingRemaining === 0 ? 0 : 150);
+  const finalTotal = cartSubtotal - couponDiscount + (freeShippingRemaining === 0 ? 0 : 150);
 
   const recommendedItems = products.filter(
     (p: Product) => !cart.some((c: CartItem) => c.product.id === p.id)
@@ -151,8 +146,9 @@ export const CartPage: React.FC = () => {
                       </Link>
                     </h3>
                     <div className="flex items-center gap-3 text-xs text-allura-muted mt-1 font-sans">
-                      <span>Size: <strong className="text-allura-text">{item.selectedSize}</strong></span>
-                      <span>•</span>
+                      {item.selectedSize && <span>Size: <strong className="text-allura-text">{item.selectedSize}</strong></span>}
+                      {item.selectedSize && item.selectedColor.name && <span>•</span>}
+                      {item.selectedColor.name && (
                       <span className="flex items-center gap-1">
                         Color:
                         <span
@@ -161,6 +157,7 @@ export const CartPage: React.FC = () => {
                         />
                         <strong className="text-allura-text">{item.selectedColor.name}</strong>
                       </span>
+                      )}
                     </div>
                   </div>
 
@@ -235,10 +232,10 @@ export const CartPage: React.FC = () => {
               <span className="font-semibold text-allura-text text-sm">{formatPrice(cartSubtotal)}</span>
             </div>
 
-            {discount > 0 && (
+            {appliedCoupon && couponDiscount > 0 && (
               <div className="flex justify-between items-center text-emerald-700 font-semibold">
-                <span>Boutique Discount ({appliedPromo})</span>
-                <span>-{formatPrice(discount)}</span>
+                <span>Coupon ({appliedCoupon.code})</span>
+                <span>-{formatPrice(couponDiscount)}</span>
               </div>
             )}
 
@@ -259,28 +256,50 @@ export const CartPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Promo Code Input */}
-          <form onSubmit={handleApplyPromo} className="space-y-2 pt-2 border-t border-allura-border/60">
-            <label className="text-[11px] font-bold text-allura-darkBrown uppercase tracking-wider flex items-center gap-1">
-              <Tag size={12} />
-              <span>HAVE A PROMO CODE?</span>
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={promoCode}
-                onChange={e => setPromoCode(e.target.value)}
-                placeholder="e.g. ALLURA10"
-                className="flex-1 bg-allura-bg border border-allura-border rounded px-3 py-2 text-xs uppercase font-sans tracking-wider text-allura-text focus:outline-none focus:border-allura-gold"
-              />
-              <button
-                type="submit"
-                className="bg-allura-darkBrown hover:bg-allura-goldDark text-allura-card text-xs font-sans font-bold tracking-wider uppercase px-4 py-2 rounded transition-colors"
-              >
-                APPLY
-              </button>
+          {/* Coupon Code */}
+          {appliedCoupon ? (
+            <div className="pt-2 border-t border-allura-border/60">
+              <div className="flex items-center justify-between gap-2 p-3 rounded bg-emerald-50 border border-emerald-200">
+                <div className="flex items-center gap-2 text-xs font-sans">
+                  <Tag size={13} className="text-emerald-700" />
+                  <div>
+                    <p className="font-bold text-emerald-800 tracking-wider">{appliedCoupon.code}</p>
+                    <p className="text-[11px] text-emerald-700">You save {formatPrice(couponDiscount)}</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={removeCoupon}
+                  className="text-[11px] font-sans font-semibold text-emerald-800 underline hover:text-emerald-900"
+                >
+                  Remove
+                </button>
+              </div>
             </div>
-          </form>
+          ) : (
+            <form onSubmit={handleApplyPromo} className="space-y-2 pt-2 border-t border-allura-border/60">
+              <label className="text-[11px] font-bold text-allura-darkBrown uppercase tracking-wider flex items-center gap-1">
+                <Tag size={12} />
+                <span>HAVE A COUPON CODE?</span>
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={promoCode}
+                  onChange={e => setPromoCode(e.target.value)}
+                  placeholder="Enter coupon code"
+                  className="flex-1 bg-allura-bg border border-allura-border rounded px-3 py-2 text-xs uppercase font-sans tracking-wider text-allura-text focus:outline-none focus:border-allura-gold"
+                />
+                <button
+                  type="submit"
+                  disabled={isApplyingCoupon || !promoCode.trim()}
+                  className="bg-allura-darkBrown hover:bg-allura-goldDark text-allura-card text-xs font-sans font-bold tracking-wider uppercase px-4 py-2 rounded transition-colors disabled:opacity-50"
+                >
+                  {isApplyingCoupon ? 'CHECKING…' : 'APPLY'}
+                </button>
+              </div>
+            </form>
+          )}
 
           {/* Checkout CTA */}
           <div className="space-y-3 pt-2">

@@ -22,6 +22,41 @@ export const clearAdminAccessToken = () => {
   document.cookie = `${ADMIN_ACCESS_TOKEN_COOKIE}=; path=/; max-age=0; SameSite=Strict`;
 };
 
+// POST /auth/refresh and /auth/logout require the refresh token in the request body,
+// so it has to be kept client-side (the backend doesn't read it from a cookie).
+export const ADMIN_REFRESH_TOKEN_COOKIE = 'allura_admin_refresh';
+
+export const getAdminRefreshToken = (): string | null => {
+  const value = `; ${document.cookie}`;
+  const parts = value.split(`; ${ADMIN_REFRESH_TOKEN_COOKIE}=`);
+  if (parts.length === 2) return parts.pop()?.split(';').shift() || null;
+  return null;
+};
+
+export const setAdminRefreshToken = (token: string, maxAgeSeconds = 7 * 86400) => {
+  document.cookie = `${ADMIN_REFRESH_TOKEN_COOKIE}=${token}; path=/; max-age=${maxAgeSeconds}; SameSite=Strict`;
+};
+
+/** Clears both admin tokens */
+export const clearAdminSession = () => {
+  clearAdminAccessToken();
+  document.cookie = `${ADMIN_REFRESH_TOKEN_COOKIE}=; path=/; max-age=0; SameSite=Strict`;
+};
+
+/** Pulls the access / refresh tokens out of a login or refresh response and stores them */
+export const storeAdminTokens = (body: any) => {
+  const data = body?.data || body;
+  const accessToken =
+    data?.accessToken || data?.token || data?.tokens?.accessToken || body?.accessToken || body?.token;
+  const refreshToken = data?.refreshToken || data?.tokens?.refreshToken || body?.refreshToken;
+  if (accessToken) setAdminAccessToken(accessToken);
+  if (refreshToken) setAdminRefreshToken(refreshToken);
+  return { accessToken: accessToken as string | undefined, refreshToken: refreshToken as string | undefined };
+};
+
+/** True when there is anything to restore a session from */
+export const hasAdminSession = () => !!(getAdminAccessToken() || getAdminRefreshToken());
+
 // ─── State ────────────────────────────────────────────────────────────────────
 
 export interface AdminAuthState {
@@ -60,13 +95,7 @@ export const loginAdmin = createAsyncThunk(
       const { default: adminApi } = await import('../../service/adminApi');
       const response = await adminApi.post('/auth/login', { email, password });
       const data = response.data?.data || response.data;
-
-      const token =
-        data?.accessToken || data?.token || response.data?.accessToken || response.data?.token;
-
-      if (token) {
-        setAdminAccessToken(token);
-      }
+      storeAdminTokens(response.data);
 
       return data?.admin || data?.user || data;
     } catch (error: any) {
@@ -86,6 +115,8 @@ export const loginAdmin = createAsyncThunk(
 export const fetchAdminProfile = createAsyncThunk(
   'adminAuth/fetchProfile',
   async (_, { rejectWithValue }) => {
+    // Nothing to restore from: don't send a request that can only fail
+    if (!hasAdminSession()) return rejectWithValue('Not signed in');
     try {
       const { default: adminApi } = await import('../../service/adminApi');
       const response = await adminApi.get('/auth/me');
@@ -105,12 +136,15 @@ export const logoutAdmin = createAsyncThunk(
   'adminAuth/logout',
   async () => {
     try {
-      const { default: adminApi } = await import('../../service/adminApi');
-      await adminApi.post('/auth/logout');
+      const refreshToken = getAdminRefreshToken();
+      if (refreshToken) {
+        const { default: adminApi } = await import('../../service/adminApi');
+        await adminApi.post('/auth/logout', { refreshToken });
+      }
     } catch {
       // Always clear client-side even if API fails
     } finally {
-      clearAdminAccessToken();
+      clearAdminSession();
     }
   }
 );
@@ -131,7 +165,7 @@ const adminAuthSlice = createSlice({
       state.isAuthenticated = false;
       state.status = 'idle';
       state.error = null;
-      clearAdminAccessToken();
+      clearAdminSession();
     },
   },
   extraReducers: (builder) => {
@@ -168,7 +202,8 @@ const adminAuthSlice = createSlice({
         state.status = 'failed';
         state.admin = null;
         state.isAuthenticated = false;
-        clearAdminAccessToken();
+        // Tokens are cleared by adminApi only when the refresh itself is rejected, so a
+        // network blip or a 5xx on /auth/me doesn't throw away a still-valid session.
       });
 
     // Logout

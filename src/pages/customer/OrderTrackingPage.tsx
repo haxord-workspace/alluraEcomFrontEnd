@@ -1,14 +1,21 @@
 import React from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, MapPin, CheckCircle, Truck, ShieldCheck, MessageCircle } from 'lucide-react';
-import { useShop } from '../../context/ShopContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
+import { useCustomerOrder } from '../../hooks/useCustomerOrder';
 
 export const OrderTrackingPage: React.FC = () => {
   const { orderId } = useParams<{ orderId: string }>();
-  const { getOrderById } = useShop();
+  const { order, isLoading: isLoadingOrder } = useCustomerOrder(orderId);
 
-  const order = orderId ? getOrderById(orderId) : undefined;
+  if (isLoadingOrder) {
+    return (
+      <div className="max-w-3xl mx-auto px-4 py-20 flex flex-col items-center gap-3 text-allura-muted">
+        <div className="w-7 h-7 border-2 border-allura-goldDark border-t-transparent rounded-full animate-spin" />
+        <p className="text-xs font-sans uppercase tracking-widest">Loading order…</p>
+      </div>
+    );
+  }
 
   if (!order) {
     return (
@@ -25,36 +32,27 @@ export const OrderTrackingPage: React.FC = () => {
     );
   }
 
-  const tracking = order.tracking || {
-    awb: 'DLHV894719283IN',
-    courier: 'Delhivery Luxury Express',
-    courierService: 'Doorstep Luxury Air',
-    estimatedDelivery: '14 September 2026',
-    currentStatus: 'Dispatched from Malappuram Atelier Hub',
-    milestones: [
-      {
-        status: 'Delivered',
-        location: `${order.shippingAddress.city}, Kerala`,
-        timestamp: 'Expected in 2 Days',
-        description: 'Delivered with secure OTP verification.',
-        completed: false,
-      },
-      {
-        status: 'In Transit',
-        location: 'Kozhikode Central Sorting Center',
-        timestamp: 'Today, 06:15 AM',
-        description: 'Package dispatched towards destination delivery hub.',
-        completed: true,
-        current: true,
-      },
-      {
-        status: 'Manifest Dispatched',
-        location: 'Allura Central Atelier, Perinthalmanna',
-        timestamp: order.date,
-        description: 'Handed over to Delhivery logistics associate.',
-        completed: true,
-      },
-    ],
+  // Before dispatch there is no courier data yet: show the real state instead of a sample shipment
+  const tracking = {
+    awb: order.tracking?.awb || 'Assigned at dispatch',
+    courier: order.tracking?.courier || 'To be assigned',
+    courierService: order.tracking?.courierService || '',
+    estimatedDelivery: order.tracking?.estimatedDelivery || 'Shared once dispatched',
+    currentStatus: order.tracking?.currentStatus || order.orderStatus,
+    trackingUrl: order.tracking?.trackingUrl,
+    milestones:
+      order.tracking?.milestones && order.tracking.milestones.length > 0
+        ? order.tracking.milestones
+        : [
+            {
+              status: 'Order Placed',
+              location: '',
+              timestamp: order.date,
+              description: 'We have received your order and will prepare it for dispatch.',
+              completed: true,
+              current: true,
+            },
+          ],
   };
 
   return (
@@ -124,7 +122,7 @@ export const OrderTrackingPage: React.FC = () => {
         {/* Vertical/Horizontal Timeline */}
         <div className="space-y-6 pt-4">
           <h3 className="font-serif text-lg text-allura-text font-normal">Tracking Milestones & History</h3>
-          
+
           <div className="relative pl-6 sm:pl-8 space-y-8 before:content-[''] before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-[2px] before:bg-allura-border">
             {tracking.milestones.map((milestone, idx) => (
               <div key={idx} className="relative space-y-1">

@@ -1,6 +1,6 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import type { PayloadAction } from '@reduxjs/toolkit';
-import api from '../../service/api';
+import { getWishlist } from '../../service/wishlist';
 
 interface WishlistState {
   items: string[];
@@ -16,8 +16,8 @@ export const fetchWishlist = createAsyncThunk(
   'wishlist/fetchWishlist',
   async (_, { rejectWithValue }) => {
     try {
-      const response = await api.get('/wishlist');
-      return response.data;
+      const entries = await getWishlist();
+      return entries.map(e => e.productId);
     } catch (error: any) {
       return rejectWithValue(error.response?.data || 'Failed to fetch wishlist');
     }
@@ -35,7 +35,7 @@ const wishlistSlice = createSlice({
   extraReducers: (builder) => {
     builder
       .addCase(fetchWishlist.fulfilled, (state, action) => {
-        state.items = action.payload.items || [];
+        state.items = action.payload;
         state.status = 'succeeded';
       });
   },

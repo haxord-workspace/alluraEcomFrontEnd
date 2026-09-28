@@ -26,9 +26,28 @@ export const getAdminCollection = async (id: string): Promise<AdminCollection> =
   return mapCollection(response.data?.data || response.data);
 };
 
+export interface CollectionImage {
+  url: string;
+  thumbnailUrl?: string;
+  alt?: string;
+}
+
+export interface CollectionSeo {
+  title?: string;
+  description?: string;
+  keywords?: string[];
+}
+
+/** Body for POST /collections and PATCH /collections/{id} */
 export interface CollectionPayload {
   name: string;
-  status: string;
+  slug?: string;
+  description?: string;
+  image?: CollectionImage;
+  seo?: CollectionSeo;
+  sortOrder?: number;
+  isFeatured?: boolean;
+  status: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED' | string;
 }
 
 /**

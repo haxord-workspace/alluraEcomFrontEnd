@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import type {
   Product,
   CartItem,
@@ -12,12 +12,24 @@ import type {
   ReturnRequest,
   Category,
 } from '../types';
-import { login, register, logout } from '../service/auth';
-import type { LoginData, RegisterData } from '../service/auth';
-import { getStoreProducts, getStoreCategories } from '../service/store';
+import { login, register, logout, googleLogin } from '../service/auth';
+import type { LoginData, RegisterData, GoogleLoginData } from '../service/auth';
+import { getStoreProducts, getStoreCategories, getStoreProduct, NO_COLOR } from '../service/store';
 import { getAddresses, addAddress, updateAddress, deleteAddress } from '../service/address';
+import { getWishlist, addWishlistItem, removeWishlistItem, clearWishlist as clearWishlistApi } from '../service/wishlist';
 import type { SavedAddress } from '../types';
-import { mockCouponsData } from '../data/mockCoupons';
+import {
+  getCart,
+  addCartItem,
+  updateCartItem,
+  removeCartItem,
+  clearCart as clearCartApi,
+  recalculateCart as recalculateCartApi,
+  validateCart as validateCartApi,
+} from '../service/cart';
+import type { CartSnapshot, CartTotals, CartValidationResult } from '../service/cart';
+import { validateCoupon } from '../service/coupons';
+import { getMyOrders, getMyOrder, cancelMyOrder, orderErrorMessage, enrichOrder } from '../service/orders';
 
 interface ToastNotification {
   id: string;
@@ -34,12 +46,23 @@ interface ShopContextType {
   // Cart & Wishlist
   cart: CartItem[];
   wishlist: string[];
-  addToCart: (product: Product, size: string, color: ProductColor, quantity?: number) => void;
-  removeFromCart: (productId: string, size: string, colorName: string) => void;
-  updateQuantity: (productId: string, size: string, colorName: string, quantity: number) => void;
-  clearCart: () => void;
-  toggleWishlist: (product: Product) => void;
+  cartTotals: CartTotals;
+  /** Server cart id (needed by coupon validation and checkout) */
+  cartId?: string;
+  isCartLoading: boolean;
+  addToCart: (product: Product, size?: string, color?: ProductColor, quantity?: number) => Promise<void>;
+  removeFromCart: (productId: string, size: string, colorName: string) => Promise<void>;
+  updateQuantity: (productId: string, size: string, colorName: string, quantity: number) => Promise<void>;
+  clearCart: () => Promise<void>;
+  refreshCart: () => Promise<void>;
+  recalculateCart: () => Promise<void>;
+  validateCart: () => Promise<CartValidationResult>;
+  wishlistProducts: Product[];
+  isWishlistLoading: boolean;
+  toggleWishlist: (product: Product) => Promise<void>;
   isInWishlist: (productId: string) => boolean;
+  refreshWishlist: () => Promise<void>;
+  clearWishlist: () => Promise<void>;
 
   // Recently Viewed
   recentlyViewed: Product[];
@@ -53,7 +76,8 @@ interface ShopContextType {
   freeShippingProgress: number;
   appliedCoupon: Coupon | null;
   couponDiscount: number;
-  applyCoupon: (code: string) => { success: boolean; message: string };
+  applyCoupon: (code: string) => Promise<{ success: boolean; message: string }>;
+  isApplyingCoupon: boolean;
   removeCoupon: () => void;
   finalOrderTotal: number;
 
@@ -62,17 +86,26 @@ interface ShopContextType {
   isAuthenticated: boolean;
   loginUser: (data: LoginData) => Promise<void>;
   registerUser: (data: RegisterData) => Promise<void>;
+  loginWithGoogle: (data: GoogleLoginData) => Promise<void>;
   completeProfile: (profile: Partial<CustomerProfile>) => void;
   logoutCustomer: () => Promise<void>;
 
   // Address Management
   fetchCustomerAddresses: () => Promise<void>;
-  addCustomerAddress: (data: Omit<SavedAddress, 'id'>) => Promise<void>;
+  addCustomerAddress: (data: Omit<SavedAddress, 'id'>) => Promise<SavedAddress | undefined>;
   updateCustomerAddress: (id: string, data: Partial<SavedAddress>) => Promise<void>;
   deleteCustomerAddress: (id: string) => Promise<void>;
 
   // Orders & Returns
   orders: Order[];
+  ordersTotal: number;
+  isLoadingOrders: boolean;
+  /** GET /orders — refreshes the customer's order list */
+  refreshOrders: () => Promise<void>;
+  /** GET /orders/{id} — loads one order into the cache and returns it */
+  loadOrder: (orderId: string) => Promise<Order | undefined>;
+  /** POST /orders/{id}/cancel */
+  cancelCustomerOrder: (orderId: string, reason: string, note?: string) => Promise<boolean>;
   placeOrder: (orderData: Partial<Order>) => Order;
   getOrderById: (orderId: string) => Order | undefined;
   returns: ReturnRequest[];
@@ -158,29 +191,29 @@ const INITIAL_AI_MESSAGES: AIMessage[] = [
 ];
 import { useAppDispatch } from '../store/hooks';
 import { fetchCustomerProfile } from '../store/slices/authSlice';
-import { fetchCart } from '../store/slices/cartSlice';
-import { fetchWishlist } from '../store/slices/wishlistSlice';
-import { fetchOrders } from '../store/slices/orderSlice';
+import { hasCustomerSession } from '../service/api';
 
 export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const dispatch = useAppDispatch();
+  const navigate = useNavigate();
+  // The admin portal doesn't use the storefront catalog or the customer's cart / wishlist
+  const isAdminRoute = useLocation().pathname.startsWith('/admin');
 
   useEffect(() => {
-    // When the application loads (i.e. Redux state is gone on refresh),
-    // we call the provided approximate APIs to restore the state.
-    dispatch(fetchCustomerProfile());
-    dispatch(fetchCart());
-    dispatch(fetchWishlist());
-    dispatch(fetchOrders());
-  }, [dispatch]);
-  const navigate = useNavigate();
+    // Restore the customer's profile after a refresh, but only if they are actually logged in
+    // (GET /orders is not part of the API, so it is no longer called here)
+    if (!isAdminRoute && hasCustomerSession()) dispatch(fetchCustomerProfile());
+  }, [dispatch, isAdminRoute]);
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [isLoadingProducts, setIsLoadingProducts] = useState(true);
 
-  // Load the real storefront catalog on mount: categories first so product
-  // category names can be resolved from the raw categoryId the list endpoint returns.
+  // Load the real storefront catalog the first time a storefront page is shown: categories first
+  // so product category names can be resolved from the raw categoryId the list endpoint returns.
+  const catalogRequested = useRef(false);
   useEffect(() => {
+    if (isAdminRoute || catalogRequested.current) return;
+    catalogRequested.current = true;
     let cancelled = false;
 
     const loadCatalog = async () => {
@@ -200,34 +233,35 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setProducts(fetchedProducts);
       } catch (e) {
         console.error('Failed to load storefront catalog:', e);
+        catalogRequested.current = false; // allow a retry on the next storefront visit
       } finally {
         if (!cancelled) setIsLoadingProducts(false);
       }
     };
 
     loadCatalog();
-    return () => { cancelled = true; };
-  }, []);
+    return () => {
+      cancelled = true;
+      // StrictMode unmounts/remounts once in development: let the remount issue the (de-duplicated) request
+      catalogRequested.current = false;
+    };
+  }, [isAdminRoute]);
 
-  // Cart state
-  const [cart, setCart] = useState<CartItem[]>(() => {
-    try {
-      const saved = localStorage.getItem('allura_cart');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
+  // Cart state (server is the source of truth; loaded once the customer is known)
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [cartId, setCartId] = useState<string | undefined>(undefined);
+  const [cartTotals, setCartTotals] = useState<CartTotals>({});
+  const [isCartLoading, setIsCartLoading] = useState(false);
 
-  // Wishlist state
-  const [wishlist, setWishlist] = useState<string[]>(() => {
-    try {
-      const saved = localStorage.getItem('allura_wishlist');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
+  // Lets cart responses that only carry a productId resolve to a full catalog product
+  const productsRef = useRef<Product[]>(products);
+  useEffect(() => { productsRef.current = products; }, [products]);
+  const lookupProduct = useCallback((productId: string) => productsRef.current.find(p => p.id === productId), []);
+
+  // Wishlist state (server is the source of truth; loaded once the customer is known)
+  const [wishlist, setWishlist] = useState<string[]>([]);
+  const [wishlistProductMap, setWishlistProductMap] = useState<Record<string, Product>>({});
+  const [isWishlistLoading, setIsWishlistLoading] = useState(false);
 
   // Recently Viewed state
   const [recentlyViewed, setRecentlyViewed] = useState<Product[]>(() => {
@@ -250,14 +284,9 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   // Orders state
-  const [orders, setOrders] = useState<Order[]>(() => {
-    try {
-      const saved = localStorage.getItem('allura_orders');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [ordersTotal, setOrdersTotal] = useState(0);
+  const [isLoadingOrders, setIsLoadingOrders] = useState(false);
 
   // Return requests state
   const [returns, setReturns] = useState<ReturnRequest[]>(() => {
@@ -310,23 +339,9 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [toasts, setToasts] = useState<ToastNotification[]>([]);
   
   const isAuthenticated = !!customer;
+  const customerId: string | null = customer ? customer.id || customer.email || 'signed-in' : null;
 
   // Sync state to localStorage
-  useEffect(() => {
-    try {
-      localStorage.setItem('allura_cart', JSON.stringify(cart));
-    } catch (e) {
-      console.error(e);
-    }
-  }, [cart]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('allura_wishlist', JSON.stringify(wishlist));
-    } catch (e) {
-      console.error(e);
-    }
-  }, [wishlist]);
 
   useEffect(() => {
     try {
@@ -344,13 +359,16 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [customer]);
 
+  // Drop the old locally-stored sample orders and clear orders on logout
   useEffect(() => {
-    try {
-      localStorage.setItem('allura_orders', JSON.stringify(orders));
-    } catch (e) {
-      console.error(e);
+    try { localStorage.removeItem('allura_orders'); } catch { /* ignore */ }
+  }, []);
+  useEffect(() => {
+    if (!customer) {
+      setOrders([]);
+      setOrdersTotal(0);
     }
-  }, [orders]);
+  }, [customer]);
 
   useEffect(() => {
     try {
@@ -403,112 +421,350 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   }, []);
 
-  const addToCart = useCallback((product: Product, size: string, color: ProductColor, quantity = 1) => {
+  const cartErrorMessage = (error: any, fallback: string): string =>
+    error?.response?.data?.error?.details?.[0]?.message || error?.response?.data?.message || fallback;
+
+  const applyCartSnapshot = useCallback((snapshot: CartSnapshot) => {
+    if (snapshot.id) setCartId(snapshot.id);
+    setCart(snapshot.items);
+    setCartTotals(snapshot.totals);
+  }, []);
+
+  const refreshCart = useCallback(async () => {
+    if (!customer || !hasCustomerSession()) {
+      setCart([]);
+      setCartTotals({});
+      setCartId(undefined);
+      return;
+    }
+    if (isAdminRoute) return;
+    setIsCartLoading(true);
+    try {
+      applyCartSnapshot(await getCart(lookupProduct));
+    } catch (e) {
+      console.error('Failed to load cart:', e);
+    } finally {
+      setIsCartLoading(false);
+    }
+  }, [customerId, isAdminRoute, applyCartSnapshot, lookupProduct]);
+
+  // Load on login / app start, clear on logout
+  useEffect(() => {
+    refreshCart();
+  }, [refreshCart]);
+
+  // Mutations that don't echo the cart back fall back to a re-fetch
+  const applyOrRefresh = useCallback(async (snapshot: CartSnapshot | null) => {
+    if (snapshot) applyCartSnapshot(snapshot);
+    else await refreshCart();
+  }, [applyCartSnapshot, refreshCart]);
+
+  const findCartLine = (productId: string, size: string, colorName: string) =>
+    cart.find(item => item.product.id === productId && item.selectedSize === size && item.selectedColor.name === colorName);
+
+  const addToCart = useCallback(async (product: Product, size = '', color: ProductColor = NO_COLOR, quantity = 1) => {
     if (!customer) {
       navigate('/auth/login');
       return;
     }
-    setCart(prev => {
-      const existingIndex = prev.findIndex(
-        item => item.product.id === product.id && item.selectedSize === size && item.selectedColor.name === color.name
-      );
-      if (existingIndex > -1) {
-        const next = [...prev];
-        next[existingIndex].quantity += quantity;
-        return next;
+    try {
+      // The list endpoint doesn't include variants, so load the detail to find the SKU for this size / colour
+      let variants = product.variants;
+      let hasVariants = product.hasVariants;
+      if (!variants) {
+        try {
+          const detail = await getStoreProduct(product.id);
+          variants = detail.variants;
+          hasVariants = detail.hasVariants;
+        } catch {
+          variants = undefined;
+        }
       }
-      return [...prev, { product, selectedSize: size, selectedColor: color, quantity }];
-    });
+      const matches = (a: string, b: string) => !a || !b || a.toLowerCase() === b.toLowerCase();
+      const variant =
+        variants?.find(v => matches(v.size, size) && matches(v.color.name, color.name)) ||
+        (variants?.length === 1 ? variants[0] : undefined);
 
-    addRecentlyViewed(product);
-    showToast(`Added ${product.name} (${size}) to your Bag`, 'gold');
-    setIsCartOpen(true);
-  }, [addRecentlyViewed, showToast, customer, navigate]);
+      if (hasVariants && variants && variants.length > 0 && !variant) {
+        showToast(`Please choose a size and colour for ${product.name}`, 'error');
+        return;
+      }
 
-  const removeFromCart = useCallback((productId: string, size: string, colorName: string) => {
-    setCart(prev =>
-      prev.filter(
-        item => !(item.product.id === productId && item.selectedSize === size && item.selectedColor.name === colorName)
-      )
-    );
-    showToast('Item removed from Bag', 'info');
-  }, [showToast]);
+      if (hasVariants && (!variants || variants.length === 0)) {
+        // Warning: product says it has variants but none were loaded.
+        // We will proceed to add without a variantId.
+        console.warn(`Product ${product.id} hasVariants but no variants array found. Adding base product.`);
+      }
 
-  const updateQuantity = useCallback((productId: string, size: string, colorName: string, quantity: number) => {
+      const snapshot = await addCartItem({ productId: product.id, variantId: variant?.id, quantity }, lookupProduct);
+      await applyOrRefresh(snapshot);
+
+      addRecentlyViewed(product);
+      showToast(`Added ${product.name}${size ? ` (${size})` : ''} to your Bag`, 'gold');
+      setIsCartOpen(true);
+    } catch (error: any) {
+      showToast(cartErrorMessage(error, 'Could not add this piece to your Bag'), 'error');
+    }
+  }, [addRecentlyViewed, showToast, customerId, navigate, lookupProduct, applyOrRefresh]);
+
+  const removeFromCart = useCallback(async (productId: string, size: string, colorName: string) => {
+    const line = findCartLine(productId, size, colorName);
+    if (!line) return;
+    const previous = cart;
+    setCart(prev => prev.filter(item => item !== line));
+    try {
+      if (!line.id) throw new Error('Missing cart item id');
+      await applyOrRefresh(await removeCartItem(line.id, lookupProduct));
+      showToast('Item removed from Bag', 'info');
+    } catch (error: any) {
+      setCart(previous);
+      showToast(cartErrorMessage(error, 'Could not remove this item'), 'error');
+    }
+  }, [cart, showToast, lookupProduct, applyOrRefresh]);
+
+  const updateQuantity = useCallback(async (productId: string, size: string, colorName: string, quantity: number) => {
     if (quantity <= 0) {
-      removeFromCart(productId, size, colorName);
+      await removeFromCart(productId, size, colorName);
       return;
     }
-    setCart(prev =>
-      prev.map(item => {
-        if (item.product.id === productId && item.selectedSize === size && item.selectedColor.name === colorName) {
-          return { ...item, quantity };
-        }
-        return item;
-      })
-    );
-  }, [removeFromCart]);
+    const line = findCartLine(productId, size, colorName);
+    if (!line) return;
+    const previous = cart;
+    setCart(prev => prev.map(item => (item === line ? { ...item, quantity } : item)));
+    try {
+      if (!line.id) throw new Error('Missing cart item id');
+      await applyOrRefresh(await updateCartItem(line.id, quantity, lookupProduct));
+    } catch (error: any) {
+      setCart(previous);
+      showToast(cartErrorMessage(error, 'Could not update the quantity'), 'error');
+    }
+  }, [cart, removeFromCart, showToast, lookupProduct, applyOrRefresh]);
 
-  const clearCart = useCallback(() => {
+  const clearCart = useCallback(async () => {
     setCart([]);
-  }, []);
+    setCartTotals({});
+    if (!customer) return;
+    try {
+      await clearCartApi();
+    } catch (e) {
+      console.error('Failed to clear cart:', e);
+      await refreshCart();
+    }
+  }, [customerId, refreshCart]);
 
-  const toggleWishlist = useCallback((product: Product) => {
+  const couponWarning = useRef('');
+  const recalculateCart = useCallback(async () => {
+    if (!customer) return;
+    try {
+      await applyOrRefresh(await recalculateCartApi(lookupProduct));
+    } catch (e: any) {
+      const body = e?.response?.data;
+      const isCouponProblem = body?.error?.code === 'COUPON_INVALID' || /coupon/i.test(body?.message || '');
+      if (isCouponProblem) {
+        // Drop the coupon locally and tell the customer once (not on every recalculation)
+        setAppliedCoupon(null);
+        setCouponDiscountAmount(0);
+        const message = body?.message || 'Your coupon is no longer valid';
+        if (couponWarning.current !== message) {
+          couponWarning.current = message;
+          showToast(`${message}. The coupon was removed from your bag.`, 'info');
+        }
+      } else {
+        console.error('Failed to recalculate cart:', e);
+      }
+    }
+  }, [customerId, lookupProduct, applyOrRefresh, showToast]);
+
+  const validateCart = useCallback(async (): Promise<CartValidationResult> => {
+    if (!customer) return { valid: false, issues: ['Please sign in to continue to checkout.'] };
+    const result = await validateCartApi();
+    if (!result.valid) {
+      showToast(result.issues[0] || 'Your Bag needs attention before checkout.', 'error');
+      // The server may have adjusted quantities or prices; show the latest state
+      await refreshCart();
+    }
+    return result;
+  }, [customerId, showToast, refreshCart]);
+
+  const refreshWishlist = useCallback(async () => {
+    if (!customer || !hasCustomerSession()) {
+      setWishlist([]);
+      setWishlistProductMap({});
+      return;
+    }
+    if (isAdminRoute) return;
+    setIsWishlistLoading(true);
+    try {
+      const entries = await getWishlist();
+      setWishlist(entries.map(e => e.productId));
+      setWishlistProductMap(
+        entries.reduce<Record<string, Product>>((acc, e) => {
+          if (e.product) acc[e.productId] = e.product;
+          return acc;
+        }, {})
+      );
+    } catch (e) {
+      console.error('Failed to load wishlist:', e);
+    } finally {
+      setIsWishlistLoading(false);
+    }
+  }, [customerId, isAdminRoute]);
+
+  // Load on login / app start, clear on logout
+  useEffect(() => {
+    refreshWishlist();
+  }, [refreshWishlist]);
+
+  const toggleWishlist = useCallback(async (product: Product) => {
     if (!customer) {
       navigate('/auth/login');
       return;
     }
     const exists = wishlist.includes(product.id);
+
+    // Optimistic update, rolled back if the API call fails
     if (exists) {
       setWishlist(prev => prev.filter(id => id !== product.id));
-      showToast(`Removed from your Wishlist`, 'info');
     } else {
       setWishlist(prev => [...prev, product.id]);
-      showToast(`Added to your Wishlist ❤️`, 'gold');
+      setWishlistProductMap(prev => ({ ...prev, [product.id]: product }));
     }
-  }, [wishlist, showToast, customer, navigate]);
+
+    try {
+      if (exists) {
+        await removeWishlistItem({ productId: product.id });
+        showToast(`Removed from your Wishlist`, 'info');
+      } else {
+        await addWishlistItem({ productId: product.id });
+        showToast(`Added to your Wishlist ❤️`, 'gold');
+      }
+    } catch (error: any) {
+      setWishlist(prev => (exists ? [...prev, product.id] : prev.filter(id => id !== product.id)));
+      showToast(error.response?.data?.message || 'Could not update your Wishlist', 'error');
+    }
+  }, [wishlist, showToast, customerId, navigate]);
+
+  const clearWishlist = useCallback(async () => {
+    const previous = wishlist;
+    setWishlist([]);
+    try {
+      await clearWishlistApi();
+      setWishlistProductMap({});
+      showToast('Wishlist cleared', 'info');
+    } catch (error: any) {
+      setWishlist(previous);
+      showToast(error.response?.data?.message || 'Could not clear your Wishlist', 'error');
+    }
+  }, [wishlist, showToast]);
 
   const isInWishlist = useCallback((productId: string) => wishlist.includes(productId), [wishlist]);
 
+  // Prefer the server-populated product, fall back to the loaded catalog
+  const wishlistProducts = wishlist
+    .map(id => wishlistProductMap[id] || products.find(p => p.id === id))
+    .filter((p): p is Product => !!p);
+
   // Pricing calculations
   const cartCount = cart.reduce((acc, item) => acc + item.quantity, 0);
-  const cartSubtotal = cart.reduce((acc, item) => acc + item.product.price * item.quantity, 0);
+  const cartSubtotal = cart.reduce((acc, item) => acc + (item.unitPrice ?? item.product.price) * item.quantity, 0);
   const freeShippingRemaining = Math.max(0, FREE_SHIPPING_THRESHOLD - cartSubtotal);
   const freeShippingProgress = Math.min(100, (cartSubtotal / FREE_SHIPPING_THRESHOLD) * 100);
 
-  // Coupon calculations
-  let couponDiscount = 0;
-  if (appliedCoupon && cartSubtotal >= appliedCoupon.minOrderValue) {
-    if (appliedCoupon.discountType === 'Percentage') {
-      const calc = (cartSubtotal * appliedCoupon.discountValue) / 100;
-      couponDiscount = appliedCoupon.maxDiscount ? Math.min(calc, appliedCoupon.maxDiscount) : calc;
-    } else {
-      couponDiscount = appliedCoupon.discountValue;
-    }
-  }
+  // Coupon: the discount amount always comes from POST /coupons/validate
+  const [couponDiscountAmount, setCouponDiscountAmount] = useState(0);
+  const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
+  const lastValidatedCouponKey = useRef('');
+  const couponDiscount = appliedCoupon ? Math.min(couponDiscountAmount, cartSubtotal) : 0;
 
   const finalOrderTotal = Math.max(0, cartSubtotal - couponDiscount);
 
-  const applyCoupon = useCallback((code: string) => {
+  const clearCoupon = useCallback(() => {
+    setAppliedCoupon(null);
+    setCouponDiscountAmount(0);
+    lastValidatedCouponKey.current = '';
+  }, []);
+
+  const applyCoupon = useCallback(async (code: string) => {
     const clean = code.trim().toUpperCase();
-    const found = mockCouponsData.find(c => c.code === clean && c.status === 'Active');
-    if (!found) {
-      showToast(`Invalid coupon code: "${code}"`, 'error');
-      return { success: false, message: 'Invalid or expired coupon code.' };
+    if (!clean) return { success: false, message: 'Enter a coupon code.' };
+    if (!customer) {
+      navigate('/auth/login');
+      return { success: false, message: 'Please sign in to use a coupon.' };
     }
-    if (cartSubtotal < found.minOrderValue) {
-      showToast(`Minimum order of ₹${found.minOrderValue.toLocaleString('en-IN')} required for ${clean}`, 'info');
-      return { success: false, message: `Minimum cart value of ₹${found.minOrderValue} required.` };
+    if (!cartId || cart.length === 0) {
+      const message = 'Add items to your Bag before applying a coupon.';
+      showToast(message, 'info');
+      return { success: false, message };
     }
-    setAppliedCoupon(found);
-    showToast(`Coupon ${found.code} applied successfully!`, 'success');
-    return { success: true, message: `Applied ${found.code} successfully!` };
-  }, [cartSubtotal, showToast]);
+
+    setIsApplyingCoupon(true);
+    try {
+      const result = await validateCoupon(clean, cartId);
+      if (!result.valid) {
+        showToast(result.message, 'error');
+        return { success: false, message: result.message };
+      }
+      lastValidatedCouponKey.current = `${clean}|${cartId}|${cartSubtotal}`;
+      setAppliedCoupon(
+        result.coupon || {
+          id: clean,
+          code: clean,
+          description: '',
+          discountType: 'Fixed',
+          discountValue: result.discountAmount,
+          minOrderValue: 0,
+          usageCount: 0,
+          startDate: '',
+          endDate: '',
+          status: 'Active',
+        }
+      );
+      setCouponDiscountAmount(result.discountAmount);
+      const message = `Coupon ${clean} applied: you save ₹${Math.round(result.discountAmount).toLocaleString('en-IN')}`;
+      showToast(message, 'success');
+      return { success: true, message };
+    } catch {
+      const message = 'Could not check this coupon right now. Please try again.';
+      showToast(message, 'error');
+      return { success: false, message };
+    } finally {
+      setIsApplyingCoupon(false);
+    }
+  }, [customerId, cartId, cart.length, cartSubtotal, showToast, navigate]);
 
   const removeCoupon = useCallback(() => {
-    setAppliedCoupon(null);
+    clearCoupon();
     showToast('Coupon removed', 'info');
-  }, [showToast]);
+  }, [clearCoupon, showToast]);
+
+  // Re-check the applied coupon whenever the bag changes (the discount or eligibility may change)
+  const appliedCouponCode = appliedCoupon?.code;
+  useEffect(() => {
+    if (!appliedCouponCode) return;
+    if (!customer) { clearCoupon(); return; }
+    if (!cartId) return; // cart not loaded yet
+    if (cart.length === 0) { clearCoupon(); return; }
+
+    const key = `${appliedCouponCode}|${cartId}|${cartSubtotal}`;
+    if (key === lastValidatedCouponKey.current) return;
+
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      validateCoupon(appliedCouponCode, cartId)
+        .then(result => {
+          if (cancelled) return;
+          lastValidatedCouponKey.current = key;
+          if (result.valid) {
+            setCouponDiscountAmount(result.discountAmount);
+          } else {
+            clearCoupon();
+            showToast(`Coupon ${appliedCouponCode} removed: ${result.message}`, 'info');
+          }
+        })
+        .catch(() => {});
+    }, 400);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [appliedCouponCode, cartId, cartSubtotal, cart.length, customerId, clearCoupon, showToast]);
 
   // Customer Auth
   const loginUser = async (data: LoginData) => {
@@ -538,6 +794,43 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
       showToast(`Welcome back, ${userProfile.name}`, 'gold');
     } catch (error: any) {
       let errorMessage = 'Login failed. Please check your credentials.';
+      if (error.response?.data?.error?.details?.[0]?.message) {
+        errorMessage = error.response.data.error.details[0].message;
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      }
+      showToast(errorMessage, 'error');
+      throw error;
+    }
+  };
+
+  const loginWithGoogle = async (data: GoogleLoginData) => {
+    try {
+      const response = await googleLogin(data);
+      if (response.token) {
+        document.cookie = `token=${response.token}; path=/; max-age=86400; SameSite=Strict`;
+      } else if (response.data?.accessToken) {
+        document.cookie = `token=${response.data.accessToken}; path=/; max-age=86400; SameSite=Strict`;
+      }
+      
+      if (response.refreshToken) {
+        document.cookie = `refreshToken=${response.refreshToken}; path=/; max-age=604800; SameSite=Strict`;
+      } else if (response.data?.refreshToken) {
+        document.cookie = `refreshToken=${response.data.refreshToken}; path=/; max-age=604800; SameSite=Strict`;
+      }
+      
+      const userProfile: CustomerProfile = response.user || {
+        id: `usr-${Date.now()}`,
+        name: 'Google User',
+        email: '',
+        phone: '',
+        addresses: [],
+        orders: [],
+      };
+      setCustomer(userProfile);
+      showToast(`Welcome back, ${userProfile.name}`, 'gold');
+    } catch (error: any) {
+      let errorMessage = 'Google login failed.';
       if (error.response?.data?.error?.details?.[0]?.message) {
         errorMessage = error.response.data.error.details[0].message;
       } else if (error.response?.data?.message) {
@@ -625,15 +918,16 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const addCustomerAddress = async (data: Omit<SavedAddress, 'id'>) => {
-    if (!customer) return;
+  const addCustomerAddress = async (data: Omit<SavedAddress, 'id'>): Promise<SavedAddress | undefined> => {
+    if (!customer) return undefined;
     try {
       const newAddress = await addAddress(data);
       setCustomer((prev) => {
         if (!prev) return prev;
-        return { ...prev, addresses: [...prev.addresses, newAddress] };
+        return { ...prev, addresses: [...(prev.addresses || []), newAddress] };
       });
       showToast('Address saved successfully', 'success');
+      return newAddress;
     } catch (error) {
       showToast(getApiErrorMessage(error, 'Failed to save address'), 'error');
       throw error;
@@ -711,7 +1005,7 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
         selectedSize: item.selectedSize,
         selectedColor: item.selectedColor,
         quantity: item.quantity,
-        unitPrice: item.product.price,
+        unitPrice: item.unitPrice ?? item.product.price,
         mrp: item.product.originalPrice || item.product.price,
         sku: `${item.product.sku}-${item.selectedSize}`,
       })),
@@ -777,8 +1071,62 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return newOrder;
   };
 
+  // Order lines only carry ids, so fill in names / images from the storefront catalog
+  const enrichedOrders = React.useMemo(
+    () =>
+      orders.map(o =>
+        enrichOrder(o, productId => {
+          const p = products.find(pr => pr.id === productId);
+          return p ? { name: p.name, image: p.images.primary } : undefined;
+        })
+      ),
+    [orders, products]
+  );
+
   const getOrderById = (orderId: string) => {
-    return orders.find(o => o.id === orderId || o.orderNumber === orderId);
+    return enrichedOrders.find(o => o.id === orderId || o.orderNumber === orderId);
+  };
+
+  const upsertOrder = (order: Order) =>
+    setOrders(prev => (prev.some(o => o.id === order.id) ? prev.map(o => (o.id === order.id ? order : o)) : [order, ...prev]));
+
+  const refreshOrders = useCallback(async () => {
+    if (!customer || !hasCustomerSession()) return;
+    setIsLoadingOrders(true);
+    try {
+      const result = await getMyOrders({ limit: 50 });
+      setOrders(result.orders);
+      setOrdersTotal(result.total);
+    } catch (e) {
+      console.error('Failed to load orders:', e);
+    } finally {
+      setIsLoadingOrders(false);
+    }
+  }, [customerId]);
+
+  const loadOrder = useCallback(async (orderId: string) => {
+    if (!customer || !hasCustomerSession()) return undefined;
+    try {
+      const order = await getMyOrder(orderId);
+      upsertOrder(order);
+      return order;
+    } catch (e) {
+      console.error('Failed to load order:', e);
+      return undefined;
+    }
+  }, [customerId]);
+
+  const cancelCustomerOrder = async (orderId: string, reason: string, note?: string) => {
+    try {
+      const updated = await cancelMyOrder(orderId, reason, note);
+      if (updated) upsertOrder(updated);
+      else await loadOrder(orderId);
+      showToast('Your order has been cancelled', 'info');
+      return true;
+    } catch (e) {
+      showToast(orderErrorMessage(e, 'This order can no longer be cancelled'), 'error');
+      return false;
+    }
   };
 
   const submitReturnRequest = (returnData: Omit<ReturnRequest, 'id' | 'status' | 'requestedDate'>): ReturnRequest => {
@@ -881,7 +1229,17 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
         categories,
         isLoadingProducts,
         cart,
+        cartTotals,
+        cartId,
+        isCartLoading,
+        refreshCart,
+        recalculateCart,
+        validateCart,
         wishlist,
+        wishlistProducts,
+        isWishlistLoading,
+        refreshWishlist,
+        clearWishlist,
         addToCart,
         removeFromCart,
         updateQuantity,
@@ -898,19 +1256,26 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
         appliedCoupon,
         couponDiscount,
         applyCoupon,
+        isApplyingCoupon,
         removeCoupon,
         finalOrderTotal,
         customer,
         isAuthenticated,
         loginUser,
         registerUser,
+        loginWithGoogle,
         completeProfile,
         logoutCustomer,
         fetchCustomerAddresses,
         addCustomerAddress,
         updateCustomerAddress,
         deleteCustomerAddress,
-        orders,
+        orders: enrichedOrders,
+        ordersTotal,
+        isLoadingOrders,
+        refreshOrders,
+        loadOrder,
+        cancelCustomerOrder,
         placeOrder,
         getOrderById,
         returns,

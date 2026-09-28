@@ -1,7 +1,7 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import type { PayloadAction } from '@reduxjs/toolkit';
 import type { CartItem, Coupon } from '../../types';
-import api from '../../service/api';
+import { getCart } from '../../service/cart';
 
 interface CartState {
   items: CartItem[];
@@ -20,23 +20,10 @@ export const fetchCart = createAsyncThunk(
   'cart/fetchCart',
   async (_, { rejectWithValue }) => {
     try {
-      const response = await api.get('/cart');
-      return response.data;
+      const snapshot = await getCart();
+      return snapshot.items;
     } catch (error: any) {
       return rejectWithValue(error.response?.data || 'Failed to fetch cart');
-    }
-  }
-);
-
-// Async thunk for updating cart
-export const updateCartApi = createAsyncThunk(
-  'cart/updateCartApi',
-  async (items: CartItem[], { rejectWithValue }) => {
-    try {
-      const response = await api.post('/cart', { items });
-      return response.data;
-    } catch (error: any) {
-      return rejectWithValue(error.response?.data || 'Failed to update cart');
     }
   }
 );
@@ -55,7 +42,7 @@ const cartSlice = createSlice({
   extraReducers: (builder) => {
     builder
       .addCase(fetchCart.fulfilled, (state, action) => {
-        state.items = action.payload.items || [];
+        state.items = action.payload;
         state.status = 'succeeded';
       });
   },

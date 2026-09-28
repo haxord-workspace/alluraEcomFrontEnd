@@ -4,15 +4,36 @@ import { CheckCircle2, ArrowRight, ShieldCheck, Phone, User, Mail, Lock, Unlock 
 import { useShop } from '../../context/ShopContext';
 import { AlluraLogo } from '../../components/common/AlluraLogo';
 import { getCustomerProfile, updateCustomerProfile } from '../../service/customer';
+import { useGoogleLogin } from '@react-oauth/google';
 
 export const AuthPage: React.FC = () => {
-  const { customer, loginUser, registerUser, completeProfile, logoutCustomer, showToast } = useShop();
+  const { customer, loginUser, registerUser, loginWithGoogle, completeProfile, logoutCustomer, showToast } = useShop();
   const navigate = useNavigate();
   const location = useLocation();
 
   const isCompleteProfile = location.pathname === '/auth/complete-profile';
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+
+  const handleGoogleLogin = useGoogleLogin({
+    onSuccess: async (tokenResponse) => {
+      setIsLoading(true);
+      try {
+        await loginWithGoogle({ token: tokenResponse.access_token });
+        setIsSuccess(true);
+        setTimeout(() => {
+          setIsLoading(false);
+          const from = (location.state as any)?.from?.pathname || '/account';
+          navigate(from, { replace: true });
+        }, 1000);
+      } catch {
+        setIsLoading(false);
+      }
+    },
+    onError: () => {
+      showToast('Google Login Failed', 'error');
+    }
+  });
 
   // Auth Form State
   const [isLoginMode, setIsLoginMode] = useState(true);
@@ -346,8 +367,27 @@ export const AuthPage: React.FC = () => {
                 <span>{isLoginMode ? 'Sign In' : 'Register'}</span>
               </button>
             </form>
+
+            <div className="flex items-center my-4 before:flex-1 before:border-t before:border-allura-border/60 before:mr-3 after:flex-1 after:border-t after:border-allura-border/60 after:ml-3">
+              <span className="text-[10px] font-sans uppercase tracking-widest text-allura-muted">Or</span>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => handleGoogleLogin()}
+              disabled={isLoading}
+              className="w-full bg-white border border-allura-border hover:bg-gray-50 text-gray-800 py-3 rounded-xl text-xs font-sans font-bold tracking-widest uppercase transition-colors flex items-center justify-center gap-3 disabled:opacity-50 shadow-sm"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+              </svg>
+              <span>Continue with Google</span>
+            </button>
             
-            <div className="text-center pt-2 border-t border-allura-border/60">
+            <div className="text-center pt-2 border-t border-allura-border/60 mt-4">
               <button
                 type="button"
                 onClick={() => setIsLoginMode(!isLoginMode)}

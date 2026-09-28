@@ -21,6 +21,7 @@ import {
   ChevronDown, 
   ChevronRight,
   Boxes,
+  Warehouse,
   Bell,
   Image as ImageIcon,
   HelpCircle,
@@ -47,7 +48,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
     catalog: true,
     inventory: true,
     orders: true,
-    marketing: false,
+    marketing: true,
     content: false,
     intelligence: false,
     settings: false,
@@ -166,17 +167,9 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
             </button>
             {(openSections.inventory || isCollapsed) && (
               <div className="space-y-0.5 pl-1">
-                <NavLink to="/admin/inventory" className={navLinkClass}>
-                  <Package size={15} />
+                <NavLink to="/admin/inventory" end className={navLinkClass}>
+                  <Warehouse size={15} />
                   {!isCollapsed && <span>Stock Levels</span>}
-                </NavLink>
-                <NavLink to="/admin/inventory/transactions" className={navLinkClass}>
-                  <FileText size={15} />
-                  {!isCollapsed && <span>Transactions Log</span>}
-                </NavLink>
-                <NavLink to="/admin/inventory/reservations" className={navLinkClass}>
-                  <Boxes size={15} />
-                  {!isCollapsed && <span>Reservations</span>}
                 </NavLink>
               </div>
             )}

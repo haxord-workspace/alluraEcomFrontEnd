@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { attachRequestGuards } from './requestGuards';
 
 // Base URL for the backend API, loaded from environment variables
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
@@ -46,5 +47,11 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+attachRequestGuards(api);
+
+/** True when a customer access token cookie exists (i.e. customer API calls can succeed) */
+export const hasCustomerSession = (): boolean =>
+  document.cookie.split('; ').some(c => c.startsWith('token=') && c.length > 'token='.length);
 
 export default api;
