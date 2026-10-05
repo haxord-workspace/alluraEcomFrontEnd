@@ -35,6 +35,7 @@ export const ProductDetailPage: React.FC = () => {
   const [selectedColorIdx, setSelectedColorIdx] = useState(0);
   const [activeImageIdx, setActiveImageIdx] = useState(0);
   const [quantity, setQuantity] = useState(1);
+  const [isBuyingNow, setIsBuyingNow] = useState(false);
   const [isSizeGuideOpen, setIsSizeGuideOpen] = useState(false);
 
   const [openAccordions, setOpenAccordions] = useState<{ [key: string]: boolean }>({
@@ -115,9 +116,13 @@ export const ProductDetailPage: React.FC = () => {
     addToCart(product, selectedSize, currentColor, quantity);
   };
 
-  const handleBuyNow = () => {
-    addToCart(product, selectedSize, currentColor, quantity);
-    navigate('/checkout');
+  // Buy Now: add quietly (no bag drawer), wait until it's in the bag, then go straight to checkout
+  const handleBuyNow = async () => {
+    if (isBuyingNow) return;
+    setIsBuyingNow(true);
+    const added = await addToCart(product, selectedSize, currentColor, quantity, { silent: true });
+    setIsBuyingNow(false);
+    if (added) navigate('/checkout');
   };
 
   const handleWhatsAppEnquiry = () => {
@@ -351,9 +356,10 @@ export const ProductDetailPage: React.FC = () => {
 
               <button
                 onClick={handleBuyNow}
-                className="bg-allura-goldDark hover:bg-allura-darkBrown text-allura-card text-xs font-sans font-bold tracking-[0.2em] uppercase py-3.5 px-4 rounded-sm transition-all flex items-center justify-center gap-2 shadow-luxury"
+                disabled={isBuyingNow}
+                className="bg-allura-goldDark hover:bg-allura-darkBrown text-allura-card text-xs font-sans font-bold tracking-[0.2em] uppercase py-3.5 px-4 rounded-sm transition-all flex items-center justify-center gap-2 shadow-luxury disabled:opacity-60"
               >
-                <span>BUY NOW</span>
+                <span>{isBuyingNow ? 'PLEASE WAIT…' : 'BUY NOW'}</span>
               </button>
             </div>
 
@@ -504,9 +510,10 @@ export const ProductDetailPage: React.FC = () => {
 
         <button
           onClick={handleBuyNow}
-          className="flex-1 bg-allura-goldDark text-allura-card text-xs font-sans font-bold tracking-wider uppercase py-3 rounded-sm flex items-center justify-center gap-1.5 shadow-sm"
+          disabled={isBuyingNow}
+          className="flex-1 bg-allura-goldDark text-allura-card text-xs font-sans font-bold tracking-wider uppercase py-3 rounded-sm flex items-center justify-center gap-1.5 shadow-sm disabled:opacity-60"
         >
-          <span>BUY NOW ({formatPrice(product.price)})</span>
+          <span>{isBuyingNow ? 'PLEASE WAIT…' : `BUY NOW (${formatPrice(product.price)})`}</span>
         </button>
       </div>
 

@@ -5,9 +5,13 @@ import { StatusBadge } from '../../components/common/StatusBadge';
 import { ImageUploadDropzone } from '../../components/admin/ImageUploadDropzone';
 import { getCategories, createCategory, updateCategory, deleteCategory } from '../../service/category';
 import type { Category } from '../../types';
+import { useConfirm } from '../../context/ConfirmContext';
+import { useShop } from '../../context/ShopContext';
 
 export const AdminCategoriesPage: React.FC = () => {
   const { products } = useAdmin();
+  const confirm = useConfirm();
+  const { showToast } = useShop();
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -63,13 +67,21 @@ export const AdminCategoriesPage: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (confirm('Are you sure you want to delete this category?')) {
-      try {
-        await deleteCategory(id);
-        setCategories(categories.filter(c => c.id !== id));
-      } catch (error) {
-        console.error('Failed to delete category:', error);
-      }
+    const category = categories.find(c => c.id === id);
+    const ok = await confirm({
+      title: 'Delete category',
+      message: `Delete "${category?.name || 'this category'}"? This can't be undone. Products in it will no longer be grouped under this category.`,
+      confirmLabel: 'Delete',
+      isDestructive: true,
+    });
+    if (!ok) return;
+    try {
+      await deleteCategory(id);
+      setCategories(prev => prev.filter(c => c.id !== id));
+      showToast(`Category "${category?.name || ''}" deleted`, 'info');
+    } catch (error: any) {
+      console.error('Failed to delete category:', error);
+      showToast(error?.response?.data?.message || 'Failed to delete category', 'error');
     }
   };
 

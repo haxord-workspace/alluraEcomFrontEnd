@@ -10,12 +10,14 @@ import {
   CheckCircle,
   Clock,
   Truck,
-  XCircle
+  XCircle,
+  Lock
 } from 'lucide-react';
 import { useShop } from '../../context/ShopContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { InvoiceModal } from '../../components/common/InvoiceModal';
 import { useCustomerOrder } from '../../hooks/useCustomerOrder';
+import { useOrderPayment } from '../../hooks/useOrderPayment';
 
 const CANCELLABLE = ['Pending', 'Confirmed', 'Processing'];
 const CANCEL_REASONS = [
@@ -28,8 +30,35 @@ const CANCEL_REASONS = [
 
 export const OrderDetailPage: React.FC = () => {
   const { orderId } = useParams<{ orderId: string }>();
-  const { formatPrice, invoiceOrder, setInvoiceOrder, cancelCustomerOrder } = useShop();
+  const { formatPrice, invoiceOrder, setInvoiceOrder, cancelCustomerOrder, customer, loadOrder, showToast } = useShop();
   const { order, isLoading: isLoadingOrder } = useCustomerOrder(orderId);
+  const { payForOrder, isPaying } = useOrderPayment();
+
+  // Online orders whose payment hasn't gone through yet (closed popup, failed attempt)
+  const needsPayment =
+    !!order &&
+    order.paymentMethod !== 'COD' &&
+    ['Pending', 'Failed', 'Authorized'].includes(order.paymentStatus) &&
+    !['Cancelled', 'Returned', 'Refunded'].includes(order.orderStatus);
+
+  const handlePayNow = async () => {
+    if (!order) return;
+    const outcome = await payForOrder(order.id, {
+      retry: true,
+      description: `Order ${order.orderNumber}`,
+      prefill: {
+        name: customer?.name,
+        email: customer?.email,
+        contact: typeof customer?.phone === 'string' ? customer.phone.replace(/\s+/g, '') : undefined,
+      },
+    });
+    if (outcome.ok === false) {
+      showToast(outcome.message, outcome.reason === 'dismissed' ? 'info' : 'error');
+    } else {
+      showToast('Payment successful. Thank you!', 'success');
+    }
+    loadOrder(order.id);
+  };
 
   const [isCancelOpen, setIsCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState(CANCEL_REASONS[0]);
@@ -116,6 +145,17 @@ export const OrderDetailPage: React.FC = () => {
             <FileText size={14} />
             <span>Tax Invoice</span>
           </button>
+
+          {needsPayment && (
+            <button
+              onClick={handlePayNow}
+              disabled={isPaying}
+              className="px-4 py-2 bg-allura-darkBrown hover:bg-allura-goldDark text-white rounded-xl text-xs font-sans font-bold transition-colors flex items-center gap-1.5 disabled:opacity-60"
+            >
+              <Lock size={14} />
+              <span>{isPaying ? 'Opening payment…' : `Pay Now · ${formatPrice(order.total)}`}</span>
+            </button>
+          )}
 
           {CANCELLABLE.includes(order.orderStatus) && (
             <button

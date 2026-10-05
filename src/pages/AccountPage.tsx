@@ -92,14 +92,18 @@ export const AccountPage: React.FC = () => {
               <span className="text-[10px] font-sans font-bold tracking-[0.25em] uppercase text-allura-goldDark">
                 ALLURA CIRCLE {customer?.circleTier?.toUpperCase() || 'MEMBER'}
               </span>
-              <span className="w-1.5 h-1.5 rounded-full bg-allura-gold" />
-              <span className="text-[10px] font-sans text-emerald-700 font-semibold">VIP Privilege Active</span>
+              {customer?.isCircleMember && (
+                <>
+                  <span className="w-1.5 h-1.5 rounded-full bg-allura-gold" />
+                  <span className="text-[10px] font-sans text-emerald-700 font-semibold">VIP Privilege Active</span>
+                </>
+              )}
             </div>
             <h1 className="font-serif text-2xl sm:text-3xl text-allura-text font-normal">
-              {customer?.name || 'Ananya Menon'}
+              {customer?.name}
             </h1>
             <p className="text-xs text-allura-muted font-sans mt-0.5">
-              {customer?.phone || '+91 98471 23456'} • {customer?.email || 'ananya.kerala@example.com'}
+              {[customer?.phone, customer?.email].filter(Boolean).join(' • ')}
             </p>
           </div>
         </div>
@@ -179,11 +183,11 @@ export const AccountPage: React.FC = () => {
             </div>
             <div className="bg-allura-card border border-allura-border rounded-2xl p-5 shadow-subtle space-y-1">
               <span className="text-[10px] font-sans font-bold uppercase tracking-wider text-allura-muted">Preferred Size</span>
-              <p className="font-serif text-2xl font-bold text-allura-goldDark">{customer?.sizePreferences?.preferredSize || 'M'}</p>
+              <p className="font-serif text-2xl font-bold text-allura-goldDark">{customer?.sizePreferences?.preferredSize || '—'}</p>
             </div>
             <div className="bg-allura-card border border-allura-border rounded-2xl p-5 shadow-subtle space-y-1">
               <span className="text-[10px] font-sans font-bold uppercase tracking-wider text-allura-muted">Allura Tier</span>
-              <p className="font-serif text-2xl font-bold text-emerald-800">{customer?.circleTier || 'Gold'}</p>
+              <p className="font-serif text-2xl font-bold text-emerald-800">{customer?.circleTier || 'Member'}</p>
             </div>
           </div>
 
@@ -472,7 +476,7 @@ export const AccountPage: React.FC = () => {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs font-sans">
             <div className="p-4 bg-allura-bg/60 rounded-xl border border-allura-border">
               <span className="text-allura-muted uppercase text-[10px] font-bold">Standard Size</span>
-              <p className="font-serif text-xl font-bold text-allura-darkBrown mt-1">{customer?.sizePreferences?.preferredSize || 'M'}</p>
+              <p className="font-serif text-xl font-bold text-allura-darkBrown mt-1">{customer?.sizePreferences?.preferredSize || '—'}</p>
             </div>
             <div className="p-4 bg-allura-bg/60 rounded-xl border border-allura-border">
               <span className="text-allura-muted uppercase text-[10px] font-bold">Bust Size</span>

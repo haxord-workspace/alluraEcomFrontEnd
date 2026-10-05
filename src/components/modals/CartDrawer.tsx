@@ -157,7 +157,7 @@ export const CartDrawer: React.FC = () => {
                     </div>
 
                     <p className="font-serif text-sm font-semibold text-allura-text mt-1">
-                      {formatPrice(item.product.price)}
+                      {formatPrice(item.unitPrice ?? item.product.price)}
                     </p>
                   </div>
 
@@ -198,7 +198,7 @@ export const CartDrawer: React.FC = () => {
                     </div>
 
                     <span className="text-xs font-semibold text-allura-darkBrown">
-                      {formatPrice(item.product.price * item.quantity)}
+                      {formatPrice((item.unitPrice ?? item.product.price) * item.quantity)}
                     </span>
                   </div>
                 </div>

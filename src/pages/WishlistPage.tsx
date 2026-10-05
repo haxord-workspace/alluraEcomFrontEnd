@@ -2,16 +2,24 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { Heart, ShoppingBag, ArrowRight, Loader2, Trash2 } from 'lucide-react';
 import { useShop } from '../context/ShopContext';
+import { useConfirm } from '../context/ConfirmContext';
 import { ProductCard } from '../components/ui/ProductCard';
 import type { Product } from '../types';
 
 export const WishlistPage: React.FC = () => {
   const { wishlistProducts, isWishlistLoading, clearWishlist, addToCart } = useShop();
 
-  const handleClearAll = () => {
-    if (window.confirm('Remove all pieces from your Wishlist?')) {
-      clearWishlist();
-    }
+  const confirm = useConfirm();
+
+  const handleClearAll = async () => {
+    const ok = await confirm({
+      title: 'Clear wishlist',
+      message: 'Remove all saved pieces from your Wishlist?',
+      confirmLabel: 'Clear all',
+      cancelLabel: 'Keep them',
+      isDestructive: true,
+    });
+    if (ok) clearWishlist();
   };
 
   return (

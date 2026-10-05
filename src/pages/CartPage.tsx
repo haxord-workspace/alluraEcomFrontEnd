@@ -162,7 +162,7 @@ export const CartPage: React.FC = () => {
                   </div>
 
                   <p className="font-serif text-lg font-semibold text-allura-darkBrown">
-                    {formatPrice(item.product.price * item.quantity)}
+                    {formatPrice((item.unitPrice ?? item.product.price) * item.quantity)}
                   </p>
                 </div>
 

@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, useLocation, Navigate } from 'react-router-dom';
 import { ShopProvider } from './context/ShopContext';
 import { AdminProvider } from './context/AdminContext';
+import { ConfirmProvider } from './context/ConfirmContext';
 
 // Layout & Navigation Components
 import { AnnouncementBar } from './components/layout/AnnouncementBar';
@@ -218,11 +219,13 @@ export const AppContent: React.FC = () => {
 export function App() {
   return (
     <BrowserRouter>
-      <ShopProvider>
-        <AdminProvider>
-          <AppContent />
-        </AdminProvider>
-      </ShopProvider>
+      <ConfirmProvider>
+        <ShopProvider>
+          <AdminProvider>
+            <AppContent />
+          </AdminProvider>
+        </ShopProvider>
+      </ConfirmProvider>
     </BrowserRouter>
   );
 }

@@ -32,13 +32,15 @@ export const ImageUploadDropzone: React.FC<ImageUploadDropzoneProps> = ({
   const [urlInput, setUrlInput] = useState(value && !value.startsWith('data:') ? value : '');
   const [fileName, setFileName] = useState<string>('');
   const [fileSize, setFileSize] = useState<string>('');
+  const [fileError, setFileError] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFile = (file: File) => {
     if (!file.type.startsWith('image/')) {
-      alert('Please select a valid image file (JPEG, PNG, WebP, SVG, AVIF).');
+      setFileError(`"${file.name}" isn't an image. Please choose a JPEG, PNG, WebP, SVG or AVIF file.`);
       return;
     }
+    setFileError('');
 
     setFileName(file.name);
     const sizeInKb = Math.round(file.size / 1024);
@@ -304,6 +306,10 @@ export const ImageUploadDropzone: React.FC<ImageUploadDropzoneProps> = ({
             </button>
           </div>
         </div>
+      )}
+
+      {fileError && (
+        <p role="alert" className="text-[11px] font-sans text-rose-700 mt-1.5">{fileError}</p>
       )}
 
       {helperText && (

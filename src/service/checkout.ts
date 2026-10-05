@@ -43,6 +43,9 @@ export interface CheckoutSummary {
 
 export interface CheckoutSession {
   checkoutId: string;
+  /** The order created for this checkout (used by POST /payments/create) */
+  orderId: string;
+  orderNumber?: string;
   customerId?: string;
   summary: CheckoutSummary;
   reservationIds: string[];
@@ -137,8 +140,13 @@ export const createCheckout = async (req: CheckoutRequest, idempotencyKey: strin
     headers: { 'Idempotency-Key': idempotencyKey },
   });
   const data = unwrap(response) || {};
+  if (import.meta.env.DEV) console.debug('[checkout] create response', data);
+  const order = data.order && typeof data.order === 'object' ? data.order : null;
+  const checkoutId = data.checkoutId || data._id || data.id || '';
   return {
-    checkoutId: data.checkoutId || data._id || data.id || '',
+    checkoutId,
+    orderId: data.orderId || order?._id || order?.id || checkoutId,
+    orderNumber: data.orderNumber || order?.orderNumber,
     customerId: data.customerId,
     summary: mapSummary(data.summary || data),
     reservationIds: Array.isArray(data.reservationIds) ? data.reservationIds : [],

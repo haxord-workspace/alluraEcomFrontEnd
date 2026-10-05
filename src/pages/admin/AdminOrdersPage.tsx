@@ -33,13 +33,10 @@ export const AdminOrdersPage: React.FC = () => {
     'Pending',
     'Confirmed',
     'Processing',
-    'Packed',
     'Shipped',
-    'Out for Delivery',
     'Delivered',
     'Cancelled',
     'Returned',
-    'Refunded',
   ];
 
   // Search is sent to the server; wait until typing pauses

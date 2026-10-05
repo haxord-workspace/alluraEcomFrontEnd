@@ -50,7 +50,11 @@ interface ShopContextType {
   /** Server cart id (needed by coupon validation and checkout) */
   cartId?: string;
   isCartLoading: boolean;
-  addToCart: (product: Product, size?: string, color?: ProductColor, quantity?: number) => Promise<void>;
+  /**
+   * Adds to the bag. Resolves true when the item is in the bag.
+   * Pass { silent: true } (e.g. for Buy Now) to skip the toast and keep the bag drawer closed.
+   */
+  addToCart: (product: Product, size?: string, color?: ProductColor, quantity?: number, options?: { silent?: boolean }) => Promise<boolean>;
   removeFromCart: (productId: string, size: string, colorName: string) => Promise<void>;
   updateQuantity: (productId: string, size: string, colorName: string, quantity: number) => Promise<void>;
   clearCart: () => Promise<void>;
@@ -191,7 +195,7 @@ const INITIAL_AI_MESSAGES: AIMessage[] = [
 ];
 import { useAppDispatch } from '../store/hooks';
 import { fetchCustomerProfile } from '../store/slices/authSlice';
-import { hasCustomerSession } from '../service/api';
+import { hasCustomerSession, storeCustomerTokens, clearCustomerTokens, CUSTOMER_SESSION_EXPIRED_EVENT } from '../service/api';
 
 export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const dispatch = useAppDispatch();
@@ -276,12 +280,33 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Customer Profile & Session
   const [customer, setCustomer] = useState<CustomerProfile | null>(() => {
     try {
+      // The profile is cached in localStorage, but it's only valid while a login token
+      // (or a refresh token to renew it) still exists; otherwise start signed out.
       const saved = localStorage.getItem('allura_customer');
-      return saved ? JSON.parse(saved) : null;
+      if (!saved || !hasCustomerSession()) {
+        localStorage.removeItem('allura_customer');
+        return null;
+      }
+      return JSON.parse(saved);
     } catch {
       return null;
     }
   });
+
+  // showToast is declared further down; reach it through a ref
+  const showToastRef = useRef<((message: string, type?: 'success' | 'info' | 'gold' | 'error') => void) | null>(null);
+
+  // The API client signals when the session can't be renewed (refresh token missing/expired)
+  useEffect(() => {
+    const onExpired = () => {
+      setCustomer(prev => {
+        if (prev) showToastRef.current?.('Your session has expired. Please sign in again.', 'info');
+        return null;
+      });
+    };
+    window.addEventListener(CUSTOMER_SESSION_EXPIRED_EVENT, onExpired);
+    return () => window.removeEventListener(CUSTOMER_SESSION_EXPIRED_EVENT, onExpired);
+  }, []);
 
   // Orders state
   const [orders, setOrders] = useState<Order[]>([]);
@@ -409,6 +434,7 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setToasts(prev => prev.filter(t => t.id !== id));
     }, 3600);
   }, []);
+  showToastRef.current = showToast;
 
   const removeToast = useCallback((id: string) => {
     setToasts(prev => prev.filter(t => t.id !== id));
@@ -462,10 +488,16 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const findCartLine = (productId: string, size: string, colorName: string) =>
     cart.find(item => item.product.id === productId && item.selectedSize === size && item.selectedColor.name === colorName);
 
-  const addToCart = useCallback(async (product: Product, size = '', color: ProductColor = NO_COLOR, quantity = 1) => {
+  const addToCart = useCallback(async (
+    product: Product,
+    size = '',
+    color: ProductColor = NO_COLOR,
+    quantity = 1,
+    options: { silent?: boolean } = {}
+  ): Promise<boolean> => {
     if (!customer) {
       navigate('/auth/login');
-      return;
+      return false;
     }
     try {
       // The list endpoint doesn't include variants, so load the detail to find the SKU for this size / colour
@@ -487,7 +519,7 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (hasVariants && variants && variants.length > 0 && !variant) {
         showToast(`Please choose a size and colour for ${product.name}`, 'error');
-        return;
+        return false;
       }
 
       if (hasVariants && (!variants || variants.length === 0)) {
@@ -500,10 +532,14 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await applyOrRefresh(snapshot);
 
       addRecentlyViewed(product);
-      showToast(`Added ${product.name}${size ? ` (${size})` : ''} to your Bag`, 'gold');
-      setIsCartOpen(true);
+      if (!options.silent) {
+        showToast(`Added ${product.name}${size ? ` (${size})` : ''} to your Bag`, 'gold');
+        setIsCartOpen(true);
+      }
+      return true;
     } catch (error: any) {
       showToast(cartErrorMessage(error, 'Could not add this piece to your Bag'), 'error');
+      return false;
     }
   }, [addRecentlyViewed, showToast, customerId, navigate, lookupProduct, applyOrRefresh]);
 
@@ -770,17 +806,7 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const loginUser = async (data: LoginData) => {
     try {
       const response = await login(data);
-      if (response.token) {
-        document.cookie = `token=${response.token}; path=/; max-age=86400; SameSite=Strict`;
-      } else if (response.data?.accessToken) {
-        document.cookie = `token=${response.data.accessToken}; path=/; max-age=86400; SameSite=Strict`;
-      }
-      
-      if (response.refreshToken) {
-        document.cookie = `refreshToken=${response.refreshToken}; path=/; max-age=604800; SameSite=Strict`;
-      } else if (response.data?.refreshToken) {
-        document.cookie = `refreshToken=${response.data.refreshToken}; path=/; max-age=604800; SameSite=Strict`;
-      }
+      storeCustomerTokens(response);
       
       const userProfile: CustomerProfile = response.user || {
         id: `usr-${Date.now()}`,
@@ -807,17 +833,7 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const loginWithGoogle = async (data: GoogleLoginData) => {
     try {
       const response = await googleLogin(data);
-      if (response.token) {
-        document.cookie = `token=${response.token}; path=/; max-age=86400; SameSite=Strict`;
-      } else if (response.data?.accessToken) {
-        document.cookie = `token=${response.data.accessToken}; path=/; max-age=86400; SameSite=Strict`;
-      }
-      
-      if (response.refreshToken) {
-        document.cookie = `refreshToken=${response.refreshToken}; path=/; max-age=604800; SameSite=Strict`;
-      } else if (response.data?.refreshToken) {
-        document.cookie = `refreshToken=${response.data.refreshToken}; path=/; max-age=604800; SameSite=Strict`;
-      }
+      storeCustomerTokens(response);
       
       const userProfile: CustomerProfile = response.user || {
         id: `usr-${Date.now()}`,
@@ -844,17 +860,7 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const registerUser = async (data: RegisterData) => {
     try {
       const response = await register(data);
-      if (response.token) {
-        document.cookie = `token=${response.token}; path=/; max-age=86400; SameSite=Strict`;
-      } else if (response.data?.accessToken) {
-        document.cookie = `token=${response.data.accessToken}; path=/; max-age=86400; SameSite=Strict`;
-      }
-
-      if (response.refreshToken) {
-        document.cookie = `refreshToken=${response.refreshToken}; path=/; max-age=604800; SameSite=Strict`;
-      } else if (response.data?.refreshToken) {
-        document.cookie = `refreshToken=${response.data.refreshToken}; path=/; max-age=604800; SameSite=Strict`;
-      }
+      storeCustomerTokens(response);
       
       const userProfile: CustomerProfile = response.user || {
         id: `usr-${Date.now()}`,
@@ -891,8 +897,7 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (e) {
       console.warn('Logout API call failed, still clearing local state', e);
     }
-    document.cookie = 'token=; path=/; max-age=0; SameSite=Strict';
-    document.cookie = 'refreshToken=; path=/; max-age=0; SameSite=Strict';
+    clearCustomerTokens();
     setCustomer(null);
     showToast('Logged out of customer session', 'info');
   };

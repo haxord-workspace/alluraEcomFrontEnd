@@ -11,6 +11,7 @@ import {
   Plus,
   Loader2,
   Clock,
+  AlertTriangle,
 } from 'lucide-react';
 import { useShop } from '../context/ShopContext';
 import { AlluraLogo } from '../components/common/AlluraLogo';
@@ -22,6 +23,7 @@ import {
 } from '../service/checkout';
 import type { CheckoutRequest, CheckoutSummary, CheckoutSession } from '../service/checkout';
 import type { CartItem, SavedAddress } from '../types';
+import { useOrderPayment } from '../hooks/useOrderPayment';
 
 type DeliveryMethod = 'STANDARD' | 'STORE_PICKUP';
 type PaymentMethod = 'upi' | 'card' | 'cod';
@@ -62,7 +64,14 @@ export const CheckoutPage: React.FC = () => {
     couponDiscount,
     fetchCustomerAddresses,
     addCustomerAddress,
+    clearCart,
+    refreshOrders,
   } = useShop();
+
+  // Online payment (Razorpay) after the order is created
+  const { payForOrder, isPaying } = useOrderPayment();
+  const [paymentState, setPaymentState] = useState<'idle' | 'paid' | 'cod' | 'pending'>('idle');
+  const [paymentMessage, setPaymentMessage] = useState('');
 
   const addresses = useMemo(() => customer?.addresses || [], [customer?.addresses]);
 
@@ -159,6 +168,26 @@ export const CheckoutPage: React.FC = () => {
   const [isPlacing, setIsPlacing] = useState(false);
   const [placeError, setPlaceError] = useState<string | null>(null);
   const [session, setSession] = useState<CheckoutSession | null>(null);
+
+  const startPayment = async (created: CheckoutSession, retry = false) => {
+    const outcome = await payForOrder(created.orderId, {
+      retry,
+      description: created.orderNumber ? `Order ${created.orderNumber}` : 'Allura order',
+      prefill: {
+        name: customer?.name,
+        email: customer?.email,
+        contact: typeof customer?.phone === 'string' ? customer.phone.replace(/\s+/g, '') : undefined,
+      },
+    });
+    if (outcome.ok) {
+      setPaymentState('paid');
+      setPaymentMessage('');
+    } else {
+      setPaymentState('pending');
+      setPaymentMessage(outcome.message);
+    }
+    refreshOrders();
+  };
   // Same key for retries of the same attempt; a new one when anything changes
   const idempotency = useRef<{ signature: string; key: string } | null>(null);
 
@@ -230,6 +259,15 @@ export const CheckoutPage: React.FC = () => {
     try {
       const created = await createCheckout(req, idempotency.current.key);
       setSession(created);
+      // The order now holds these items: empty the bag so the same items can't be ordered twice.
+      // (Payment, if still pending, is completed on the order itself, not by checking out again.)
+      clearCart();
+      if (paymentMethod === 'cod') {
+        setPaymentState('cod');
+        refreshOrders();
+      } else {
+        await startPayment(created);
+      }
     } catch (err: any) {
       const status = err?.response?.status;
       setPlaceError(
@@ -275,30 +313,56 @@ export const CheckoutPage: React.FC = () => {
       : null;
 
   // ── Confirmation ─────────────────────────────────────────────────────────
+  if (session && (isPaying || paymentState === 'idle')) {
+    return (
+      <div className="max-w-md mx-auto px-6 py-24 flex flex-col items-center gap-4 text-center">
+        <Loader2 size={32} className="animate-spin text-allura-goldDark" />
+        <h2 className="font-serif text-2xl text-allura-text">Completing your payment…</h2>
+        <p className="text-xs font-sans text-allura-muted">
+          Finish the payment in the secure Razorpay window. Please don't close or refresh this page.
+        </p>
+      </div>
+    );
+  }
+
   if (session) {
     const s = session.summary;
+    const isPending = paymentState === 'pending';
+    const reference = session.orderNumber || session.orderId || session.checkoutId;
     return (
       <div className="max-w-2xl mx-auto px-6 py-16 text-center space-y-6 animate-slide-up">
-        <div className="w-20 h-20 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 mx-auto">
-          <CheckCircle2 size={40} />
+        <div
+          className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto ${
+            isPending ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
+          }`}
+        >
+          {isPending ? <AlertTriangle size={38} /> : <CheckCircle2 size={40} />}
         </div>
 
         <span className="text-[11px] font-sans font-bold tracking-[0.3em] uppercase text-allura-goldDark">
-          ORDER RESERVED
+          {paymentState === 'paid' ? 'PAYMENT SUCCESSFUL' : paymentState === 'cod' ? 'ORDER PLACED' : 'PAYMENT PENDING'}
         </span>
 
         <h1 className="font-serif text-3xl sm:text-4xl text-allura-text font-normal uppercase tracking-tight">
-          YOUR PIECES ARE ON HOLD
+          {isPending ? 'YOUR ORDER IS SAVED' : 'THANK YOU FOR YOUR ORDER'}
         </h1>
+
+        {isPending && paymentMessage && (
+          <p className="text-xs font-sans text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-3">{paymentMessage}</p>
+        )}
 
         <div className="bg-allura-card border border-allura-border rounded-xl p-6 text-left space-y-4 shadow-subtle">
           <div className="flex justify-between items-center pb-3 border-b border-allura-border/60">
             <div>
-              <p className="text-[11px] font-sans text-allura-muted uppercase tracking-wider">Checkout Reference</p>
-              <p className="font-mono text-sm font-bold text-allura-darkBrown break-all">{session.checkoutId}</p>
+              <p className="text-[11px] font-sans text-allura-muted uppercase tracking-wider">Order Reference</p>
+              <p className="font-mono text-sm font-bold text-allura-darkBrown break-all">{reference}</p>
             </div>
-            <span className="text-xs bg-amber-100 text-amber-800 font-semibold px-2.5 py-1 rounded uppercase">
-              {session.status.replace(/_/g, ' ')}
+            <span
+              className={`text-xs font-semibold px-2.5 py-1 rounded uppercase ${
+                paymentState === 'paid' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+              }`}
+            >
+              {paymentState === 'paid' ? 'Paid' : paymentState === 'cod' ? 'Pay on delivery' : 'Awaiting payment'}
             </span>
           </div>
 
@@ -313,11 +377,34 @@ export const CheckoutPage: React.FC = () => {
 
           <div className="p-3 bg-allura-bgSecondary/60 rounded-lg text-xs font-sans text-allura-text flex items-center gap-2">
             <Clock size={16} className="text-allura-gold flex-shrink-0" />
-            <span>Your items are reserved. Our team will contact you to complete payment and confirm dispatch.</span>
+            <span>
+              {paymentState === 'paid'
+                ? "Payment received. We'll confirm and dispatch your order shortly."
+                : paymentState === 'cod'
+                ? 'Please keep the amount ready. You can pay in cash or UPI when your order arrives.'
+                : 'Your items are reserved for a limited time. Complete the payment to confirm your order.'}
+            </span>
           </div>
         </div>
 
         <div className="pt-4 flex flex-wrap gap-3 justify-center">
+          {isPending && (
+            <button
+              type="button"
+              onClick={() => startPayment(session, true)}
+              disabled={isPaying}
+              className="bg-allura-goldDark hover:bg-allura-darkBrown text-allura-card text-xs font-sans font-bold tracking-[0.2em] uppercase py-3.5 px-6 rounded-xl transition-all flex items-center gap-2 disabled:opacity-60"
+            >
+              <Lock size={14} />
+              <span>PAY NOW · {formatPrice(s.total)}</span>
+            </button>
+          )}
+          <Link
+            to="/account/orders"
+            className="border border-allura-border hover:bg-allura-bgSecondary text-allura-text text-xs font-sans font-bold tracking-[0.2em] uppercase py-3.5 px-6 rounded-xl transition-all"
+          >
+            MY ORDERS
+          </Link>
           <Link
             to="/shop"
             className="border border-allura-border hover:bg-allura-bgSecondary text-allura-text text-xs font-sans font-bold tracking-[0.2em] uppercase py-3.5 px-6 rounded-xl transition-all"
@@ -325,7 +412,7 @@ export const CheckoutPage: React.FC = () => {
             CONTINUE SHOPPING
           </Link>
           <a
-            href={`https://wa.me/919037991774?text=${encodeURIComponent(`Hello Allura, I have placed checkout ${session.checkoutId}. Please help me complete payment.`)}`}
+            href={`https://wa.me/919037991774?text=${encodeURIComponent(`Hello Allura, I have placed order ${reference}. Please help me with my order.`)}`}
             target="_blank"
             rel="noopener noreferrer"
             className="bg-[#25D366] text-white text-xs font-sans font-bold tracking-[0.2em] uppercase py-3.5 px-6 rounded-xl transition-all flex items-center justify-center gap-2 shadow-sm"
@@ -352,7 +439,7 @@ export const CheckoutPage: React.FC = () => {
     );
   }
 
-  const busy = isPlacing || isSavingAddress;
+  const busy = isPlacing || isSavingAddress || isPaying;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 space-y-8">
@@ -706,7 +793,13 @@ export const CheckoutPage: React.FC = () => {
           >
             {busy ? <Loader2 size={14} className="animate-spin" /> : <Lock size={14} />}
             <span>
-              {isSavingAddress ? 'SAVING ADDRESS…' : isPlacing ? 'PLACING ORDER…' : `PLACE ORDER · ${formatPrice(display.total)}`}
+              {isSavingAddress
+                ? 'SAVING ADDRESS…'
+                : isPlacing
+                ? 'PLACING ORDER…'
+                : paymentMethod === 'cod'
+                ? `PLACE ORDER · ${formatPrice(display.total)}`
+                : `PLACE ORDER & PAY · ${formatPrice(display.total)}`}
             </span>
           </button>
         </div>

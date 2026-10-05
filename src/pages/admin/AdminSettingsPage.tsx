@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAdmin } from '../../context/AdminContext';
 import { useShop } from '../../context/ShopContext';
+import { useConfirm } from '../../context/ConfirmContext';
 import { PermissionMatrix } from '../../components/admin/PermissionMatrix';
 import { 
   Building2, 
@@ -27,6 +28,7 @@ export const AdminSettingsPage: React.FC = () => {
     hasPermission
   } = useAdmin();
   const { showToast } = useShop();
+  const confirm = useConfirm();
 
   const [activeTab, setActiveTab] = useState<'store' | 'integrations' | 'admins' | 'security'>('store');
 
@@ -690,8 +692,14 @@ export const AdminSettingsPage: React.FC = () => {
 
               <button
                 type="button"
-                onClick={() => {
-                  if (window.confirm('Reset all demo orders, stock changes, and logs back to original master data?')) {
+                onClick={async () => {
+                  const ok = await confirm({
+                    title: 'Reset demo data',
+                    message: 'Reset all demo orders, stock changes, and logs back to the original master data? You will also be signed out.',
+                    confirmLabel: 'Reset',
+                    isDestructive: true,
+                  });
+                  if (ok) {
                     localStorage.clear();
                     showToast('Demo state reset. Reloading boutique...', 'gold');
                     setTimeout(() => window.location.reload(), 800);
