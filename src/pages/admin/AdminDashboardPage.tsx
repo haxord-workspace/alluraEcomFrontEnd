@@ -12,10 +12,11 @@ import { StatusBadge } from '../../components/common/StatusBadge';
 import { getLowStockInventory } from '../../service/adminInventory';
 import type { InventoryRecord } from '../../service/adminInventory';
 import { getAdminOrders } from '../../service/orders';
+import { getAdminAbandonedCarts } from '../../service/abandonedCarts';
 import type { Order } from '../../types';
 
 export const AdminDashboardPage: React.FC = () => {
-  const { currentAdmin, products, abandonedCarts } = useAdmin();
+  const { currentAdmin, products } = useAdmin();
   const [timeRange, setTimeRange] = useState<'7D' | '30D' | '90D' | '1Y'>('30D');
 
   const { overview, salesChart, funnel } = mockAnalyticsData;
@@ -32,6 +33,18 @@ export const AdminDashboardPage: React.FC = () => {
   const [recentOrders, setRecentOrders] = useState<Order[]>([]);
   const [totalOrders, setTotalOrders] = useState(0);
   const [pendingCount, setPendingCount] = useState(0);
+
+  // Abandoned carts: count + value of the most recent ones
+  const [abandonedTotal, setAbandonedTotal] = useState(0);
+  const [abandonedValue, setAbandonedValue] = useState(0);
+  useEffect(() => {
+    getAdminAbandonedCarts({ page: 1, limit: 50 })
+      .then(result => {
+        setAbandonedTotal(result.total);
+        setAbandonedValue(result.carts.filter(c => !/RECOVER|SUPPRESS|CONVERT|EXPIRE/i.test(c.status)).reduce((sum, c) => sum + c.cartValue, 0));
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     getAdminOrders({ page: 1, limit: 5 })
@@ -351,11 +364,13 @@ export const AdminDashboardPage: React.FC = () => {
             <div className="flex justify-between items-center">
               <h3 className="font-serif text-xl font-normal text-stone-900">Abandoned Carts</h3>
               <Link to="/admin/marketing/abandoned-carts" className="text-xs text-stone-500 hover:underline">
-                View ({abandonedCarts.length})
+                View ({abandonedTotal})
               </Link>
             </div>
             <p className="text-xs text-stone-500 font-sans">
-              ₹ {overview.abandonedCartValue.toLocaleString('en-IN')} potential revenue recoverable via WhatsApp & Email reminders.
+              {abandonedTotal === 0
+                ? 'No abandoned bags right now.'
+                : `₹ ${Math.round(abandonedValue).toLocaleString('en-IN')} in bags customers left behind, recoverable via WhatsApp & email reminders.`}
             </p>
             <Link
               to="/admin/marketing/abandoned-carts"

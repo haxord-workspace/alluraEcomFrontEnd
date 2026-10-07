@@ -17,6 +17,7 @@ import { occasionsData } from '../data/occasions';
 import { ProductCard } from '../components/ui/ProductCard';
 import { OccasionCard } from '../components/ui/OccasionCard';
 import { AlluraCircleSection } from '../components/ui/AlluraCircleSection';
+import { AbandonedCartBanner } from '../components/customer/AbandonedCartBanner';
 import { useAdmin } from '../context/AdminContext';
 import { useShop } from '../context/ShopContext';
 
@@ -189,7 +190,9 @@ export const HomePage: React.FC = () => {
 
   return (
     <div className="space-y-12 sm:space-y-20">
-      
+      {/* Reminder for customers with an abandoned bag (GET /abandoned-cart/status) */}
+      <AbandonedCartBanner />
+
       {/* 1. HIGH-CONVERSION HERO SECTION */}
       <section 
         className="relative w-full min-h-[600px] sm:min-h-[580px] lg:h-[84vh] lg:max-h-[820px] overflow-hidden bg-[#F7E6C8]"
