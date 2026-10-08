@@ -30,7 +30,7 @@ export const WhatsAppButton: React.FC = () => {
   };
 
   return (
-    <div className="fixed bottom-20 lg:bottom-8 right-5 z-40">
+    <div className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] lg:bottom-8 right-4 sm:right-5 z-40">
       {/* Popover Card */}
       {isOpen && (
         <div className="absolute bottom-16 right-0 w-80 bg-allura-card rounded-xl border border-allura-border shadow-luxury overflow-hidden animate-slide-up mb-2">
@@ -101,10 +101,10 @@ export const WhatsAppButton: React.FC = () => {
       {/* Floating Trigger Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="w-13 h-13 p-3.5 rounded-full bg-[#25D366] text-white shadow-luxury hover:scale-105 active:scale-95 transition-all duration-300 flex items-center justify-center relative group"
+        className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-[#25D366] text-white shadow-luxury hover:scale-105 active:scale-95 transition-all duration-300 flex items-center justify-center relative group"
         aria-label="Contact Allura Stylist on WhatsApp"
       >
-        <MessageCircle size={26} className="fill-current text-white" />
+        <MessageCircle size={24} className="fill-current text-white" />
         <span className="absolute -top-1 -right-1 flex h-3 w-3">
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-300 opacity-75"></span>
           <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-400"></span>

@@ -7,6 +7,8 @@ interface AlluraLogoProps {
   showTagline?: boolean;
   clickable?: boolean;
   className?: string;
+  /** Overrides the logo image height (e.g. "h-14"), for places that need a custom size */
+  imgClassName?: string;
 }
 
 export const AlluraLogo: React.FC<AlluraLogoProps> = ({
@@ -15,14 +17,14 @@ export const AlluraLogo: React.FC<AlluraLogoProps> = ({
   showTagline = false,
   clickable = true,
   className = '',
+  imgClassName,
 }) => {
   const isLight = variant === 'light';
   const brandColor = isLight ? '#FFFFFF' : '#561C08';
 
-  const imgHeight = 
-    size === 'sm' ? 'h-9' :
-    size === 'lg' ? 'h-16' :
-    size === 'xl' ? 'h-20' : 'h-12';
+  const imgHeight =
+    imgClassName ||
+    (size === 'sm' ? 'h-10' : size === 'lg' ? 'h-16' : size === 'xl' ? 'h-20' : 'h-12');
 
   const logoContent = (
     <div className={`flex flex-col items-center justify-center text-center select-none group cursor-pointer leading-none ${className}`}>
@@ -68,7 +70,7 @@ export const AlluraLogo: React.FC<AlluraLogoProps> = ({
       ) : (
         /* Official Brand Logo Asset for clean white/beige backgrounds */
         <img
-          src="/allura-logo-official.png"
+          src="/allura-logo.png"
           alt="ALLURA BOUTIQUE"
           className={`${imgHeight} w-auto object-contain transition-transform duration-300 group-hover:scale-105 mix-blend-multiply`}
         />

@@ -143,27 +143,27 @@ export const ShopPage: React.FC = () => {
   ]);
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-8 sm:py-12">
       {/* Header */}
-      <div className="text-center max-w-2xl mx-auto mb-8 sm:mb-12">
-        <span className="text-[11px] font-sans font-bold tracking-[0.28em] uppercase text-allura-goldDark block mb-2">
+      <div className="text-center max-w-2xl mx-auto mb-3 sm:mb-12">
+        <span className="text-[10px] sm:text-[11px] font-sans font-bold tracking-[0.28em] uppercase text-allura-goldDark block mb-1 sm:mb-2">
           THE ALLURA EDIT
         </span>
-        <h1 className="font-serif text-3xl sm:text-5xl text-allura-text font-normal tracking-tight uppercase">
+        <h1 className="font-serif text-2xl sm:text-5xl text-allura-text font-normal tracking-tight uppercase">
           SHOP ALL
         </h1>
-        <p className="text-xs sm:text-sm text-allura-muted font-sans mt-2">
+        <p className="hidden sm:block text-sm text-allura-muted font-sans mt-2">
           Handcrafted ethnic silhouettes, contemporary modest co-ords and bespoke festive wear.
         </p>
       </div>
 
       {/* Horizontal Category Chips Bar */}
-      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-3 mb-8 border-b border-allura-border/60">
+      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-2 mb-3 sm:pb-3 sm:mb-8 sm:border-b sm:border-allura-border/60">
         {categoryOptions.map(cat => (
           <button
             key={cat}
             onClick={() => setSelectedCategory(cat)}
-            className={`px-4 py-2 rounded-full text-xs font-sans font-medium whitespace-nowrap transition-all duration-200 ${
+            className={`px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-full text-xs font-sans font-medium whitespace-nowrap transition-all duration-200 ${
               selectedCategory === cat
                 ? 'bg-allura-darkBrown text-allura-card border border-allura-darkBrown shadow-xs'
                 : 'bg-allura-card text-allura-text border border-allura-border hover:border-allura-gold'
@@ -175,10 +175,10 @@ export const ShopPage: React.FC = () => {
       </div>
 
       {/* Mobile Top Filter & Sort Bar */}
-      <div className="lg:hidden flex items-center justify-between gap-3 mb-6 bg-allura-card p-3 rounded-lg border border-allura-border">
+      <div className="lg:hidden flex items-center justify-between gap-2 mb-4">
         <button
           onClick={() => setIsFilterSheetOpen(true)}
-          className="flex-1 flex items-center justify-center gap-2 text-xs font-sans font-bold text-allura-text py-2 rounded border border-allura-border/80 bg-allura-bg uppercase tracking-wider"
+          className="flex-1 flex items-center justify-center gap-2 text-xs font-sans font-bold text-allura-text py-2.5 rounded-lg border border-allura-border bg-allura-card uppercase tracking-wider"
         >
           <SlidersHorizontal size={14} className="text-allura-goldDark" />
           <span>Filters {hasActiveFilters && '•'}</span>
@@ -186,7 +186,7 @@ export const ShopPage: React.FC = () => {
 
         <button
           onClick={() => setIsSortSheetOpen(true)}
-          className="flex-1 flex items-center justify-center gap-2 text-xs font-sans font-bold text-allura-text py-2 rounded border border-allura-border/80 bg-allura-bg uppercase tracking-wider"
+          className="flex-1 flex items-center justify-center gap-2 text-xs font-sans font-bold text-allura-text py-2.5 rounded-lg border border-allura-border bg-allura-card uppercase tracking-wider"
         >
           <ArrowUpDown size={14} className="text-allura-goldDark" />
           <span>Sort By</span>

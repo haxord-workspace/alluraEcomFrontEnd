@@ -7,7 +7,7 @@ export const MobileHeader: React.FC = () => {
   const { cartCount, setIsMobileMenuOpen, setIsSearchOpen, setIsCartOpen } = useShop();
 
   return (
-    <header className="lg:hidden sticky top-0 z-40 bg-[#FFFFFF] border-b border-[#561C08]/15 py-3 px-4 flex items-center justify-between safe-top">
+    <header className="lg:hidden sticky top-0 z-40 bg-[#FFFFFF] border-b border-[#561C08]/15 py-2 px-4 flex items-center justify-between safe-top">
       {/* Left Menu Trigger */}
       <button
         onClick={() => setIsMobileMenuOpen(true)}
@@ -19,7 +19,7 @@ export const MobileHeader: React.FC = () => {
 
       {/* Center Logo */}
       <div className="flex-1 flex justify-center">
-        <AlluraLogo size="sm" showTagline={false} />
+        <AlluraLogo size="sm" showTagline={false} imgClassName="h-14" />
       </div>
 
       {/* Right Action Icons */}
