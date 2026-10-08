@@ -1,13 +1,30 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Heart, ShoppingBag, ArrowRight, Loader2, Trash2 } from 'lucide-react';
+import { Heart, ArrowRight, Loader2, Trash2 } from 'lucide-react';
 import { useShop } from '../context/ShopContext';
 import { useConfirm } from '../context/ConfirmContext';
+import { useAddToBag } from '../hooks/useAddToBag';
+import { AddToBagLabel, addToBagButtonState } from '../components/ui/AddToBagLabel';
+
+const MoveToBagButton: React.FC<{ product: Product }> = ({ product }) => {
+  const bag = useAddToBag();
+  return (
+    <button
+      onClick={() => bag.add(product, product.sizes[0], product.colors[0])}
+      disabled={bag.isAdding}
+      className={`w-full text-allura-card text-[10px] sm:text-xs font-sans font-bold tracking-wider uppercase py-2.5 px-3 rounded-sm flex items-center justify-center gap-1.5 ${addToBagButtonState(bag.state)} ${
+        bag.justAdded ? 'bg-emerald-700' : 'bg-allura-darkBrown hover:bg-allura-goldDark'
+      }`}
+    >
+      <AddToBagLabel state={bag.state} label="MOVE TO BAG" iconSize={13} />
+    </button>
+  );
+};
 import { ProductCard } from '../components/ui/ProductCard';
 import type { Product } from '../types';
 
 export const WishlistPage: React.FC = () => {
-  const { wishlistProducts, isWishlistLoading, clearWishlist, addToCart } = useShop();
+  const { wishlistProducts, isWishlistLoading, clearWishlist } = useShop();
 
   const confirm = useConfirm();
 
@@ -75,13 +92,7 @@ export const WishlistPage: React.FC = () => {
           {wishlistProducts.map((product: Product) => (
             <div key={product.id} className="space-y-2">
               <ProductCard product={product} />
-              <button
-                onClick={() => addToCart(product, product.sizes[0], product.colors[0])}
-                className="w-full bg-allura-darkBrown hover:bg-allura-goldDark text-allura-card text-[10px] sm:text-xs font-sans font-bold tracking-wider uppercase py-2.5 px-3 rounded-sm transition-colors flex items-center justify-center gap-1.5"
-              >
-                <ShoppingBag size={13} />
-                <span>MOVE TO BAG</span>
-              </button>
+              <MoveToBagButton product={product} />
             </div>
           ))}
         </div>

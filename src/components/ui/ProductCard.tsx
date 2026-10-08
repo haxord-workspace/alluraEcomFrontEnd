@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Heart, Eye, ShoppingBag } from 'lucide-react';
+import { Heart, Eye} from 'lucide-react';
 import type { Product } from '../../types';
 import { useShop } from '../../context/ShopContext';
+import { useAddToBag } from '../../hooks/useAddToBag';
+import { AddToBagLabel, addToBagButtonState } from './AddToBagLabel';
 
 interface ProductCardProps {
   product: Product;
@@ -10,7 +12,8 @@ interface ProductCardProps {
 }
 
 export const ProductCard: React.FC<ProductCardProps> = ({ product, showCategory = false }) => {
-  const { toggleWishlist, isInWishlist, setQuickViewProduct, addToCart, formatPrice } = useShop();
+  const { toggleWishlist, isInWishlist, setQuickViewProduct, formatPrice } = useShop();
+  const bag = useAddToBag();
   const [selectedColorIdx, setSelectedColorIdx] = useState(0);
   const [isHovered, setIsHovered] = useState(false);
 
@@ -20,7 +23,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, showCategory 
   const handleQuickAdd = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    addToCart(product, product.sizes[0], activeColor);
+    bag.add(product, product.sizes[0], activeColor);
   };
 
   const handleQuickView = (e: React.MouseEvent) => {
@@ -104,10 +107,12 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, showCategory 
         <div className="hidden lg:flex absolute inset-x-3 bottom-3 z-10 gap-2 opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300">
           <button
             onClick={handleQuickAdd}
-            className="flex-1 bg-[#561C08] hover:bg-[#3D1406] text-white text-[11px] font-heading font-bold tracking-[0.2em] uppercase py-2.5 px-3 rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5"
+            disabled={bag.isAdding}
+            className={`flex-1 text-white text-[11px] font-heading font-bold tracking-[0.2em] uppercase py-2.5 px-3 rounded-xl shadow-md flex items-center justify-center gap-1.5 ${addToBagButtonState(bag.state)} ${
+              bag.justAdded ? 'bg-emerald-700' : 'bg-[#561C08] hover:bg-[#3D1406]'
+            }`}
           >
-            <ShoppingBag size={13} />
-            <span>QUICK ADD</span>
+            <AddToBagLabel state={bag.state} label="QUICK ADD" iconSize={13} />
           </button>
           <button
             onClick={handleQuickView}

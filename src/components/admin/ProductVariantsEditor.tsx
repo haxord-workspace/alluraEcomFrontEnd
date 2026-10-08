@@ -20,6 +20,8 @@ interface ProductVariantsEditorProps {
   onChange: (variants: VariantRow[]) => void;
   productSku: string;
   isLoading?: boolean;
+  /** The product's own selling price; variants with a blank price use it */
+  productPrice?: number;
 }
 
 const slug = (v: string) => v.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -49,6 +51,7 @@ export const ProductVariantsEditor: React.FC<ProductVariantsEditorProps> = ({
   onChange,
   productSku,
   isLoading,
+  productPrice,
 }) => {
   // Quick builder selections
   const [pickedColors, setPickedColors] = useState<string[]>([]);
@@ -138,8 +141,30 @@ export const ProductVariantsEditor: React.FC<ProductVariantsEditorProps> = ({
         <label className="block text-[10px] uppercase font-bold text-stone-500">Colours & Sizes (Variants)</label>
         <p className="text-[11px] text-stone-400 mt-0.5">
           Each colour / size combination becomes a variant customers can choose. Stock is tracked per variant.
+          Customers are charged the <strong>variant's</strong> price; leave it blank to use the product price.
         </p>
       </div>
+
+      {/* Variants priced differently from the product: what customers pay differs from the product price */}
+      {variants.some(v => v.price !== undefined && v.price !== productPrice) && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-xl border border-amber-200 bg-amber-50 text-[11px] text-amber-900">
+          <span>
+            {variants.filter(v => v.price !== undefined && v.price !== productPrice).length} variant(s) have their own price
+            (e.g. ₹{variants.find(v => v.price !== undefined && v.price !== productPrice)?.price?.toLocaleString('en-IN')}),
+            so customers pay that instead of the product price
+            {productPrice !== undefined && <> (₹{productPrice.toLocaleString('en-IN')})</>}.
+          </span>
+          {productPrice !== undefined && (
+            <button
+              type="button"
+              onClick={() => onChange(variants.map(v => ({ ...v, price: undefined, mrp: undefined })))}
+              className="shrink-0 px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold"
+            >
+              Use ₹{productPrice.toLocaleString('en-IN')} for all variants
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Quick builder */}
       <div className="p-3 rounded-xl border border-stone-200 bg-stone-50/60 space-y-3">

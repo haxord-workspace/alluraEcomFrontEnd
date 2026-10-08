@@ -2,9 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import {
   CheckCircle2,
-  CreditCard,
   QrCode,
-  Banknote,
   ArrowLeft,
   Lock,
   MapPin,
@@ -653,14 +651,12 @@ export const CheckoutPage: React.FC = () => {
           {/* Section 3: Payment Method */}
           <div className="bg-allura-card p-6 sm:p-8 rounded-2xl border border-allura-border shadow-xs space-y-4">
             <h3 className="font-serif text-lg font-semibold uppercase text-allura-text tracking-wide">
-              3. Payment Preference
+              3. Payment Method
             </h3>
 
             <div className="space-y-2.5">
               {([
                 ['upi', QrCode, 'UPI / QR Code / Instant Transfer', 'Google Pay, PhonePe, Paytm, BHIM'],
-                ['card', CreditCard, 'Credit / Debit Card', 'Visa, MasterCard, RuPay, Amex'],
-                ['cod', Banknote, 'Cash on Delivery', 'Pay at doorstep upon inspection'],
               ] as const).map(([value, Icon, title, subtitle]) => (
                 <label
                   key={value}

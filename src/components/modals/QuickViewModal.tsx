@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { X, Heart, ShoppingBag, MessageCircle, Star, Check, ArrowRight } from 'lucide-react';
+import { X, Heart, MessageCircle, Star, Check, ArrowRight } from 'lucide-react';
 import { useShop } from '../../context/ShopContext';
+import { useAddToBag } from '../../hooks/useAddToBag';
+import { AddToBagLabel, addToBagButtonState } from '../ui/AddToBagLabel';
 
 export const QuickViewModal: React.FC = () => {
   const {
     quickViewProduct,
     setQuickViewProduct,
-    addToCart,
     toggleWishlist,
     isInWishlist,
     formatPrice,
@@ -16,6 +17,7 @@ export const QuickViewModal: React.FC = () => {
   const [selectedSize, setSelectedSize] = useState<string>('');
   const [selectedColorIdx, setSelectedColorIdx] = useState(0);
   const [activeImageIdx, setActiveImageIdx] = useState(0);
+  const bag = useAddToBag();
 
   if (!quickViewProduct) return null;
 
@@ -30,8 +32,9 @@ export const QuickViewModal: React.FC = () => {
     ...(product.images.gallery || []),
   ].filter((v, i, a) => a.indexOf(v) === i);
 
-  const handleAddToCart = () => {
-    addToCart(product, currentSize, currentColor);
+  const handleAddToCart = async () => {
+    const ok = await bag.add(product, currentSize, currentColor);
+    if (!ok) return;
     setQuickViewProduct(null);
   };
 
@@ -182,10 +185,10 @@ export const QuickViewModal: React.FC = () => {
             <div className="flex gap-2">
               <button
                 onClick={handleAddToCart}
-                className="flex-1 bg-allura-goldDark hover:bg-allura-darkBrown text-allura-card text-xs font-sans font-bold tracking-[0.2em] uppercase py-3 px-4 rounded-sm transition-colors flex items-center justify-center gap-2"
+                disabled={bag.isAdding}
+                className={`flex-1 bg-allura-goldDark hover:bg-allura-darkBrown text-allura-card text-xs font-sans font-bold tracking-[0.2em] uppercase py-3 px-4 rounded-sm flex items-center justify-center gap-2 ${addToBagButtonState(bag.state)}`}
               >
-                <ShoppingBag size={15} />
-                <span>ADD TO BAG</span>
+                <AddToBagLabel state={bag.state} label="ADD TO BAG" />
               </button>
 
               <button

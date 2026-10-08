@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   Heart,
-  ShoppingBag,
   MessageCircle,
   Truck,
   RefreshCw,
@@ -21,6 +20,8 @@ import { getStoreProductBySlug } from '../service/store';
 import { ProductCard } from '../components/ui/ProductCard';
 import { BottomSheet } from '../components/modals/BottomSheet';
 import type { Product } from '../types';
+import { useAddToBag } from '../hooks/useAddToBag';
+import { AddToBagLabel, addToBagButtonState } from '../components/ui/AddToBagLabel';
 
 export const ProductDetailPage: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
@@ -36,6 +37,7 @@ export const ProductDetailPage: React.FC = () => {
   const [activeImageIdx, setActiveImageIdx] = useState(0);
   const [quantity, setQuantity] = useState(1);
   const [isBuyingNow, setIsBuyingNow] = useState(false);
+  const bag = useAddToBag();
   const [isSizeGuideOpen, setIsSizeGuideOpen] = useState(false);
 
   const [openAccordions, setOpenAccordions] = useState<{ [key: string]: boolean }>({
@@ -106,6 +108,14 @@ export const ProductDetailPage: React.FC = () => {
   const inWishlist = isInWishlist(product.id);
   const currentColor = product.colors[selectedColorIdx] || product.colors[0];
 
+  // Variants can be priced differently from the product: show the price of the selected size / colour
+  const sameText = (a?: string, b?: string) => !a || !b || a.toLowerCase() === b.toLowerCase();
+  const selectedVariant =
+    product.variants?.find(v => sameText(v.size, selectedSize) && sameText(v.color?.name, currentColor?.name)) ||
+    (product.variants?.length === 1 ? product.variants[0] : undefined);
+  const displayPrice = selectedVariant?.price || product.price;
+  const displayMrp = selectedVariant ? (selectedVariant.mrp > displayPrice ? selectedVariant.mrp : undefined) : product.originalPrice;
+
   const galleryImages = [
     product.images.primary,
     product.images.secondary,
@@ -113,7 +123,7 @@ export const ProductDetailPage: React.FC = () => {
   ].filter(Boolean).filter((v, i, a) => a.indexOf(v) === i);
 
   const handleAddToCart = () => {
-    addToCart(product, selectedSize, currentColor, quantity);
+    bag.add(product, selectedSize, currentColor, quantity);
   };
 
   // Buy Now: add quietly (no bag drawer), wait until it's in the bag, then go straight to checkout
@@ -127,7 +137,7 @@ export const ProductDetailPage: React.FC = () => {
 
   const handleWhatsAppEnquiry = () => {
     const text = encodeURIComponent(
-      `Hello Allura Stylist, I am interested in ${product.name} (SKU: ${product.sku}, Price: ${formatPrice(product.price)}, Size: ${selectedSize || 'N/A'}, Color: ${currentColor?.name || 'N/A'}). Can you help me finalize my order?`
+      `Hello Allura Stylist, I am interested in ${product.name} (SKU: ${product.sku}, Price: ${formatPrice(displayPrice)}, Size: ${selectedSize || 'N/A'}, Color: ${currentColor?.name || 'N/A'}). Can you help me finalize my order?`
     );
     window.open(`https://wa.me/919037991774?text=${text}`, '_blank');
   };
@@ -236,11 +246,11 @@ export const ProductDetailPage: React.FC = () => {
 
           <div className="flex items-baseline gap-3 pb-3 border-b border-allura-border/60">
             <span className="font-serif text-2xl sm:text-3xl font-semibold text-allura-darkBrown">
-              {formatPrice(product.price)}
+              {formatPrice(displayPrice)}
             </span>
-            {product.originalPrice && (
+            {!!displayMrp && displayMrp > displayPrice && (
               <span className="font-sans text-sm text-allura-muted line-through">
-                {formatPrice(product.originalPrice)}
+                {formatPrice(displayMrp)}
               </span>
             )}
             <span className="text-[11px] font-sans text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded font-semibold uppercase tracking-wider">
@@ -348,10 +358,14 @@ export const ProductDetailPage: React.FC = () => {
             <div className="grid grid-cols-2 gap-3">
               <button
                 onClick={handleAddToCart}
-                className="bg-allura-card hover:bg-allura-bgSecondary border-2 border-allura-darkBrown text-allura-darkBrown text-xs font-sans font-bold tracking-[0.2em] uppercase py-3.5 px-4 rounded-sm transition-all flex items-center justify-center gap-2 shadow-xs"
+                disabled={bag.isAdding || isBuyingNow}
+                className={`border-2 text-xs font-sans font-bold tracking-[0.2em] uppercase py-3.5 px-4 rounded-sm flex items-center justify-center gap-2 shadow-xs ${addToBagButtonState(bag.state)} ${
+                  bag.justAdded
+                    ? 'bg-emerald-700 border-emerald-700 text-white'
+                    : 'bg-allura-card hover:bg-allura-bgSecondary border-allura-darkBrown text-allura-darkBrown'
+                }`}
               >
-                <ShoppingBag size={16} />
-                <span>ADD TO BAG</span>
+                <AddToBagLabel state={bag.state} label="ADD TO BAG" iconSize={16} />
               </button>
 
               <button
@@ -502,10 +516,14 @@ export const ProductDetailPage: React.FC = () => {
       <div className="lg:hidden fixed bottom-16 left-0 right-0 z-30 bg-allura-card/95 backdrop-blur-md border-t border-allura-border p-3 flex gap-2.5 shadow-bottom-sheet safe-bottom">
         <button
           onClick={handleAddToCart}
-          className="flex-1 bg-allura-card hover:bg-allura-bgSecondary border border-allura-darkBrown text-allura-darkBrown text-xs font-sans font-bold tracking-wider uppercase py-3 rounded-sm flex items-center justify-center gap-1.5"
+          disabled={bag.isAdding || isBuyingNow}
+          className={`flex-1 border text-xs font-sans font-bold tracking-wider uppercase py-3 rounded-sm flex items-center justify-center gap-1.5 ${addToBagButtonState(bag.state)} ${
+            bag.justAdded
+              ? 'bg-emerald-700 border-emerald-700 text-white'
+              : 'bg-allura-card hover:bg-allura-bgSecondary border-allura-darkBrown text-allura-darkBrown'
+          }`}
         >
-          <ShoppingBag size={14} />
-          <span>ADD TO BAG</span>
+          <AddToBagLabel state={bag.state} label="ADD TO BAG" iconSize={14} />
         </button>
 
         <button
@@ -513,7 +531,7 @@ export const ProductDetailPage: React.FC = () => {
           disabled={isBuyingNow}
           className="flex-1 bg-allura-goldDark text-allura-card text-xs font-sans font-bold tracking-wider uppercase py-3 rounded-sm flex items-center justify-center gap-1.5 shadow-sm disabled:opacity-60"
         >
-          <span>{isBuyingNow ? 'PLEASE WAIT…' : `BUY NOW (${formatPrice(product.price)})`}</span>
+          <span>{isBuyingNow ? 'PLEASE WAIT…' : `BUY NOW (${formatPrice(displayPrice)})`}</span>
         </button>
       </div>
 

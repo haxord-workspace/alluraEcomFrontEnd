@@ -6,6 +6,12 @@ import { AlluraLogo } from '../../components/common/AlluraLogo';
 import { getCustomerProfile, updateCustomerProfile } from '../../service/customer';
 import { useGoogleLogin } from '@react-oauth/google';
 
+// After signing in, go to the Home page, unless the customer was sent here from a specific page
+// (e.g. checkout or wishlist), in which case return them there. The Account page and the auth
+// pages themselves don't count, since that's just how people reach the login screen.
+const postLoginPath = (from?: string) =>
+  from && !from.startsWith('/auth') && from !== '/account' ? from : '/';
+
 export const AuthPage: React.FC = () => {
   const { customer, loginUser, registerUser, loginWithGoogle, completeProfile, logoutCustomer, showToast } = useShop();
   const navigate = useNavigate();
@@ -23,7 +29,7 @@ export const AuthPage: React.FC = () => {
         setIsSuccess(true);
         setTimeout(() => {
           setIsLoading(false);
-          const from = (location.state as any)?.from?.pathname || '/account';
+          const from = postLoginPath((location.state as any)?.from?.pathname);
           navigate(from, { replace: true });
         }, 1000);
       } catch {
@@ -95,7 +101,7 @@ export const AuthPage: React.FC = () => {
       setIsSuccess(true);
       setTimeout(() => {
         setIsLoading(false);
-        const from = (location.state as any)?.from?.pathname || '/account';
+        const from = postLoginPath((location.state as any)?.from?.pathname);
         navigate(from, { replace: true });
       }, 1000);
     } catch {

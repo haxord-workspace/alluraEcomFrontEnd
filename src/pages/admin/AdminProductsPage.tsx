@@ -25,6 +25,7 @@ import {
   updateAdminVariant,
   deleteAdminVariant,
   getAdminVariantsByProduct,
+  getAdminVariants,
 } from '../../service/adminVariants';
 import type { VariantPayload } from '../../service/adminVariants';
 import { ProductVariantsEditor, buildVariantSku } from '../../components/admin/ProductVariantsEditor';
@@ -125,12 +126,21 @@ export const AdminProductsPage: React.FC = () => {
   const [saveProgress, setSaveProgress] = useState('');
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
+  // Variant prices per product, to flag products whose variants are priced differently
+  const [variantPrices, setVariantPrices] = useState<Record<string, number[]>>({});
+
   const fetchProducts = async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const data = await getAdminProducts();
+      const [data, variants] = await Promise.all([getAdminProducts(), getAdminVariants().catch(() => [])]);
       setProducts(data);
+      const byProduct: Record<string, number[]> = {};
+      variants.forEach(v => {
+        const price = v.pricing?.sellingPrice;
+        if (v.productId && typeof price === 'number') (byProduct[v.productId] ||= []).push(price);
+      });
+      setVariantPrices(byProduct);
     } catch (err: any) {
       setError(err?.response?.data?.message || 'Failed to load products');
     } finally {
@@ -503,6 +513,22 @@ export const AdminProductsPage: React.FC = () => {
                           {product.pricing.currency === 'INR' ? '₹' : product.pricing.currency}{' '}
                           {product.pricing.sellingPrice.toLocaleString('en-IN')}
                         </p>
+                        {(() => {
+                          const different = [...new Set(variantPrices[product.id] || [])].filter(p => p !== product.pricing.sellingPrice);
+                          if (different.length === 0) return null;
+                          const min = Math.min(...different);
+                          const max = Math.max(...different);
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEdit(product)}
+                              className="mt-1 text-left text-[10px] font-semibold text-amber-700 hover:underline"
+                              title="Customers are charged the variant price. Click to review."
+                            >
+                              ⚠ Variants: ₹{min.toLocaleString('en-IN')}{max !== min ? `–₹${max.toLocaleString('en-IN')}` : ''}
+                            </button>
+                          );
+                        })()}
                       </td>
                       <td className="p-4">
                         <p className="text-stone-400 line-through text-[11px]">
@@ -673,6 +699,7 @@ export const AdminProductsPage: React.FC = () => {
                 onChange={variants => setFormData(prev => ({ ...prev, variants }))}
                 productSku={formData.sku}
                 isLoading={isLoadingVariants}
+                productPrice={formData.pricing.sellingPrice}
               />
 
               <div>
