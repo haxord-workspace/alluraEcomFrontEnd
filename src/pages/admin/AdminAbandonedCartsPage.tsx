@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import {
   MessageCircle,
   Mail,
@@ -11,6 +12,7 @@ import {
   ShoppingBag,
   Loader2,
   Clock,
+  ExternalLink,
 } from 'lucide-react';
 import { useAdmin } from '../../context/AdminContext';
 import { useShop } from '../../context/ShopContext';
@@ -23,7 +25,9 @@ import {
   abandonedCartErrorMessage,
 } from '../../service/abandonedCarts';
 import type { AbandonedCartRecord } from '../../service/abandonedCarts';
-import { prettyStatus } from '../../service/orders';
+import { prettyStatus, getAdminOrder } from '../../service/orders';
+import { useAdminOrderCatalog } from '../../hooks/useAdminOrderCatalog';
+import type { Order } from '../../types';
 
 const PAGE_SIZE = 20;
 
@@ -54,6 +58,41 @@ const formatDateTime = (iso?: string) =>
   iso && !Number.isNaN(new Date(iso).getTime())
     ? new Date(iso).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
     : '—';
+
+// What actually happened with reminders (a cancelled or scheduled reminder is not "sent")
+const reminderSummary = (c: AbandonedCartRecord) => {
+  if (c.remindersSent > 0) return `${c.remindersSent} reminder${c.remindersSent === 1 ? '' : 's'} sent`;
+  if (c.customerOptedOut) return 'Customer opted out';
+  const scheduled = c.reminders.find(r => /SCHEDULED|PENDING|QUEUED/i.test(r.status || ''));
+  if (scheduled) return `Reminder scheduled${scheduled.scheduledAt ? ` · ${formatDateTime(scheduled.scheduledAt)}` : ''}`;
+  if (c.reminders.some(r => /CANCEL/i.test(r.status || ''))) {
+    return c.recoveredAt || /RECOVER/i.test(c.status) ? 'Reminder cancelled (ordered)' : 'Reminder cancelled';
+  }
+  if (c.reminders.some(r => /FAIL/i.test(r.status || ''))) return 'Reminder failed';
+  return 'No reminders yet';
+};
+
+/** Bag contents for display: the cart's own items, or the order it turned into */
+const withOrderItems = (c: AbandonedCartRecord, order?: Order): AbandonedCartRecord => {
+  if (c.items.length > 0 || !order) return c;
+  const items = order.items.map(i => ({
+    productId: i.product.id,
+    variantId: i.variantId,
+    name: i.product.name,
+    sku: i.sku,
+    image: i.product.images.primary,
+    color: i.selectedColor?.name || undefined,
+    size: i.selectedSize || undefined,
+    quantity: i.quantity,
+    unitPrice: i.unitPrice,
+  }));
+  return {
+    ...c,
+    items,
+    itemCount: items.reduce((s, i) => s + i.quantity, 0),
+    cartValue: c.cartValue || order.subtotal || order.total,
+  };
+};
 
 const isClosed = (c: AbandonedCartRecord) => /RECOVER|SUPPRESS|CONVERT|EXPIRE/i.test(c.status) || !!c.recoveredAt || !!c.suppressedAt;
 
@@ -90,6 +129,10 @@ export const AdminAbandonedCartsPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
+  // Orders that recovered carts turned into (the cart record itself carries no items or value)
+  const [recoveredOrders, setRecoveredOrders] = useState<Record<string, Order>>({});
+  const withCatalog = useAdminOrderCatalog();
+
   // Details panel
   const [detail, setDetail] = useState<AbandonedCartRecord | null>(null);
   const [isDetailLoading, setIsDetailLoading] = useState(false);
@@ -111,6 +154,40 @@ export const AdminAbandonedCartsPage: React.FC = () => {
   useEffect(() => {
     fetchCarts();
   }, [fetchCarts]);
+
+  useEffect(() => {
+    const missing = carts
+      .filter(c => c.items.length === 0 && c.recoveredOrderId && !recoveredOrders[c.recoveredOrderId])
+      .map(c => c.recoveredOrderId!);
+    if (missing.length === 0) return;
+    let cancelled = false;
+    Promise.allSettled([...new Set(missing)].map(id => getAdminOrder(id))).then(results => {
+      if (cancelled) return;
+      const loaded: Record<string, Order> = {};
+      results.forEach(r => {
+        if (r.status === 'fulfilled' && r.value.id) loaded[r.value.id] = r.value;
+      });
+      if (Object.keys(loaded).length) setRecoveredOrders(prev => ({ ...prev, ...loaded }));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [carts, recoveredOrders]);
+
+  // Carts with display items filled in from their recovered orders
+  const rows = useMemo(
+    () =>
+      carts.map(c => {
+        const order = c.recoveredOrderId ? recoveredOrders[c.recoveredOrderId] : undefined;
+        return withOrderItems(c, order ? withCatalog(order) : undefined);
+      }),
+    [carts, recoveredOrders, withCatalog]
+  );
+  const detailRow = useMemo(() => {
+    if (!detail) return null;
+    const order = detail.recoveredOrderId ? recoveredOrders[detail.recoveredOrderId] : undefined;
+    return withOrderItems(detail, order ? withCatalog(order) : undefined);
+  }, [detail, recoveredOrders, withCatalog]);
 
   const openDetail = async (cart: AbandonedCartRecord) => {
     setDetail(cart);
@@ -145,10 +222,15 @@ export const AdminAbandonedCartsPage: React.FC = () => {
     }
   };
 
-  const openCarts = carts.filter(c => !isClosed(c));
+  const openCarts = rows.filter(c => !isClosed(c));
   const valueAtRisk = openCarts.reduce((sum, c) => sum + c.cartValue, 0);
-  const recoveredCount = carts.filter(c => /RECOVER|CONVERT/i.test(c.status) || !!c.recoveredAt).length;
-  const remindersSent = carts.reduce((sum, c) => sum + c.reminders.length, 0);
+  const recoveredRows = rows.filter(c => /RECOVER|CONVERT/i.test(c.status) || !!c.recoveredAt);
+  const recoveredCount = recoveredRows.length;
+  const recoveredValue = recoveredRows.reduce((sum, c) => {
+    const order = c.recoveredOrderId ? recoveredOrders[c.recoveredOrderId] : undefined;
+    return sum + (order?.total || c.cartValue || 0);
+  }, 0);
+  const remindersSent = rows.reduce((sum, c) => sum + c.remindersSent, 0);
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   const contactButtons = (cart: AbandonedCartRecord, compact = false) => {
@@ -220,6 +302,7 @@ export const AdminAbandonedCartsPage: React.FC = () => {
         <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-xs space-y-1">
           <span className="text-[10px] font-sans font-bold uppercase text-emerald-700">Recovered</span>
           <p className="font-serif text-2xl font-bold text-emerald-800">{recoveredCount}</p>
+          {recoveredValue > 0 && <p className="text-[10px] text-emerald-700">{inr(recoveredValue)} in orders</p>}
         </div>
         <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-xs space-y-1">
           <span className="text-[10px] font-sans font-bold uppercase text-stone-400">Reminders Sent</span>
@@ -267,11 +350,11 @@ export const AdminAbandonedCartsPage: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-stone-100">
-              {isLoading && carts.length === 0 ? (
+              {isLoading && rows.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="p-10 text-center text-stone-400">Loading abandoned carts…</td>
                 </tr>
-              ) : carts.length === 0 ? (
+              ) : rows.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="p-12 text-center text-stone-400">
                     <ShoppingBag size={24} className="mx-auto mb-2 text-stone-300" />
@@ -279,7 +362,7 @@ export const AdminAbandonedCartsPage: React.FC = () => {
                   </td>
                 </tr>
               ) : (
-                carts.map(cart => {
+                rows.map(cart => {
                   const closed = isClosed(cart);
                   return (
                     <tr key={cart.id} className="hover:bg-stone-50/70 transition-colors">
@@ -311,15 +394,20 @@ export const AdminAbandonedCartsPage: React.FC = () => {
                       </td>
                       <td className="p-4">
                         <StatusBadge status={prettyStatus(cart.status)} size="sm" />
-                        <p className="text-[10px] text-stone-400 mt-1">
-                          {cart.reminders.length > 0
-                            ? `${cart.reminders.length} reminder${cart.reminders.length === 1 ? '' : 's'} sent`
-                            : 'No reminders yet'}
-                        </p>
+                        <p className="text-[10px] text-stone-400 mt-1">{reminderSummary(cart)}</p>
                       </td>
                       <td className="p-4">
                         <div className="flex items-center justify-end gap-1.5">
                           {!closed && contactButtons(cart, true)}
+                          {cart.recoveredOrderId && (
+                            <Link
+                              to={`/admin/orders/${cart.recoveredOrderId}`}
+                              className="p-1.5 text-emerald-700 hover:bg-emerald-50 rounded-lg"
+                              title="Open the order this bag became"
+                            >
+                              <ExternalLink size={14} />
+                            </Link>
+                          )}
                           <button
                             onClick={() => openDetail(cart)}
                             className="p-1.5 text-stone-500 hover:text-stone-900 hover:bg-stone-100 rounded-lg"
@@ -373,7 +461,7 @@ export const AdminAbandonedCartsPage: React.FC = () => {
       </div>
 
       {/* Details panel */}
-      {detail && (
+      {detail && detailRow && (
         <div className="fixed inset-0 z-50 flex justify-end bg-stone-900/50 backdrop-blur-sm" onClick={() => setDetail(null)}>
           <aside
             className="w-full max-w-md h-full bg-white shadow-2xl overflow-y-auto text-xs font-sans"
@@ -385,9 +473,9 @@ export const AdminAbandonedCartsPage: React.FC = () => {
             <div className="sticky top-0 bg-white border-b border-stone-200 p-5 flex items-start justify-between">
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-wider text-stone-400">Abandoned bag</p>
-                <h3 className="font-serif text-xl text-stone-900">{detail.customer.name}</h3>
+                <h3 className="font-serif text-xl text-stone-900">{detailRow.customer.name}</h3>
                 <div className="mt-1">
-                  <StatusBadge status={prettyStatus(detail.status)} size="sm" />
+                  <StatusBadge status={prettyStatus(detailRow.status)} size="sm" />
                 </div>
               </div>
               <button onClick={() => setDetail(null)} className="p-1 text-stone-400 hover:text-stone-900" aria-label="Close">
@@ -403,18 +491,20 @@ export const AdminAbandonedCartsPage: React.FC = () => {
               {/* Contact */}
               <section className="space-y-1.5">
                 <h4 className="text-[10px] font-bold uppercase text-stone-400">Customer</h4>
-                {detail.customer.phone && <p className="text-stone-700">{detail.customer.phone}</p>}
-                {detail.customer.email && <p className="text-stone-700">{detail.customer.email}</p>}
-                {!isClosed(detail) && <div className="flex gap-2 pt-1">{contactButtons(detail)}</div>}
+                {detailRow.customer.phone && <p className="text-stone-700">{detailRow.customer.phone}</p>}
+                {detailRow.customer.email && <p className="text-stone-700">{detailRow.customer.email}</p>}
+                {!isClosed(detailRow) && <div className="flex gap-2 pt-1">{contactButtons(detailRow)}</div>}
               </section>
 
               {/* Items */}
               <section className="space-y-3">
-                <h4 className="text-[10px] font-bold uppercase text-stone-400">Items in bag ({detail.itemCount})</h4>
-                {detail.items.length === 0 ? (
-                  <p className="text-stone-400">No item details available.</p>
+                <h4 className="text-[10px] font-bold uppercase text-stone-400">
+                  {detail.items.length === 0 && detailRow.items.length > 0 ? 'Items ordered' : 'Items in bag'} ({detailRow.itemCount})
+                </h4>
+                {detailRow.items.length === 0 ? (
+                  <p className="text-stone-400">The backend doesn't include this bag's items yet.</p>
                 ) : (
-                  detail.items.map((item, i) => (
+                  detailRow.items.map((item, i) => (
                     <div key={i} className="flex items-center gap-3">
                       {item.image ? (
                         <img src={item.image} alt="" className="w-12 h-14 object-cover rounded bg-stone-100" />
@@ -436,7 +526,7 @@ export const AdminAbandonedCartsPage: React.FC = () => {
                 )}
                 <div className="flex justify-between pt-3 border-t border-stone-100 font-serif text-base font-bold text-stone-900">
                   <span>Bag value</span>
-                  <span>{inr(detail.cartValue)}</span>
+                  <span>{inr(detailRow.cartValue)}</span>
                 </div>
               </section>
 
@@ -444,35 +534,44 @@ export const AdminAbandonedCartsPage: React.FC = () => {
               <section className="space-y-2">
                 <h4 className="text-[10px] font-bold uppercase text-stone-400">Timeline</h4>
                 <ul className="space-y-1.5 text-stone-600">
-                  <li className="flex justify-between"><span>Last activity</span><span>{formatDateTime(detail.lastActivityAt)}</span></li>
-                  <li className="flex justify-between"><span>Marked abandoned</span><span>{formatDateTime(detail.abandonedAt)}</span></li>
-                  {detail.recoveredAt && <li className="flex justify-between text-emerald-700"><span>Recovered</span><span>{formatDateTime(detail.recoveredAt)}</span></li>}
-                  {detail.suppressedAt && <li className="flex justify-between"><span>Reminders stopped</span><span>{formatDateTime(detail.suppressedAt)}</span></li>}
+                  <li className="flex justify-between"><span>Last activity</span><span>{formatDateTime(detailRow.lastActivityAt)}</span></li>
+                  <li className="flex justify-between"><span>Marked abandoned</span><span>{formatDateTime(detailRow.abandonedAt)}</span></li>
+                  {detailRow.recoveredAt && <li className="flex justify-between text-emerald-700"><span>Recovered</span><span>{formatDateTime(detailRow.recoveredAt)}</span></li>}
+                  {detailRow.recoveredOrderId && (
+                    <li className="pt-1">
+                      <Link to={`/admin/orders/${detailRow.recoveredOrderId}`} className="inline-flex items-center gap-1 font-semibold text-emerald-700 hover:underline">
+                        Open the order <ExternalLink size={12} />
+                      </Link>
+                    </li>
+                  )}
+                  {detailRow.suppressedAt && <li className="flex justify-between"><span>Reminders stopped</span><span>{formatDateTime(detailRow.suppressedAt)}</span></li>}
                 </ul>
               </section>
 
               {/* Reminders */}
               <section className="space-y-2">
-                <h4 className="text-[10px] font-bold uppercase text-stone-400">Reminders sent</h4>
-                {detail.reminders.length === 0 ? (
+                <h4 className="text-[10px] font-bold uppercase text-stone-400">Reminders</h4>
+                {detailRow.reminders.length === 0 ? (
                   <p className="text-stone-400">No automatic reminders sent yet.</p>
                 ) : (
                   <ul className="space-y-1.5">
-                    {detail.reminders.map((r, i) => (
+                    {detailRow.reminders.map((r, i) => (
                       <li key={i} className="flex items-center justify-between p-2 bg-stone-50 rounded-lg">
                         <span className="flex items-center gap-1.5 text-stone-700">
                           <Clock size={12} className="text-stone-400" />
                           {prettyStatus(r.channel)}
                           {r.status && <span className="text-stone-400">· {prettyStatus(r.status)}</span>}
                         </span>
-                        <span className="text-stone-400">{formatDateTime(r.sentAt)}</span>
+                        <span className="text-stone-400" title={r.failureReason || undefined}>
+                          {r.sentAt ? `Sent ${formatDateTime(r.sentAt)}` : r.scheduledAt ? `Planned ${formatDateTime(r.scheduledAt)}` : '—'}
+                        </span>
                       </li>
                     ))}
                   </ul>
                 )}
               </section>
 
-              {canAct && !isClosed(detail) && (
+              {canAct && !isClosed(detailRow) && (
                 <button
                   onClick={() => handleSuppress(detail)}
                   disabled={busyId === detail.id}

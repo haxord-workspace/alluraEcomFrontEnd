@@ -24,8 +24,12 @@ export interface AbandonedCartItem {
 
 export interface AbandonedCartReminder {
   channel: string;
+  /** Empty until the reminder has actually been sent */
   sentAt: string;
+  scheduledAt?: string;
+  /** e.g. SCHEDULED, SENT, CANCELLED, FAILED */
   status?: string;
+  failureReason?: string;
 }
 
 export interface AbandonedCartRecord {
@@ -41,7 +45,12 @@ export interface AbandonedCartRecord {
   abandonedAt?: string;
   recoveredAt?: string;
   suppressedAt?: string;
+  /** The order this cart turned into, when recovered */
+  recoveredOrderId?: string;
   reminders: AbandonedCartReminder[];
+  /** Reminders actually delivered */
+  remindersSent: number;
+  customerOptedOut?: boolean;
 }
 
 export interface AbandonedCartList {
@@ -124,13 +133,25 @@ export const mapAbandonedCart = (raw: any): AbandonedCartRecord => {
     abandonedAt: raw?.abandonedAt || raw?.detectedAt || raw?.createdAt,
     recoveredAt: raw?.recoveredAt,
     suppressedAt: raw?.suppressedAt,
+    recoveredOrderId: idOf(raw?.recoveredOrderId) || undefined,
     reminders: Array.isArray(reminders)
       ? reminders.map((r: any) => ({
-          channel: r?.channel || r?.type || 'Reminder',
-          sentAt: r?.sentAt || r?.createdAt || r?.at || '',
+          channel:
+            r?.channel ||
+            (Array.isArray(r?.channels) ? r.channels.join(' + ') : '') ||
+            r?.type ||
+            (r?.stage ? `Reminder ${r.stage}` : 'Reminder'),
+          // Only a real send time; a reminder that was scheduled or cancelled has sentAt null
+          sentAt: r?.sentAt || '',
+          scheduledAt: r?.scheduledAt,
           status: r?.status,
+          failureReason: r?.failureReason || undefined,
         }))
       : [],
+    remindersSent:
+      firstNumber(raw?.reminderCount) ??
+      (Array.isArray(reminders) ? reminders.filter((r: any) => r?.sentAt || /SENT|DELIVERED/i.test(r?.status || '')).length : 0),
+    customerOptedOut: !!raw?.customerOptedOut,
   };
 };
 

@@ -135,9 +135,13 @@ export const newIdempotencyKey = (): string =>
     : `chk-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
 /** POST /checkout/create */
-export const createCheckout = async (req: CheckoutRequest, idempotencyKey: string): Promise<CheckoutSession> => {
+export const createCheckout = async (
+  req: CheckoutRequest,
+  idempotencyKey: string,
+  extraHeaders?: Record<string, string>
+): Promise<CheckoutSession> => {
   const response = await api.post('/checkout/create', toBody(req), {
-    headers: { 'Idempotency-Key': idempotencyKey },
+    headers: { 'Idempotency-Key': idempotencyKey, ...(extraHeaders || {}) },
   });
   const data = unwrap(response) || {};
   if (import.meta.env.DEV) console.debug('[checkout] create response', data);

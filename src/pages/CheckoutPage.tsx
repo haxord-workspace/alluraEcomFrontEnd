@@ -22,6 +22,7 @@ import {
 import type { CheckoutRequest, CheckoutSummary, CheckoutSession } from '../service/checkout';
 import type { CartItem, SavedAddress } from '../types';
 import { useOrderPayment } from '../hooks/useOrderPayment';
+import { newMetaEventId, metaHeaders, trackMetaEvent } from '../utils/metaPixel';
 
 type DeliveryMethod = 'STANDARD' | 'STORE_PICKUP';
 type PaymentMethod = 'upi' | 'card' | 'cod';
@@ -170,6 +171,13 @@ export const CheckoutPage: React.FC = () => {
   const startPayment = async (created: CheckoutSession, retry = false) => {
     const outcome = await payForOrder(created.orderId, {
       retry,
+      purchase: {
+        value: created.summary.total,
+        currency: created.summary.currency || 'INR',
+        num_items: created.summary.items.reduce((n, i) => n + i.quantity, 0) || undefined,
+        content_ids: created.summary.items.map(i => i.sku || i.productId || '').filter(Boolean),
+        content_type: 'product',
+      },
       description: created.orderNumber ? `Order ${created.orderNumber}` : 'Allura order',
       prefill: {
         name: customer?.name,
@@ -187,7 +195,7 @@ export const CheckoutPage: React.FC = () => {
     refreshOrders();
   };
   // Same key for retries of the same attempt; a new one when anything changes
-  const idempotency = useRef<{ signature: string; key: string } | null>(null);
+  const idempotency = useRef<{ signature: string; key: string; metaEventId: string } | null>(null);
 
   const saveNewAddress = async (): Promise<string | null> => {
     const a = newAddress;
@@ -250,13 +258,26 @@ export const CheckoutPage: React.FC = () => {
     };
     const signature = JSON.stringify({ req, cartSignature });
     if (!idempotency.current || idempotency.current.signature !== signature) {
-      idempotency.current = { signature, key: newIdempotencyKey() };
+      // A retry of the same attempt reuses both keys, so Meta also sees it as one event
+      idempotency.current = { signature, key: newIdempotencyKey(), metaEventId: newMetaEventId() };
     }
+    const metaEventId = idempotency.current.metaEventId;
 
     setIsPlacing(true);
     try {
-      const created = await createCheckout(req, idempotency.current.key);
+      const created = await createCheckout(req, idempotency.current.key, metaHeaders(metaEventId));
       setSession(created);
+      trackMetaEvent(
+        'InitiateCheckout',
+        {
+          value: created.summary.total || display.total,
+          currency: created.summary.currency || 'INR',
+          num_items: cart.reduce((n, i) => n + i.quantity, 0),
+          content_ids: cart.map(i => i.product.sku || i.product.id),
+          content_type: 'product',
+        },
+        metaEventId
+      );
       // The order now holds these items: empty the bag so the same items can't be ordered twice.
       // (Payment, if still pending, is completed on the order itself, not by checking out again.)
       clearCart();

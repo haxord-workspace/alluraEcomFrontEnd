@@ -29,6 +29,7 @@ import {
 } from '../service/cart';
 import type { CartSnapshot, CartTotals, CartValidationResult } from '../service/cart';
 import { validateCoupon } from '../service/coupons';
+import { newMetaEventId, metaHeaders, trackMetaEvent } from '../utils/metaPixel';
 import { getMyOrders, getMyOrder, cancelMyOrder, orderErrorMessage, enrichOrder } from '../service/orders';
 
 interface ToastNotification {
@@ -528,8 +529,27 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.warn(`Product ${product.id} hasVariants but no variants array found. Adding base product.`);
       }
 
-      const snapshot = await addCartItem({ productId: product.id, variantId: variant?.id, quantity }, lookupProduct);
+      // Meta: same event ID for the Pixel (below) and the backend's CAPI call (headers)
+      const metaEventId = newMetaEventId();
+      const snapshot = await addCartItem(
+        { productId: product.id, variantId: variant?.id, quantity },
+        lookupProduct,
+        metaHeaders(metaEventId)
+      );
       await applyOrRefresh(snapshot);
+      const unitPrice = variant?.price || product.price;
+      trackMetaEvent(
+        'AddToCart',
+        {
+          content_ids: [variant?.sku || product.sku || product.id],
+          content_name: product.name,
+          content_type: 'product',
+          contents: [{ id: variant?.sku || product.sku || product.id, quantity, item_price: unitPrice }],
+          value: unitPrice * quantity,
+          currency: 'INR',
+        },
+        metaEventId
+      );
 
       addRecentlyViewed(product);
       if (!options.silent) {
@@ -859,7 +879,9 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const registerUser = async (data: RegisterData) => {
     try {
-      const response = await register(data);
+      const metaEventId = newMetaEventId();
+      const response = await register(data, metaHeaders(metaEventId));
+      trackMetaEvent('CompleteRegistration', { status: true }, metaEventId);
       storeCustomerTokens(response);
       
       const userProfile: CustomerProfile = response.user || {

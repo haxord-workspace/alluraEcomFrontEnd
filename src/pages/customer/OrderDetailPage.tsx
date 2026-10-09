@@ -45,6 +45,13 @@ export const OrderDetailPage: React.FC = () => {
     if (!order) return;
     const outcome = await payForOrder(order.id, {
       retry: true,
+      purchase: {
+        value: order.total,
+        currency: 'INR',
+        num_items: order.items.reduce((n, i) => n + i.quantity, 0),
+        content_ids: order.items.map(i => i.sku || i.product.id),
+        content_type: 'product',
+      },
       description: `Order ${order.orderNumber}`,
       prefill: {
         name: customer?.name,

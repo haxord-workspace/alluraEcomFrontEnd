@@ -45,8 +45,8 @@ export const login = async (data: LoginData): Promise<AuthResponse> => {
  * Register a new user.
  * POST /auth/register
  */
-export const register = async (data: RegisterData): Promise<AuthResponse> => {
-  const response = await api.post<AuthResponse>('/auth/register', data);
+export const register = async (data: RegisterData, headers?: Record<string, string>): Promise<AuthResponse> => {
+  const response = await api.post<AuthResponse>('/auth/register', data, headers ? { headers } : undefined);
   return response.data;
 };
 

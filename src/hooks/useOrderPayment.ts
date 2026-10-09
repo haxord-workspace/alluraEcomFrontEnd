@@ -2,6 +2,8 @@ import { useCallback, useState } from 'react';
 import { createPayment, retryPayment, verifyPayment, paymentErrorMessage } from '../service/payments';
 import type { RazorpayOrder } from '../service/payments';
 import { loadRazorpay, openRazorpayCheckout } from '../utils/razorpay';
+import { newMetaEventId, metaHeaders, trackMetaEvent } from '../utils/metaPixel';
+import type { MetaEventData } from '../utils/metaPixel';
 
 export type PaymentOutcome =
   | { ok: true; paymentId: string }
@@ -12,6 +14,8 @@ interface PayOptions {
   retry?: boolean;
   description?: string;
   prefill?: { name?: string; email?: string; contact?: string };
+  /** Meta Pixel "Purchase" details (value, currency, items), fired once the payment is verified */
+  purchase?: MetaEventData;
 }
 
 const isClientError = (err: any) => {
@@ -69,8 +73,11 @@ export const useOrderPayment = () => {
       }
 
       // 3. Backend verifies the Razorpay signature and marks the order paid
+      // Meta: the backend sends Purchase via CAPI on verify; the Pixel uses the same event ID
+      const metaEventId = newMetaEventId();
       try {
-        await verifyPayment({ orderId, ...result.response });
+        await verifyPayment({ orderId, ...result.response }, metaHeaders(metaEventId));
+        if (options.purchase) trackMetaEvent('Purchase', { currency: 'INR', ...options.purchase }, metaEventId);
       } catch (err) {
         return {
           ok: false,

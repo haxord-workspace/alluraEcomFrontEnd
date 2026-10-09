@@ -62,6 +62,6 @@ export const retryPayment = async (orderId: string): Promise<RazorpayOrder> => {
 };
 
 /** POST /payments/verify — the backend checks the Razorpay signature */
-export const verifyPayment = async (payload: VerifyPaymentPayload): Promise<void> => {
-  await api.post('/payments/verify', payload);
+export const verifyPayment = async (payload: VerifyPaymentPayload, headers?: Record<string, string>): Promise<void> => {
+  await api.post('/payments/verify', payload, headers ? { headers } : undefined);
 };

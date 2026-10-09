@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, useLocation, Navigate } from 'react-route
 import { ShopProvider } from './context/ShopContext';
 import { AdminProvider } from './context/AdminContext';
 import { ConfirmProvider } from './context/ConfirmContext';
+import { trackPageView } from './utils/metaPixel';
 
 // Layout & Navigation Components
 import { AnnouncementBar } from './components/layout/AnnouncementBar';
@@ -95,6 +96,11 @@ export const AppContent: React.FC = () => {
   const location = useLocation();
   const isCheckout = location.pathname === '/checkout';
   const isAdminRoute = location.pathname.startsWith('/admin');
+
+  // Meta Pixel: the app never reloads between pages, so send a PageView on every route change
+  useEffect(() => {
+    if (!isAdminRoute) trackPageView();
+  }, [location.pathname, isAdminRoute]);
 
   // Admin Portal Views
   if (isAdminRoute) {

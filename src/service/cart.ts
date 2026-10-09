@@ -163,10 +163,14 @@ export const clearCart = (): Promise<void> =>
   });
 
 /** POST /cart/items — add an item */
-export const addCartItem = async (payload: AddCartItemPayload, lookup?: ProductLookup): Promise<CartSnapshot | null> => {
+export const addCartItem = async (
+  payload: AddCartItemPayload,
+  lookup?: ProductLookup,
+  headers?: Record<string, string>
+): Promise<CartSnapshot | null> => {
   const body: AddCartItemPayload = { productId: payload.productId, quantity: payload.quantity };
   if (payload.variantId) body.variantId = payload.variantId;
-  const response = await cartWrite(() => api.post('/cart/items', body));
+  const response = await cartWrite(() => api.post('/cart/items', body, headers ? { headers } : undefined));
   return mapCart(unwrap(response), lookup);
 };
 
