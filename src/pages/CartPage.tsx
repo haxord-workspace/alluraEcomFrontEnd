@@ -10,8 +10,10 @@ import {
   Sparkles,
   Tag,
   MessageCircle,
+  Loader2,
 } from 'lucide-react';
 import { useShop } from '../context/ShopContext';
+import { useCartLineActions } from '../hooks/useCartLineActions';
 import { ProductCard } from '../components/ui/ProductCard';
 import type { CartItem, Product } from '../types';
 
@@ -19,8 +21,6 @@ export const CartPage: React.FC = () => {
   const {
     products,
     cart,
-    removeFromCart,
-    updateQuantity,
     cartSubtotal,
     freeShippingRemaining,
     freeShippingProgress,
@@ -35,6 +35,7 @@ export const CartPage: React.FC = () => {
   const [promoCode, setPromoCode] = useState('');
 
   const navigate = useNavigate();
+  const { run, isBusy, isPending } = useCartLineActions();
 
   const handleApplyPromo = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -170,48 +171,34 @@ export const CartPage: React.FC = () => {
                 <div className="flex items-center justify-between pt-2 border-t border-allura-border/60">
                   <div className="flex items-center border border-allura-border rounded bg-allura-bg">
                     <button
-                      onClick={() =>
-                        updateQuantity(
-                          item.product.id,
-                          item.selectedSize,
-                          item.selectedColor.name,
-                          item.quantity - 1
-                        )
-                      }
-                      className="p-1.5 px-3 text-allura-text hover:bg-allura-bgSecondary transition-colors"
+                      onClick={() => run(item, 'decrease')}
+                      disabled={isBusy}
+                      className="p-1.5 px-3 text-allura-text hover:bg-allura-bgSecondary transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                       aria-label="Decrease"
+                      aria-busy={isPending(item, 'decrease')}
                     >
-                      <Minus size={12} />
+                      {isPending(item, 'decrease') ? <Loader2 size={12} className="animate-spin" /> : <Minus size={12} />}
                     </button>
                     <span className="text-xs font-bold px-3 text-allura-text">{item.quantity}</span>
                     <button
-                      onClick={() =>
-                        updateQuantity(
-                          item.product.id,
-                          item.selectedSize,
-                          item.selectedColor.name,
-                          item.quantity + 1
-                        )
-                      }
-                      className="p-1.5 px-3 text-allura-text hover:bg-allura-bgSecondary transition-colors"
+                      onClick={() => run(item, 'increase')}
+                      disabled={isBusy}
+                      className="p-1.5 px-3 text-allura-text hover:bg-allura-bgSecondary transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                       aria-label="Increase"
+                      aria-busy={isPending(item, 'increase')}
                     >
-                      <Plus size={12} />
+                      {isPending(item, 'increase') ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
                     </button>
                   </div>
 
                   <button
-                    onClick={() =>
-                      removeFromCart(
-                        item.product.id,
-                        item.selectedSize,
-                        item.selectedColor.name
-                      )
-                    }
-                    className="flex items-center gap-1 text-xs text-allura-muted hover:text-red-700 font-sans transition-colors"
+                    onClick={() => run(item, 'remove')}
+                    disabled={isBusy}
+                    className="flex items-center gap-1 text-xs text-allura-muted hover:text-red-700 font-sans transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    aria-busy={isPending(item, 'remove')}
                   >
-                    <Trash2 size={13} />
-                    <span>Remove</span>
+                    {isPending(item, 'remove') ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                    <span>{isPending(item, 'remove') ? 'Removing…' : 'Remove'}</span>
                   </button>
                 </div>
               </div>

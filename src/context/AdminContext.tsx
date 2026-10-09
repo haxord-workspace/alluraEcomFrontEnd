@@ -336,7 +336,30 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     },
   ]);
 
-  // Note: admin auth state is managed by Redux (adminAuthSlice) — no need to sync here
+  // Show the admin who is actually logged in (GET /admin/auth/me or login response)
+  // instead of the sample profile
+  const authAdmin = useSelector((state: RootState) => state.adminAuth.admin);
+  useEffect(() => {
+    if (!authAdmin) return;
+    const p = authAdmin.profile || {};
+    const name =
+      p.displayName ||
+      [p.firstName, p.lastName].filter(Boolean).join(' ') ||
+      authAdmin.name ||
+      authAdmin.fullName ||
+      authAdmin.email ||
+      'Admin';
+    setCurrentAdmin(prev => ({
+      ...prev,
+      id: authAdmin._id || authAdmin.id || prev.id,
+      name,
+      email: authAdmin.email || prev.email,
+      role: (authAdmin.role as AdminRole) || prev.role,
+      status: authAdmin.status && authAdmin.status !== 'ACTIVE' ? 'Suspended' : 'Active',
+      lastLogin: authAdmin.lastLoginAt || prev.lastLogin,
+      createdDate: authAdmin.createdAt || prev.createdDate,
+    }));
+  }, [authAdmin]);
 
   useEffect(() => {
     localStorage.setItem('allura_current_admin', JSON.stringify(currentAdmin));

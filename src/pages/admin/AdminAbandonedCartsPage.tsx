@@ -135,6 +135,14 @@ export const AdminAbandonedCartsPage: React.FC = () => {
 
   // Details panel
   const [detail, setDetail] = useState<AbandonedCartRecord | null>(null);
+
+  // Close the details modal with Esc
+  useEffect(() => {
+    if (!detail) return;
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setDetail(null);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [detail]);
   const [isDetailLoading, setIsDetailLoading] = useState(false);
 
   const fetchCarts = useCallback(async () => {
@@ -460,17 +468,20 @@ export const AdminAbandonedCartsPage: React.FC = () => {
         )}
       </div>
 
-      {/* Details panel */}
+      {/* Details modal */}
       {detail && detailRow && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-stone-900/50 backdrop-blur-sm" onClick={() => setDetail(null)}>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/50 backdrop-blur-sm animate-fade-in"
+          onClick={() => setDetail(null)}
+        >
           <aside
-            className="w-full max-w-md h-full bg-white shadow-2xl overflow-y-auto text-xs font-sans"
+            className="w-full max-w-lg max-h-[90vh] bg-white rounded-2xl shadow-2xl overflow-y-auto text-xs font-sans"
             onClick={e => e.stopPropagation()}
             role="dialog"
             aria-modal="true"
             aria-label="Abandoned cart details"
           >
-            <div className="sticky top-0 bg-white border-b border-stone-200 p-5 flex items-start justify-between">
+            <div className="sticky top-0 z-10 bg-white rounded-t-2xl border-b border-stone-200 p-5 flex items-start justify-between">
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-wider text-stone-400">Abandoned bag</p>
                 <h3 className="font-serif text-xl text-stone-900">{detailRow.customer.name}</h3>

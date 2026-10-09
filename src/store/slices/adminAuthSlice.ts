@@ -120,7 +120,8 @@ export const fetchAdminProfile = createAsyncThunk(
     try {
       const { default: adminApi } = await import('../../service/adminApi');
       const response = await adminApi.get('/auth/me');
-      return response.data?.data || response.data;
+      const data = response.data?.data || response.data;
+      return data?.admin || data?.user || data;
     } catch (error: any) {
       return rejectWithValue(
         error?.response?.data?.message || 'Session expired'

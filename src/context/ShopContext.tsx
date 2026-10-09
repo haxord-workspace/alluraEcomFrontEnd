@@ -566,14 +566,12 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const removeFromCart = useCallback(async (productId: string, size: string, colorName: string) => {
     const line = findCartLine(productId, size, colorName);
     if (!line) return;
-    const previous = cart;
-    setCart(prev => prev.filter(item => item !== line));
+    // Not optimistic: the line stays (with a spinner) until the server confirms
     try {
       if (!line.id) throw new Error('Missing cart item id');
       await applyOrRefresh(await removeCartItem(line.id, lookupProduct));
       showToast('Item removed from Bag', 'info');
     } catch (error: any) {
-      setCart(previous);
       showToast(cartErrorMessage(error, 'Could not remove this item'), 'error');
     }
   }, [cart, showToast, lookupProduct, applyOrRefresh]);
@@ -585,13 +583,11 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     const line = findCartLine(productId, size, colorName);
     if (!line) return;
-    const previous = cart;
-    setCart(prev => prev.map(item => (item === line ? { ...item, quantity } : item)));
+    // Not optimistic: the count changes once the server confirms it
     try {
       if (!line.id) throw new Error('Missing cart item id');
       await applyOrRefresh(await updateCartItem(line.id, quantity, lookupProduct));
     } catch (error: any) {
-      setCart(previous);
       showToast(cartErrorMessage(error, 'Could not update the quantity'), 'error');
     }
   }, [cart, removeFromCart, showToast, lookupProduct, applyOrRefresh]);

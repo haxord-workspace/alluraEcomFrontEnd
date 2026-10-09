@@ -42,6 +42,13 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({ onMobileMenuToggle }) 
     setIsRoleDropdownOpen(false);
   };
 
+  // e.g. SUPER_ADMIN -> Super Admin
+  const roleLabel = role
+    .toLowerCase()
+    .split('_')
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+
   const handleLogout = () => {
     adminLogout();
     navigate('/admin/login');
@@ -162,10 +169,10 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({ onMobileMenuToggle }) 
             className="flex items-center gap-2 p-1 text-stone-700 hover:text-stone-900 focus:outline-none"
           >
             <div className="w-8 h-8 rounded-full bg-allura-darkBrown text-white font-serif font-bold text-xs flex items-center justify-center shadow-xs">
-              {currentAdmin.name.charAt(0)}
+              {roleLabel.charAt(0)}
             </div>
             <span className="hidden lg:block text-xs font-sans font-medium text-stone-800">
-              {currentAdmin.name}
+              {roleLabel}
             </span>
             <ChevronDown size={13} className="text-stone-400 hidden lg:block" />
           </button>
@@ -173,7 +180,7 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({ onMobileMenuToggle }) 
           {isUserDropdownOpen && (
             <div className="absolute right-0 mt-2 w-48 bg-white border border-stone-200 rounded-2xl shadow-xl p-2 space-y-1 z-50 text-xs font-sans animate-slide-up">
               <div className="px-3 py-2 border-b border-stone-100">
-                <p className="font-bold text-stone-900">{currentAdmin.name}</p>
+                <p className="font-bold text-stone-900 truncate">{currentAdmin.name}</p>
                 <p className="text-[10px] text-stone-500 truncate">{currentAdmin.email}</p>
               </div>
               <Link

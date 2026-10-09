@@ -13,6 +13,8 @@ export interface CheckoutRequest {
   addressId: string;
   couponCode?: string;
   shippingMethod?: string;
+  /** Only these cart lines go into the order (omitted = the whole cart); the rest stay in the bag */
+  cartItemIds?: string[];
 }
 
 export interface CheckoutLine {
@@ -115,6 +117,7 @@ const toBody = (req: CheckoutRequest): CheckoutRequest => ({
   addressId: req.addressId,
   ...(req.couponCode ? { couponCode: req.couponCode } : {}),
   ...(req.shippingMethod ? { shippingMethod: req.shippingMethod } : {}),
+  ...(req.cartItemIds?.length ? { cartItemIds: req.cartItemIds } : {}),
 });
 
 export const checkoutErrorMessage = (error: any, fallback: string): string =>

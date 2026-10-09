@@ -10,6 +10,7 @@ import {
   Loader2,
   Clock,
   AlertTriangle,
+  X,
 } from 'lucide-react';
 import { useShop } from '../context/ShopContext';
 import { AlluraLogo } from '../components/common/AlluraLogo';
@@ -51,6 +52,10 @@ const formatAddress = (a: SavedAddress) =>
 const inputClass =
   'w-full bg-allura-bg border border-allura-border rounded p-3 text-xs text-allura-text focus:outline-none focus:border-allura-gold';
 
+const FREE_SHIPPING_THRESHOLD = 2999;
+
+const linePrice = (i: CartItem) => (i.unitPrice ?? i.product.price) * i.quantity;
+
 export const CheckoutPage: React.FC = () => {
   const {
     customer,
@@ -64,8 +69,24 @@ export const CheckoutPage: React.FC = () => {
     fetchCustomerAddresses,
     addCustomerAddress,
     clearCart,
+    refreshCart,
     refreshOrders,
   } = useShop();
+
+  // ── Items in this order: the whole bag, minus what the customer removes here
+  //    (removed items stay in the bag) ─────────────────────────────────────
+  const [excludedIds, setExcludedIds] = useState<string[]>([]);
+
+  const orderItems = cart.filter(i => !i.id || !excludedIds.includes(i.id));
+  const setAsideItems = cart.filter(i => i.id && excludedIds.includes(i.id));
+  const isPartial = setAsideItems.length > 0 && orderItems.length > 0;
+  const selectedIdsKey = isPartial ? orderItems.map(i => i.id).filter(Boolean).join(',') : '';
+  const orderSubtotal = isPartial ? orderItems.reduce((sum, i) => sum + linePrice(i), 0) : cartSubtotal;
+
+  const removeFromOrder = (id?: string) => {
+    if (id && orderItems.length > 1) setExcludedIds(prev => [...prev, id]);
+  };
+  const addBackToOrder = (id?: string) => setExcludedIds(prev => prev.filter(x => x !== id));
 
   // Online payment (Razorpay) after the order is created
   const { payForOrder, isPaying } = useOrderPayment();
@@ -126,15 +147,16 @@ export const CheckoutPage: React.FC = () => {
             addressId: selectedAddressId,
             couponCode: appliedCoupon?.code,
             shippingMethod: deliveryMethod,
+            cartItemIds: selectedIdsKey ? selectedIdsKey.split(',') : undefined,
           }
         : null,
-    [cartId, selectedAddressId, isAddingAddress, appliedCoupon?.code, deliveryMethod]
+    [cartId, selectedAddressId, isAddingAddress, appliedCoupon?.code, deliveryMethod, selectedIdsKey]
   );
 
   // Re-preview when the request or the bag contents change
   const cartSignature = cart.map(i => `${i.id}:${i.quantity}`).join(',');
   useEffect(() => {
-    if (!request || cart.length === 0) {
+    if (!request || orderItems.length === 0) {
       setSummary(null);
       setPreviewError(null);
       return;
@@ -151,7 +173,12 @@ export const CheckoutPage: React.FC = () => {
       } catch (err) {
         if (!cancelled) {
           setSummary(null);
-          setPreviewError(checkoutErrorMessage(err, 'Could not calculate your order total.'));
+          const message = checkoutErrorMessage(err, 'Could not calculate your order total.');
+          setPreviewError(
+            request.cartItemIds && /cartItemIds/i.test(message)
+              ? "Removing items from checkout isn't available yet. Please add the items back, or remove them from your bag instead."
+              : message
+          );
         }
       } finally {
         if (!cancelled) setIsPreviewing(false);
@@ -161,7 +188,7 @@ export const CheckoutPage: React.FC = () => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [request, cartSignature, cart.length]);
+  }, [request, cartSignature, orderItems.length]);
 
   // ── Create checkout ──────────────────────────────────────────────────────
   const [isPlacing, setIsPlacing] = useState(false);
@@ -193,6 +220,7 @@ export const CheckoutPage: React.FC = () => {
       setPaymentMessage(outcome.message);
     }
     refreshOrders();
+    refreshCart(); // the backend removes the ordered items; anything set aside stays
   };
   // Same key for retries of the same attempt; a new one when anything changes
   const idempotency = useRef<{ signature: string; key: string; metaEventId: string } | null>(null);
@@ -255,6 +283,7 @@ export const CheckoutPage: React.FC = () => {
       addressId,
       couponCode: appliedCoupon?.code,
       shippingMethod: deliveryMethod,
+      cartItemIds: selectedIdsKey ? selectedIdsKey.split(',') : undefined,
     };
     const signature = JSON.stringify({ req, cartSignature });
     if (!idempotency.current || idempotency.current.signature !== signature) {
@@ -272,15 +301,17 @@ export const CheckoutPage: React.FC = () => {
         {
           value: created.summary.total || display.total,
           currency: created.summary.currency || 'INR',
-          num_items: cart.reduce((n, i) => n + i.quantity, 0),
-          content_ids: cart.map(i => i.product.sku || i.product.id),
+          num_items: orderItems.reduce((n, i) => n + i.quantity, 0),
+          content_ids: orderItems.map(i => i.product.sku || i.product.id),
           content_type: 'product',
         },
         metaEventId
       );
-      // The order now holds these items: empty the bag so the same items can't be ordered twice.
-      // (Payment, if still pending, is completed on the order itself, not by checking out again.)
-      clearCart();
+      // The order now holds these items, so they leave the bag (payment, if still pending, is
+      // completed on the order itself). With some items set aside, the backend removes only the
+      // ordered ones, so reload the bag instead of emptying it.
+      if (isPartial) refreshCart();
+      else clearCart();
       if (paymentMethod === 'cod') {
         setPaymentState('cod');
         refreshOrders();
@@ -300,7 +331,9 @@ export const CheckoutPage: React.FC = () => {
   };
 
   // ── Fallback totals (before the server preview is available) ─────────────
-  const estimatedShipping = deliveryMethod === 'STORE_PICKUP' ? 0 : freeShippingRemaining === 0 ? 0 : 150;
+  const freeShipping = isPartial ? orderSubtotal >= FREE_SHIPPING_THRESHOLD : freeShippingRemaining === 0;
+  const estimatedCoupon = isPartial ? 0 : couponDiscount; // the preview calculates it for the selected items
+  const estimatedShipping = deliveryMethod === 'STORE_PICKUP' || freeShipping ? 0 : 150;
   const display = summary
     ? {
         subtotal: summary.subtotal,
@@ -312,15 +345,23 @@ export const CheckoutPage: React.FC = () => {
         total: summary.total,
       }
     : {
-        subtotal: cartSubtotal,
+        subtotal: orderSubtotal,
         productDiscount: 0,
         promotionDiscount: 0,
-        couponDiscount,
+        couponDiscount: estimatedCoupon,
         shipping: estimatedShipping,
         tax: 0,
-        total: Math.max(0, cartSubtotal - couponDiscount) + estimatedShipping,
+        total: Math.max(0, orderSubtotal - estimatedCoupon) + estimatedShipping,
       };
   const isEstimate = !summary;
+
+  // Until the backend supports cartItemIds it prices the whole bag: never let that be ordered
+  const orderIdSet = new Set(orderItems.map(i => i.id));
+  const selectionError =
+    summary && isPartial &&
+    (summary.items.some(l => l.cartItemId && !orderIdSet.has(l.cartItemId)) || summary.items.length > orderItems.length)
+      ? "Removing items from checkout isn't available yet. Please add the items back, or remove them from your bag instead."
+      : null;
 
   // The backend priced one or more items at ₹0: don't allow placing the order
   const unpricedLines = summary ? summary.items.filter(l => l.quantity > 0 && l.unitPrice <= 0) : [];
@@ -389,7 +430,7 @@ export const CheckoutPage: React.FC = () => {
             {selectedAddress && (
               <p><strong>Deliver To:</strong> {selectedAddress.fullName}, {formatAddress(selectedAddress)}</p>
             )}
-            <p><strong>Items:</strong> {s.items.reduce((a, i) => a + i.quantity, 0) || cart.reduce((a, i) => a + i.quantity, 0)}</p>
+            <p><strong>Items:</strong> {s.items.reduce((a, i) => a + i.quantity, 0) || orderItems.reduce((a, i) => a + i.quantity, 0)}</p>
             <p><strong>Payment:</strong> {PAYMENT_LABELS[paymentMethod]}</p>
             <p><strong>Total:</strong> <strong className="text-allura-darkBrown">{formatPrice(s.total)}</strong></p>
           </div>
@@ -712,11 +753,11 @@ export const CheckoutPage: React.FC = () => {
         {/* Right: Order Summary */}
         <div className="lg:col-span-5 bg-allura-card p-6 sm:p-8 rounded-2xl border border-allura-border shadow-luxury space-y-6 sticky top-24">
           <h3 className="font-serif text-lg font-semibold uppercase tracking-wide text-allura-text border-b border-allura-border pb-3">
-            ORDER ITEMS ({cart.reduce((a: number, b: CartItem) => a + b.quantity, 0)})
+            ORDER ITEMS ({orderItems.reduce((a: number, b: CartItem) => a + b.quantity, 0)})
           </h3>
 
           <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
-            {cart.map((item: CartItem) => {
+            {orderItems.map((item: CartItem) => {
               const line = summary?.items.find(l => l.cartItemId && l.cartItemId === item.id);
               const lineTotal = line ? line.finalLineTotal : (item.unitPrice ?? item.product.price) * item.quantity;
               const meta = [
@@ -741,10 +782,53 @@ export const CheckoutPage: React.FC = () => {
                       <p className="text-[10px] text-allura-muted line-through">{formatPrice(line.lineSubtotal)}</p>
                     )}
                   </div>
+                  {orderItems.length > 1 && item.id && (
+                    <button
+                      type="button"
+                      onClick={() => removeFromOrder(item.id)}
+                      disabled={busy}
+                      className="p-1.5 -mr-1.5 rounded-full text-allura-muted hover:text-red-700 hover:bg-allura-bgSecondary transition-colors disabled:opacity-40"
+                      aria-label={`Remove ${item.product.name} from this order`}
+                      title="Remove from this order (stays in your bag)"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
                 </div>
               );
             })}
           </div>
+
+          {setAsideItems.length > 0 && (
+            <div className="rounded-xl border border-dashed border-allura-border p-3 space-y-2">
+              <p className="text-[11px] font-sans font-bold uppercase tracking-wider text-allura-muted">
+                Not in this order · stays in your bag ({setAsideItems.length})
+              </p>
+              {setAsideItems.map(item => (
+                <div key={item.id} className="flex items-center gap-3 opacity-80">
+                  <img
+                    src={item.product.images.primary}
+                    alt={item.product.name}
+                    className="w-9 h-11 object-cover object-top rounded bg-allura-bgSecondary flex-shrink-0 grayscale"
+                  />
+                  <div className="flex-1 min-w-0 text-xs">
+                    <p className="font-serif text-allura-text line-clamp-1">{item.product.name}</p>
+                    <p className="text-[11px] text-allura-muted">
+                      Qty: {item.quantity} · {formatPrice(linePrice(item))}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => addBackToOrder(item.id)}
+                    disabled={busy}
+                    className="text-[11px] font-sans font-semibold text-allura-goldDark hover:text-allura-darkBrown flex items-center gap-1 disabled:opacity-40"
+                  >
+                    <Plus size={12} /> Add back
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
 
           <div className="space-y-2 pt-4 border-t border-allura-border text-xs font-sans text-allura-muted">
             <div className="flex justify-between">
@@ -795,17 +879,17 @@ export const CheckoutPage: React.FC = () => {
             )}
           </div>
 
-          {(previewError || placeError || pricingError) && (
+          {(previewError || placeError || pricingError || selectionError) && (
             <div className="p-3 bg-rose-50 border border-rose-200 rounded-sm text-xs font-sans text-rose-800 space-y-1">
               <p className="font-bold uppercase tracking-wider text-[10px]">Please review</p>
-              <p>{placeError || previewError || pricingError}</p>
+              <p>{placeError || previewError || selectionError || pricingError}</p>
               <Link to="/cart" className="inline-block pt-1 font-semibold underline">Edit bag</Link>
             </div>
           )}
 
           <button
             type="submit"
-            disabled={busy || isPreviewing || (!!previewError && !isAddingAddress) || !!pricingError}
+            disabled={busy || isPreviewing || (!!previewError && !isAddingAddress) || !!pricingError || !!selectionError}
             className="w-full bg-allura-goldDark hover:bg-allura-darkBrown text-allura-card text-xs font-sans font-bold tracking-[0.25em] uppercase py-4 px-6 rounded-sm transition-all duration-300 flex items-center justify-center gap-2 shadow-luxury disabled:opacity-60"
           >
             {busy ? <Loader2 size={14} className="animate-spin" /> : <Lock size={14} />}

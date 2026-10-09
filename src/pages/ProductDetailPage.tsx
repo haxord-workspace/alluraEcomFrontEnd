@@ -126,7 +126,8 @@ export const ProductDetailPage: React.FC = () => {
     bag.add(product, selectedSize, currentColor, quantity);
   };
 
-  // Buy Now: add quietly (no bag drawer), wait until it's in the bag, then go straight to checkout
+  // Buy Now: add quietly (no bag drawer), wait until it's in the bag, then go to checkout.
+  // Checkout shows the whole bag; the customer can remove items there (they stay in the bag).
   const handleBuyNow = async () => {
     if (isBuyingNow) return;
     setIsBuyingNow(true);

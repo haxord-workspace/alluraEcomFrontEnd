@@ -1,15 +1,14 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { X, Plus, Minus, Trash2, ShoppingBag, ArrowRight, Sparkles, Truck } from 'lucide-react';
+import { X, Plus, Minus, Trash2, ShoppingBag, ArrowRight, Sparkles, Truck, Loader2 } from 'lucide-react';
 import { useShop } from '../../context/ShopContext';
+import { useCartLineActions } from '../../hooks/useCartLineActions';
 
 export const CartDrawer: React.FC = () => {
   const {
     isCartOpen,
     setIsCartOpen,
     cart,
-    removeFromCart,
-    updateQuantity,
     cartSubtotal,
     freeShippingRemaining,
     freeShippingProgress,
@@ -17,6 +16,7 @@ export const CartDrawer: React.FC = () => {
   } = useShop();
 
   const navigate = useNavigate();
+  const { run, isBusy, isPending } = useCartLineActions();
 
   if (!isCartOpen) return null;
 
@@ -127,17 +127,13 @@ export const CartDrawer: React.FC = () => {
                         {item.product.name}
                       </Link>
                       <button
-                        onClick={() =>
-                          removeFromCart(
-                            item.product.id,
-                            item.selectedSize,
-                            item.selectedColor.name
-                          )
-                        }
-                        className="text-allura-muted hover:text-red-700 transition-colors p-1"
+                        onClick={() => run(item, 'remove')}
+                        disabled={isBusy}
+                        className="text-allura-muted hover:text-red-700 transition-colors p-1 disabled:opacity-40 disabled:cursor-not-allowed"
                         aria-label="Remove item"
+                        aria-busy={isPending(item, 'remove')}
                       >
-                        <Trash2 size={14} />
+                        {isPending(item, 'remove') ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
                       </button>
                     </div>
 
@@ -165,35 +161,25 @@ export const CartDrawer: React.FC = () => {
                   <div className="flex items-center justify-between pt-2">
                     <div className="flex items-center border border-allura-border rounded bg-allura-bg">
                       <button
-                        onClick={() =>
-                          updateQuantity(
-                            item.product.id,
-                            item.selectedSize,
-                            item.selectedColor.name,
-                            item.quantity - 1
-                          )
-                        }
-                        className="p-1 px-2 text-allura-text hover:bg-allura-bgSecondary transition-colors"
+                        onClick={() => run(item, 'decrease')}
+                        disabled={isBusy}
+                        className="p-1 px-2 text-allura-text hover:bg-allura-bgSecondary transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                         aria-label="Decrease quantity"
+                        aria-busy={isPending(item, 'decrease')}
                       >
-                        <Minus size={11} />
+                        {isPending(item, 'decrease') ? <Loader2 size={11} className="animate-spin" /> : <Minus size={11} />}
                       </button>
                       <span className="text-xs font-semibold px-2 text-allura-text">
                         {item.quantity}
                       </span>
                       <button
-                        onClick={() =>
-                          updateQuantity(
-                            item.product.id,
-                            item.selectedSize,
-                            item.selectedColor.name,
-                            item.quantity + 1
-                          )
-                        }
-                        className="p-1 px-2 text-allura-text hover:bg-allura-bgSecondary transition-colors"
+                        onClick={() => run(item, 'increase')}
+                        disabled={isBusy}
+                        className="p-1 px-2 text-allura-text hover:bg-allura-bgSecondary transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                         aria-label="Increase quantity"
+                        aria-busy={isPending(item, 'increase')}
                       >
-                        <Plus size={11} />
+                        {isPending(item, 'increase') ? <Loader2 size={11} className="animate-spin" /> : <Plus size={11} />}
                       </button>
                     </div>
 
