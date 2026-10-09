@@ -6,7 +6,7 @@
 //   2. fire the Pixel event with { eventID: eventId },
 //   3. send the same eventId (+ _fbp / _fbc cookies) to the backend as x-meta-* headers.
 //
-// The Pixel only loads when VITE_META_PIXEL_ID is set.
+// The Pixel only loads when META_PIXEL_ID is set.
 
 declare global {
   interface Window {
@@ -15,7 +15,7 @@ declare global {
   }
 }
 
-export const META_PIXEL_ID: string | undefined = import.meta.env.VITE_META_PIXEL_ID || undefined;
+export const META_PIXEL_ID: string | undefined = import.meta.env.META_PIXEL_ID || undefined;
 export const isMetaPixelEnabled = (): boolean => !!META_PIXEL_ID;
 
 let initialized = false;
@@ -97,7 +97,7 @@ export const trackMetaEvent = (event: MetaStandardEvent, data: MetaEventData, ev
 /**
  * Headers for the backend call that triggers the same event server-side (CAPI).
  * Only sent while the Pixel is configured, so the backend's CORS setup must allow
- * x-meta-event-id, x-meta-fbp and x-meta-fbc before VITE_META_PIXEL_ID is set.
+ * x-meta-event-id, x-meta-fbp and x-meta-fbc before META_PIXEL_ID is set.
  */
 export const metaHeaders = (eventId: string): Record<string, string> => {
   if (!isMetaPixelEnabled()) return {};
