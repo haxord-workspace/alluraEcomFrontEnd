@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Heart, Eye} from 'lucide-react';
+import { Heart, Eye, ShoppingBag, Loader2, Check } from 'lucide-react';
 import type { Product } from '../../types';
 import { useShop } from '../../context/ShopContext';
 import { useAddToBag } from '../../hooks/useAddToBag';
-import { AddToBagLabel, addToBagButtonState } from './AddToBagLabel';
+import { addToBagButtonState } from './AddToBagLabel';
 
 interface ProductCardProps {
   product: Product;
@@ -103,20 +103,11 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, showCategory 
           />
         </button>
 
-        {/* Quick Action Overlay on Desktop Hover */}
-        <div className="hidden lg:flex absolute inset-x-3 bottom-3 z-10 gap-2 opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300">
-          <button
-            onClick={handleQuickAdd}
-            disabled={bag.isAdding}
-            className={`flex-1 text-white text-[11px] font-heading font-bold tracking-[0.2em] uppercase py-2.5 px-3 rounded-xl shadow-md flex items-center justify-center gap-1.5 ${addToBagButtonState(bag.state)} ${
-              bag.justAdded ? 'bg-emerald-700' : 'bg-[#561C08] hover:bg-[#3D1406]'
-            }`}
-          >
-            <AddToBagLabel state={bag.state} label="QUICK ADD" iconSize={13} />
-          </button>
+        {/* Quick view (desktop hover) */}
+        <div className="hidden lg:flex absolute right-2.5 bottom-2.5 z-10 opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300">
           <button
             onClick={handleQuickView}
-            className="bg-white hover:bg-[#F7E6C8] text-[#561C08] p-2.5 rounded-xl shadow-sm border border-[#561C08]/15 transition-all"
+            className="bg-white hover:bg-[#F7E6C8] text-[#561C08] p-2.5 rounded-full shadow-sm border border-[#561C08]/15 transition-all"
             title="Quick view details"
             aria-label="Quick view"
           >
@@ -140,16 +131,36 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, showCategory 
           {product.name}
         </Link>
 
-        {/* Price */}
-        <div className="flex items-center gap-2 mt-1">
-          <span className="font-heading text-sm sm:text-base font-bold text-[#561C08]">
-            {formatPrice(product.price)}
-          </span>
-          {product.originalPrice && (
-            <span className="font-body text-xs text-[#000000]/40 line-through">
-              {formatPrice(product.originalPrice)}
+        {/* Price + Add to Bag (always visible, phone and desktop) */}
+        <div className="flex items-center justify-between gap-2 mt-1">
+          <div className="flex items-baseline gap-2 min-w-0 flex-wrap">
+            <span className="font-heading text-sm sm:text-base font-bold text-[#561C08]">
+              {formatPrice(product.price)}
             </span>
-          )}
+            {product.originalPrice && (
+              <span className="font-body text-xs text-[#000000]/40 line-through">
+                {formatPrice(product.originalPrice)}
+              </span>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={handleQuickAdd}
+            disabled={bag.isAdding}
+            className={`flex-shrink-0 w-9 h-9 rounded-full text-white shadow-sm flex items-center justify-center ${addToBagButtonState(bag.state)} ${
+              bag.justAdded ? 'bg-emerald-700' : 'bg-[#561C08] hover:bg-[#3D1406]'
+            }`}
+            title="Add to Bag"
+            aria-label={bag.isAdding ? 'Adding to Bag' : bag.justAdded ? 'Added to Bag' : `Add ${product.name} to Bag`}
+          >
+            {bag.isAdding ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : bag.justAdded ? (
+              <Check size={16} className="animate-[pop_0.3s_ease-out]" />
+            ) : (
+              <ShoppingBag size={16} strokeWidth={1.9} />
+            )}
+          </button>
         </div>
 
         {/* Color Swatches */}

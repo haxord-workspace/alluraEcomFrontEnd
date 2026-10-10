@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { CheckCircle2, ArrowRight, ShieldCheck, Phone, User, Mail, Lock, Unlock } from 'lucide-react';
+import { CheckCircle2, ArrowRight, ShieldCheck, Phone, User, Mail, Lock, Unlock, Loader2 } from 'lucide-react';
 import { useShop } from '../../context/ShopContext';
 import { AlluraLogo } from '../../components/common/AlluraLogo';
-import { getCustomerProfile, updateCustomerProfile } from '../../service/customer';
+import { getCustomerProfile, updateCustomerProfile, profileDisplayName, profilePhone, profileErrorMessage } from '../../service/customer';
+import { normalizeMobile, mobileError } from '../../utils/addressValidation';
 import { useGoogleLogin } from '@react-oauth/google';
 
 // After signing in, go to the Home page, unless the customer was sent here from a specific page
@@ -59,6 +60,12 @@ export const AuthPage: React.FC = () => {
   const [avatarUrl, setAvatarUrl] = useState('');
   const [isLoadingProfile, setIsLoadingProfile] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [phoneTouched, setPhoneTouched] = useState(false);
+  // Indian numbers get the 10-digit check; other country codes only need digits
+  const isIndia = countryCode.replace(/\s/g, '') === '+91';
+  const phoneError = isIndia
+    ? mobileError(phoneNumber)
+    : /^\d{6,15}$/.test(phoneNumber) ? '' : 'Enter a valid phone number (digits only).';
 
   // Prefill the edit-profile form from the real backend profile
   useEffect(() => {
@@ -72,7 +79,7 @@ export const AuthPage: React.FC = () => {
         setLastName(profile.lastName || '');
         setDisplayName(profile.displayName || '');
         setCountryCode(profile.phone?.countryCode || '+91');
-        setPhoneNumber(profile.phone?.number || '');
+        setPhoneNumber((profile.phone?.countryCode || '+91') === '+91' ? normalizeMobile(profile.phone?.number || '') : profile.phone?.number || '');
         setAvatarUrl(profile.avatarUrl || '');
       })
       .catch(() => {
@@ -111,24 +118,29 @@ export const AuthPage: React.FC = () => {
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (phoneError) {
+      setPhoneTouched(true);
+      return;
+    }
     setIsSavingProfile(true);
     try {
-      const updated = await updateCustomerProfile({
-        firstName,
-        lastName,
-        displayName,
-        phone: { countryCode, number: phoneNumber },
-        avatarUrl,
-      });
+      const body = {
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        ...(displayName.trim() ? { displayName: displayName.trim() } : {}),
+        phone: { countryCode: countryCode.replace(/\s/g, ''), number: phoneNumber },
+        ...(avatarUrl.trim() ? { avatarUrl: avatarUrl.trim() } : {}),
+      };
+      const updated = await updateCustomerProfile(body);
+      // Use what the backend saved; fall back to what was sent if the response is minimal
       completeProfile({
-        name: updated.displayName || [updated.firstName, updated.lastName].filter(Boolean).join(' ') || displayName,
-        phone: updated.phone ? `${updated.phone.countryCode} ${updated.phone.number}`.trim() : `${countryCode} ${phoneNumber}`.trim(),
-        avatar: updated.avatarUrl || avatarUrl,
+        name: profileDisplayName(updated) || profileDisplayName(body),
+        phone: profilePhone(updated) || profilePhone(body),
+        avatar: updated.avatarUrl || body.avatarUrl,
       });
-      showToast('Profile updated successfully.', 'gold');
       navigate('/account');
     } catch (err) {
-      showToast('Failed to update profile. Please try again.', 'error');
+      showToast(profileErrorMessage(err, 'Failed to update profile. Please try again.'), 'error');
     } finally {
       setIsSavingProfile(false);
     }
@@ -156,7 +168,14 @@ export const AuthPage: React.FC = () => {
               </p>
             </div>
 
-            <div className="space-y-4">
+            <div className="relative space-y-4" aria-busy={isLoadingProfile}>
+              {/* Loading the saved profile (GET /customer/profile) */}
+              {isLoadingProfile && (
+                <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-allura-card/80 backdrop-blur-[1px] rounded-xl">
+                  <Loader2 size={26} className="animate-spin text-allura-goldDark" />
+                  <p className="text-xs font-sans text-allura-muted" aria-live="polite">Loading your profile…</p>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[11px] font-sans font-bold uppercase tracking-wider text-allura-muted mb-1">
@@ -220,28 +239,54 @@ export const AuthPage: React.FC = () => {
                     <Phone size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-allura-muted" />
                     <input
                       type="tel"
+                      inputMode="numeric"
+                      autoComplete="tel-national"
                       value={phoneNumber}
-                      onChange={e => setPhoneNumber(e.target.value)}
+                      onChange={e => setPhoneNumber(isIndia ? normalizeMobile(e.target.value) : e.target.value.replace(/\D/g, '').slice(0, 15))}
+                      onBlur={() => setPhoneTouched(true)}
+                      maxLength={isIndia ? 10 : 15}
+                      placeholder={isIndia ? '10-digit mobile number' : 'Phone number'}
                       required
                       disabled={isLoadingProfile}
-                      className="w-full pl-10 pr-4 py-2.5 bg-allura-bg border border-allura-border rounded-xl text-xs font-sans text-allura-text focus:outline-none focus:border-allura-gold disabled:opacity-60"
+                      aria-invalid={phoneTouched && !!phoneError}
+                      className={`w-full pl-10 pr-4 py-2.5 bg-allura-bg border rounded-xl text-xs font-sans text-allura-text focus:outline-none focus:border-allura-gold disabled:opacity-60 ${
+                        phoneTouched && phoneError ? 'border-red-400' : 'border-allura-border'
+                      }`}
                     />
                   </div>
                 </div>
+                {phoneTouched && phoneError && <p className="mt-1 text-[11px] text-red-600">{phoneError}</p>}
               </div>
 
               <div>
                 <label className="block text-[11px] font-sans font-bold uppercase tracking-wider text-allura-muted mb-1">
-                  Avatar URL
+                  Profile Image
                 </label>
-                <input
-                  type="text"
-                  value={avatarUrl}
-                  onChange={e => setAvatarUrl(e.target.value)}
-                  placeholder="https://..."
-                  disabled={isLoadingProfile}
-                  className="w-full px-4 py-2.5 bg-allura-bg border border-allura-border rounded-xl text-xs font-sans text-allura-text focus:outline-none focus:border-allura-gold disabled:opacity-60"
-                />
+                <div className="flex items-center gap-3">
+                  {avatarUrl && (
+                    <div className="w-10 h-10 rounded-full overflow-hidden border border-allura-border shrink-0 bg-allura-bg">
+                      <img src={avatarUrl} alt="Avatar preview" className="w-full h-full object-cover" />
+                    </div>
+                  )}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    disabled={isLoadingProfile}
+                    onChange={e => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onload = event => {
+                          if (event.target?.result) {
+                            setAvatarUrl(event.target.result as string);
+                          }
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                    className="flex-1 w-full text-xs font-sans text-allura-text file:cursor-pointer file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-allura-gold/10 file:text-allura-goldDark hover:file:bg-allura-gold/20 focus:outline-none disabled:opacity-60"
+                  />
+                </div>
               </div>
             </div>
 
@@ -250,8 +295,9 @@ export const AuthPage: React.FC = () => {
               disabled={isLoadingProfile || isSavingProfile}
               className="w-full bg-allura-darkBrown hover:bg-allura-softBrown text-white py-3 rounded-xl text-xs font-sans font-bold tracking-widest uppercase transition-colors flex items-center justify-center gap-2 mt-4 disabled:opacity-50"
             >
-              <span>{isSavingProfile ? 'Saving...' : 'Save & Continue to Boutique'}</span>
-              <ArrowRight size={14} />
+              {isSavingProfile && <Loader2 size={14} className="animate-spin" />}
+              <span>{isSavingProfile ? 'Saving…' : isLoadingProfile ? 'Loading…' : 'Save & Continue to Boutique'}</span>
+              {!isSavingProfile && !isLoadingProfile && <ArrowRight size={14} />}
             </button>
 
             <button

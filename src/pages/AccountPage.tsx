@@ -84,8 +84,12 @@ export const AccountPage: React.FC = () => {
       {/* Account Profile Header */}
       <div className="bg-allura-card p-6 sm:p-8 rounded-2xl border border-allura-border shadow-subtle flex flex-col sm:flex-row items-center justify-between gap-6">
         <div className="flex items-center gap-4 text-center sm:text-left">
-          <div className="w-16 h-16 rounded-full bg-allura-bgSecondary text-allura-goldDark font-serif text-2xl font-bold flex items-center justify-center border-2 border-allura-gold flex-shrink-0 shadow-sm">
-            {customer?.name?.charAt(0) || 'A'}
+          <div className="w-16 h-16 rounded-full bg-allura-bgSecondary text-allura-goldDark font-serif text-2xl font-bold flex items-center justify-center border-2 border-allura-gold flex-shrink-0 shadow-sm overflow-hidden">
+            {customer?.avatar ? (
+              <img src={customer.avatar} alt={customer.name} className="w-full h-full object-cover" />
+            ) : (
+              customer?.name?.charAt(0) || 'A'
+            )}
           </div>
           <div>
             <div className="flex items-center gap-2 justify-center sm:justify-start">

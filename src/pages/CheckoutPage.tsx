@@ -24,6 +24,7 @@ import type { CheckoutRequest, CheckoutSummary, CheckoutSession } from '../servi
 import type { CartItem, SavedAddress } from '../types';
 import { useOrderPayment } from '../hooks/useOrderPayment';
 import { newMetaEventId, metaHeaders, trackMetaEvent } from '../utils/metaPixel';
+import { normalizeMobile, normalizePincode, mobileError, pincodeError } from '../utils/addressValidation';
 
 type DeliveryMethod = 'STANDARD' | 'STORE_PICKUP';
 type PaymentMethod = 'upi' | 'card' | 'cod';
@@ -128,7 +129,7 @@ export const CheckoutPage: React.FC = () => {
     setNewAddress(prev => ({
       ...prev,
       fullName: prev.fullName || customer.name || '',
-      phone: prev.phone || (typeof customer.phone === 'string' ? customer.phone : '') || '',
+      phone: prev.phone || normalizeMobile(typeof customer.phone === 'string' ? customer.phone : ''),
     }));
   }, [customer]);
 
@@ -225,18 +226,30 @@ export const CheckoutPage: React.FC = () => {
   // Same key for retries of the same attempt; a new one when anything changes
   const idempotency = useRef<{ signature: string; key: string; metaEventId: string } | null>(null);
 
+  // Mobile / PIN errors show once the field is left or the address is submitted
+  const [addrTouched, setAddrTouched] = useState({ phone: false, postalCode: false });
+  const newPhoneError = mobileError(newAddress.phone);
+  const newPinError = pincodeError(newAddress.postalCode);
+
   const saveNewAddress = async (): Promise<string | null> => {
     const a = newAddress;
     if (!a.fullName.trim() || !a.phone.trim() || !a.addressLine1.trim() || !a.city.trim() || !a.state.trim() || !a.postalCode.trim()) {
+      setAddrTouched({ phone: true, postalCode: true });
       setPlaceError('Please fill in all required address fields.');
       return null;
     }
+    if (newPhoneError || newPinError) {
+      setAddrTouched({ phone: true, postalCode: true });
+      setPlaceError(newPhoneError || newPinError);
+      return null;
+    }
+    setPlaceError(null);
     setIsSavingAddress(true);
     try {
       const saved = await addCustomerAddress({
         label: a.label,
         fullName: a.fullName.trim(),
-        phone: { countryCode: '+91', number: a.phone.replace(/^\+91\s*/, '').replace(/\s+/g, '') },
+        phone: { countryCode: '+91', number: normalizeMobile(a.phone) },
         addressLine1: a.addressLine1.trim(),
         ...(a.addressLine2.trim() ? { addressLine2: a.addressLine2.trim() } : {}),
         ...(a.landmark.trim() ? { landmark: a.landmark.trim() } : {}),
@@ -617,7 +630,23 @@ export const CheckoutPage: React.FC = () => {
                   </div>
                   <div className="space-y-1">
                     <label className="text-xs font-bold text-allura-darkBrown uppercase">Mobile Number *</label>
-                    <input type="tel" required placeholder="98471 23456" value={newAddress.phone} onChange={e => setNewAddress({ ...newAddress, phone: e.target.value })} className={inputClass} />
+                    <div className={`flex items-center bg-allura-bg border rounded focus-within:border-allura-gold ${addrTouched.phone && newPhoneError ? 'border-red-400' : 'border-allura-border'}`}>
+                      <span className="pl-3 pr-1 text-xs text-allura-muted">+91</span>
+                      <input
+                        type="tel"
+                        inputMode="numeric"
+                        autoComplete="tel-national"
+                        required
+                        maxLength={10}
+                        placeholder="10-digit mobile number"
+                        value={newAddress.phone}
+                        onChange={e => setNewAddress({ ...newAddress, phone: normalizeMobile(e.target.value) })}
+                        onBlur={() => setAddrTouched(t => ({ ...t, phone: true }))}
+                        aria-invalid={addrTouched.phone && !!newPhoneError}
+                        className="flex-1 min-w-0 bg-transparent p-3 pl-1 text-xs text-allura-text focus:outline-none"
+                      />
+                    </div>
+                    {addrTouched.phone && newPhoneError && <p className="text-[11px] text-red-600">{newPhoneError}</p>}
                   </div>
                 </div>
 
@@ -648,7 +677,20 @@ export const CheckoutPage: React.FC = () => {
                   </div>
                   <div className="space-y-1">
                     <label className="text-xs font-bold text-allura-darkBrown uppercase">PIN Code *</label>
-                    <input type="text" required inputMode="numeric" value={newAddress.postalCode} onChange={e => setNewAddress({ ...newAddress, postalCode: e.target.value })} className={inputClass} />
+                    <input
+                      type="text"
+                      required
+                      inputMode="numeric"
+                      autoComplete="postal-code"
+                      maxLength={6}
+                      placeholder="6 digits"
+                      value={newAddress.postalCode}
+                      onChange={e => setNewAddress({ ...newAddress, postalCode: normalizePincode(e.target.value) })}
+                      onBlur={() => setAddrTouched(t => ({ ...t, postalCode: true }))}
+                      aria-invalid={addrTouched.postalCode && !!newPinError}
+                      className={`${inputClass} ${addrTouched.postalCode && newPinError ? '!border-red-400' : ''}`}
+                    />
+                    {addrTouched.postalCode && newPinError && <p className="text-[11px] text-red-600">{newPinError}</p>}
                   </div>
                 </div>
 

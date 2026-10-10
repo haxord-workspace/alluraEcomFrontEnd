@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { ArrowLeft, Plus, MapPin, Edit3, Trash2 } from 'lucide-react';
 import { useShop } from '../../context/ShopContext';
 import type { SavedAddress } from '../../types';
+import { normalizeMobile, normalizePincode, mobileError, pincodeError } from '../../utils/addressValidation';
 
 export const AccountAddressesPage: React.FC = () => {
   const { customer, fetchCustomerAddresses, addCustomerAddress, updateCustomerAddress, deleteCustomerAddress } = useShop();
@@ -13,6 +14,8 @@ export const AccountAddressesPage: React.FC = () => {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingAddressId, setEditingAddressId] = useState<string | null>(null);
+  // Show field errors after the field is left or the form is submitted
+  const [touched, setTouched] = useState({ phone: false, postalCode: false });
 
   const [formData, setFormData] = useState({
     label: 'Home',
@@ -34,7 +37,7 @@ export const AccountAddressesPage: React.FC = () => {
     setFormData({
       label: 'Home',
       fullName: customer?.name || '',
-      phone: { countryCode: '+91', number: customer?.phone?.replace('+91 ', '') || '' },
+      phone: { countryCode: '+91', number: normalizeMobile(customer?.phone || '') },
       addressLine1: '',
       addressLine2: '',
       landmark: '',
@@ -45,6 +48,7 @@ export const AccountAddressesPage: React.FC = () => {
       isDefaultShipping: false,
       isDefaultBilling: false,
     });
+    setTouched({ phone: false, postalCode: false });
     setIsModalOpen(true);
   };
 
@@ -53,7 +57,7 @@ export const AccountAddressesPage: React.FC = () => {
     setFormData({
       label: addr.label,
       fullName: addr.fullName,
-      phone: { countryCode: addr.phone.countryCode, number: addr.phone.number },
+      phone: { countryCode: addr.phone.countryCode || '+91', number: normalizeMobile(addr.phone.number) },
       addressLine1: addr.addressLine1,
       addressLine2: addr.addressLine2 || '',
       landmark: addr.landmark || '',
@@ -64,12 +68,20 @@ export const AccountAddressesPage: React.FC = () => {
       isDefaultShipping: addr.isDefaultShipping,
       isDefaultBilling: addr.isDefaultBilling,
     });
+    setTouched({ phone: false, postalCode: false });
     setIsModalOpen(true);
   };
+
+  const phoneErr = mobileError(formData.phone.number);
+  const pinErr = pincodeError(formData.postalCode);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!customer) return;
+    if (phoneErr || pinErr) {
+      setTouched({ phone: true, postalCode: true });
+      return;
+    }
 
     try {
       if (editingAddressId) {
@@ -191,17 +203,31 @@ export const AccountAddressesPage: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block font-bold text-allura-muted uppercase text-[10px] mb-1">Phone Number</label>
-                <input
-                  type="tel"
-                  required
-                  value={formData.phone.number}
-                  onChange={e => setFormData({ 
-                    ...formData, 
-                    phone: { ...formData.phone, number: e.target.value } 
-                  })}
-                  className="w-full p-2.5 bg-allura-bg border border-allura-border rounded-xl focus:border-allura-gold outline-none"
-                />
+                <label className="block font-bold text-allura-muted uppercase text-[10px] mb-1">Mobile Number</label>
+                <div
+                  className={`flex items-center bg-allura-bg border rounded-xl focus-within:border-allura-gold ${
+                    touched.phone && phoneErr ? 'border-red-400' : 'border-allura-border'
+                  }`}
+                >
+                  <span className="pl-2.5 pr-1 text-allura-muted">+91</span>
+                  <input
+                    type="tel"
+                    inputMode="numeric"
+                    autoComplete="tel-national"
+                    required
+                    maxLength={10}
+                    placeholder="10-digit mobile number"
+                    value={formData.phone.number}
+                    onChange={e => setFormData({
+                      ...formData,
+                      phone: { ...formData.phone, number: normalizeMobile(e.target.value) },
+                    })}
+                    onBlur={() => setTouched(t => ({ ...t, phone: true }))}
+                    aria-invalid={touched.phone && !!phoneErr}
+                    className="flex-1 min-w-0 p-2.5 pl-1 bg-transparent outline-none"
+                  />
+                </div>
+                {touched.phone && phoneErr && <p className="mt-1 text-[11px] text-red-600">{phoneErr}</p>}
               </div>
               <div>
                 <label className="block font-bold text-allura-muted uppercase text-[10px] mb-1">Street Address</label>
@@ -226,14 +252,23 @@ export const AccountAddressesPage: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-allura-muted uppercase text-[10px] mb-1">Postal Code</label>
+                  <label className="block font-bold text-allura-muted uppercase text-[10px] mb-1">PIN Code</label>
                   <input
                     type="text"
+                    inputMode="numeric"
+                    autoComplete="postal-code"
                     required
+                    maxLength={6}
+                    placeholder="6 digits"
                     value={formData.postalCode}
-                    onChange={e => setFormData({ ...formData, postalCode: e.target.value })}
-                    className="w-full p-2.5 bg-allura-bg border border-allura-border rounded-xl focus:border-allura-gold outline-none"
+                    onChange={e => setFormData({ ...formData, postalCode: normalizePincode(e.target.value) })}
+                    onBlur={() => setTouched(t => ({ ...t, postalCode: true }))}
+                    aria-invalid={touched.postalCode && !!pinErr}
+                    className={`w-full p-2.5 bg-allura-bg border rounded-xl focus:border-allura-gold outline-none ${
+                      touched.postalCode && pinErr ? 'border-red-400' : 'border-allura-border'
+                    }`}
                   />
+                  {touched.postalCode && pinErr && <p className="mt-1 text-[11px] text-red-600">{pinErr}</p>}
                 </div>
               </div>
               <div>

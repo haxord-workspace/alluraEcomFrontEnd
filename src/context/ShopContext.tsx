@@ -14,6 +14,7 @@ import type {
 } from '../types';
 import { login, register, logout, googleLogin } from '../service/auth';
 import type { LoginData, RegisterData, GoogleLoginData } from '../service/auth';
+import { getCustomerProfile, profileDisplayName, profilePhone } from '../service/customer';
 import { getStoreProducts, getStoreCategories, getStoreProduct, NO_COLOR } from '../service/store';
 import { getAddresses, addAddress, updateAddress, deleteAddress } from '../service/address';
 import { getWishlist, addWishlistItem, removeWishlistItem, clearWishlist as clearWishlistApi } from '../service/wishlist';
@@ -384,6 +385,34 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error(e);
     }
   }, [customer]);
+
+  // GET /customer/profile: real name, phone and avatar for the signed-in customer
+  // (the login response may only carry the email). Runs after sign-in and on app start.
+  const syncCustomerProfile = useCallback(async () => {
+    if (!hasCustomerSession()) return;
+    try {
+      const p = await getCustomerProfile();
+      setCustomer(prev =>
+        prev
+          ? {
+              ...prev,
+              id: prev.id && !prev.id.startsWith('usr-') ? prev.id : p.id || prev.id,
+              name: profileDisplayName(p) || prev.name,
+              email: p.email || prev.email,
+              phone: profilePhone(p) || prev.phone,
+              avatar: p.avatarUrl || prev.avatar,
+            }
+          : prev
+      );
+    } catch (e) {
+      console.warn('Could not load the customer profile:', e);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (customerId && !isAdminRoute) syncCustomerProfile();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customerId]);
 
   // Drop the old locally-stored sample orders and clear orders on logout
   useEffect(() => {
