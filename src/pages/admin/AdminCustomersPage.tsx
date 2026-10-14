@@ -1,11 +1,21 @@
-import React, { useState } from 'react';
-import { Search, Eye, MessageCircle, Sparkles } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Search, Eye, MessageCircle, Sparkles, UserCheck, Users, ShoppingBag } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAdmin } from '../../context/AdminContext';
+import { getDashboardCustomers, type CustomerAnalyticsResponse } from '../../service/adminDashboard';
 
 export const AdminCustomersPage: React.FC = () => {
   const { customers } = useAdmin();
   const [searchQuery, setSearchQuery] = useState('');
+  const [analytics, setAnalytics] = useState<CustomerAnalyticsResponse | null>(null);
+
+  useEffect(() => {
+    getDashboardCustomers()
+      .then(setAnalytics)
+      .catch(err => console.warn('Could not load customer analytics:', err));
+  }, []);
+
+  const totalPatrons = analytics?.totalCustomers ?? customers.length;
 
   const filtered = customers.filter(
     c =>
@@ -23,7 +33,7 @@ export const AdminCustomersPage: React.FC = () => {
             PATRON DATABASE & CRM
           </span>
           <h1 className="font-serif text-3xl text-stone-900 font-normal mt-0.5">
-            Allura Customers ({customers.length})
+            Allura Customers ({totalPatrons})
           </h1>
           <p className="text-xs font-sans text-stone-500">
             360-degree customer profiles, lifetime spending, size preferences, and dedicated WhatsApp concierge links.
@@ -39,6 +49,48 @@ export const AdminCustomersPage: React.FC = () => {
             onChange={e => setSearchQuery(e.target.value)}
             className="w-full pl-10 pr-4 py-2 bg-white border border-stone-200 rounded-xl text-xs font-sans text-stone-900 focus:outline-none"
           />
+        </div>
+      </div>
+
+      {/* Customer Analytics KPI Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="bg-white border border-stone-200 rounded-2xl p-4 shadow-xs space-y-1">
+          <div className="flex justify-between items-center text-stone-400">
+            <span className="text-[10px] font-bold uppercase">Total Patrons</span>
+            <Users size={14} />
+          </div>
+          <p className="font-serif text-2xl font-bold text-stone-900">{totalPatrons}</p>
+          <p className="text-[11px] text-stone-500 font-sans">Active in boutique CRM</p>
+        </div>
+        <div className="bg-white border border-stone-200 rounded-2xl p-4 shadow-xs space-y-1">
+          <div className="flex justify-between items-center text-emerald-700">
+            <span className="text-[10px] font-bold uppercase">New Registrations</span>
+            <UserCheck size={14} />
+          </div>
+          <p className="font-serif text-2xl font-bold text-emerald-800">
+            {analytics?.newCustomersInPeriod ?? 0}
+          </p>
+          <p className="text-[11px] text-emerald-700 font-sans">Current window</p>
+        </div>
+        <div className="bg-white border border-stone-200 rounded-2xl p-4 shadow-xs space-y-1">
+          <div className="flex justify-between items-center text-allura-goldDark">
+            <span className="text-[10px] font-bold uppercase">Repeat Patrons</span>
+            <Sparkles size={14} />
+          </div>
+          <p className="font-serif text-2xl font-bold text-allura-darkBrown">
+            {analytics?.customerOrderFrequency.repeatOrderCount ?? 0}
+          </p>
+          <p className="text-[11px] text-stone-500 font-sans">2+ Atelier orders</p>
+        </div>
+        <div className="bg-white border border-stone-200 rounded-2xl p-4 shadow-xs space-y-1">
+          <div className="flex justify-between items-center text-stone-400">
+            <span className="text-[10px] font-bold uppercase">First-Time Buyers</span>
+            <ShoppingBag size={14} />
+          </div>
+          <p className="font-serif text-2xl font-bold text-stone-900">
+            {analytics?.customerOrderFrequency.singleOrderCount ?? 0}
+          </p>
+          <p className="text-[11px] text-stone-500 font-sans">1 Atelier purchase</p>
         </div>
       </div>
 

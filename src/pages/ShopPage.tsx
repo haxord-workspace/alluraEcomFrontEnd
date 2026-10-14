@@ -1,12 +1,14 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { SlidersHorizontal, ArrowUpDown, Check, RotateCcw, Sparkles } from 'lucide-react';
+import { SlidersHorizontal, ArrowUpDown, Check, RotateCcw, Sparkles, ArrowRight } from 'lucide-react';
 import { useShop } from '../context/ShopContext';
+import { useAdmin } from '../context/AdminContext';
 import { ProductCard } from '../components/ui/ProductCard';
 import { BottomSheet } from '../components/modals/BottomSheet';
 
 export const ShopPage: React.FC = () => {
   const { products, categories, isLoadingProducts } = useShop();
+  const { banners } = useAdmin();
   const [searchParams, setSearchParams] = useSearchParams();
   const filterParam = searchParams.get('filter');
   const catParam = searchParams.get('category');
@@ -21,6 +23,25 @@ export const ShopPage: React.FC = () => {
   const [sortBy, setSortBy] = useState<'featured' | 'newest' | 'price-asc' | 'price-desc' | 'rating'>(
     filterParam === 'new' ? 'newest' : 'featured'
   );
+
+  const activeShopBanner = useMemo(() => {
+    const activeBanners = (banners || []).filter(
+      b => (b.status?.toLowerCase() === 'active' || b.status === 'Active' || (b as any).isActive === true) &&
+           Boolean(b.desktopImage)
+    );
+
+    if (selectedCategory && selectedCategory !== 'All') {
+      const catBanner = activeBanners.find(
+        b => b.placement === 'CATEGORY_BANNER' && 
+             (b.title?.toLowerCase().includes(selectedCategory.toLowerCase()) || 
+              b.headline?.toLowerCase().includes(selectedCategory.toLowerCase()) ||
+              b.targetUrl?.toLowerCase().includes(encodeURIComponent(selectedCategory.toLowerCase())))
+      );
+      if (catBanner) return catBanner;
+    }
+
+    return activeBanners.find(b => b.placement === 'SHOP_BANNER' || b.placement === 'CATEGORY_BANNER');
+  }, [banners, selectedCategory]);
 
   const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false);
   const [isSortSheetOpen, setIsSortSheetOpen] = useState(false);
@@ -192,6 +213,50 @@ export const ShopPage: React.FC = () => {
           <span>Sort By</span>
         </button>
       </div>
+
+      {/* Active Shop / Category Banner from Admin Studio */}
+      {activeShopBanner && (
+        <div className="relative mb-6 sm:mb-8 rounded-2xl overflow-hidden shadow-md border border-allura-border/60 aspect-[21/9] sm:aspect-[24/7] min-h-[140px] max-h-[260px] group">
+          <picture className="w-full h-full">
+            {activeShopBanner.mobileImage && (
+              <source media="(max-width: 640px)" srcSet={activeShopBanner.mobileImage} />
+            )}
+            <img
+              src={activeShopBanner.desktopImage}
+              alt={activeShopBanner.headline || activeShopBanner.title}
+              className="w-full h-full object-cover object-[center_35%] group-hover:scale-102 transition-transform duration-700"
+            />
+          </picture>
+          <div className="absolute inset-0 bg-gradient-to-r from-allura-darkBrown/90 via-allura-darkBrown/50 to-transparent flex items-center p-6 sm:p-10">
+            <div className="max-w-xl text-white space-y-2">
+              {activeShopBanner.badge && (
+                <span className="inline-block text-[10px] font-sans font-bold uppercase tracking-[0.2em] text-allura-gold">
+                  {activeShopBanner.badge}
+                </span>
+              )}
+              <h2 className="font-serif text-xl sm:text-3xl font-medium tracking-tight">
+                {activeShopBanner.headline || activeShopBanner.title}
+              </h2>
+              {(activeShopBanner.subtitle || activeShopBanner.description) && (
+                <p className="text-xs sm:text-sm text-allura-bgSecondary/90 font-sans max-w-md line-clamp-2">
+                  {activeShopBanner.subtitle || activeShopBanner.description}
+                </p>
+              )}
+              {activeShopBanner.targetUrl && (
+                <div className="pt-1">
+                  <a
+                    href={activeShopBanner.targetUrl}
+                    className="inline-flex items-center gap-1.5 text-xs font-sans font-bold tracking-wider text-allura-gold hover:text-white uppercase transition-colors"
+                  >
+                    <span>{activeShopBanner.ctaText || 'EXPLORE NOW'}</span>
+                    <ArrowRight size={13} />
+                  </a>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Layout: Desktop Sidebar + Product Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">

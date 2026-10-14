@@ -9,6 +9,8 @@ import {
   Square,
   Barcode,
   RefreshCw,
+  ChevronDown,
+  Loader2,
 } from 'lucide-react';
 import { useAdmin } from '../../context/AdminContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
@@ -19,6 +21,7 @@ import {
   createAdminProduct,
   updateAdminProduct,
   updateAdminProductStatus,
+  deleteAdminProduct,
 } from '../../service/adminProducts';
 import {
   createAdminVariant,
@@ -32,7 +35,9 @@ import { ProductVariantsEditor, buildVariantSku } from '../../components/admin/P
 import { ProductImagesEditor } from '../../components/admin/ProductImagesEditor';
 import type { VariantRow } from '../../components/admin/ProductVariantsEditor';
 import { useShop } from '../../context/ShopContext';
+import { getDashboardProducts, type ProductAnalyticsResponse } from '../../service/adminDashboard';
 import type { AdminProduct, AdminProductVariant } from '../../types';
+import { getBackendErrorMessage } from '../../utils/apiResponse';
 
 // Default form state
 const EMPTY_FORM = {
@@ -69,7 +74,7 @@ const toVariantPayload = (v: VariantRow, productSku: string, pricing: ProductPri
 };
 
 const apiErrorMessage = (err: any, fallback: string): string =>
-  err?.response?.data?.error?.details?.[0]?.message || err?.response?.data?.message || fallback;
+  getBackendErrorMessage(err, fallback);
 
 // One retry for transient failures (server error, rate limit, network drop)
 const withRetry = async <T,>(fn: () => Promise<T>): Promise<T> => {
@@ -96,12 +101,43 @@ const toVariantRow = (v: AdminProductVariant, pricing: ProductPricing): VariantR
   status: v.status,
 });
 
+const getStatusSelectStyle = (status: string) => {
+  const normalized = (status || '').toLowerCase();
+  if (
+    normalized.includes('delivered') ||
+    normalized.includes('paid') ||
+    normalized.includes('active') ||
+    normalized.includes('captured') ||
+    normalized.includes('approved') ||
+    normalized.includes('completed') ||
+    normalized.includes('published')
+  ) {
+    return 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100/80';
+  } else if (
+    normalized.includes('pending') ||
+    normalized.includes('review') ||
+    normalized.includes('draft')
+  ) {
+    return 'bg-blue-50 text-blue-800 border-blue-200 hover:bg-blue-100/80';
+  } else if (
+    normalized.includes('cancelled') ||
+    normalized.includes('failed') ||
+    normalized.includes('rejected') ||
+    normalized.includes('out of stock') ||
+    normalized.includes('archived')
+  ) {
+    return 'bg-rose-50 text-rose-800 border-rose-200 hover:bg-rose-100/80';
+  }
+  return 'bg-stone-100 text-stone-700 border-stone-200 hover:bg-stone-200/80';
+};
+
 export const AdminProductsPage: React.FC = () => {
   const { hasPermission } = useAdmin();
   const { showToast } = useShop();
 
   // ── API state ──────────────────────────────────────────────────────────────
   const [products, setProducts] = useState<AdminProduct[]>([]);
+  const [catalogAnalytics, setCatalogAnalytics] = useState<ProductAnalyticsResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -111,6 +147,7 @@ export const AdminProductsPage: React.FC = () => {
 
   // ── Bulk selection ─────────────────────────────────────────────────────────
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [busyStatusId, setBusyStatusId] = useState<string | null>(null);
 
   // ── Delete confirm ─────────────────────────────────────────────────────────
   const [deleteModal, setDeleteModal] = useState<{ id: string; name: string } | null>(null);
@@ -133,8 +170,13 @@ export const AdminProductsPage: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const [data, variants] = await Promise.all([getAdminProducts(), getAdminVariants().catch(() => [])]);
+      const [data, variants, dashboardCatalog] = await Promise.all([
+        getAdminProducts(),
+        getAdminVariants().catch(() => []),
+        getDashboardProducts().catch(() => null),
+      ]);
       setProducts(data);
+      if (dashboardCatalog) setCatalogAnalytics(dashboardCatalog);
       const byProduct: Record<string, number[]> = {};
       variants.forEach(v => {
         const price = v.pricing?.sellingPrice;
@@ -167,23 +209,65 @@ export const AdminProductsPage: React.FC = () => {
     setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   };
 
-  // ── Bulk status change ─────────────────────────────────────────────────────
-  const handleBulkArchive = async () => {
-    await Promise.all(selectedIds.map(id => updateAdminProductStatus(id, 'ARCHIVED')));
-    setSelectedIds([]);
-    fetchProducts();
+  // ── Interactive single product status change ──────────────────────────────
+  const handleStatusChange = async (productId: string, newStatus: AdminProduct['status']) => {
+    setBusyStatusId(productId);
+    try {
+      const updated = await updateAdminProductStatus(productId, newStatus);
+      const effectiveStatus = updated?.status || newStatus;
+      setProducts(prev =>
+        prev.map(p => (p.id === productId ? { ...p, status: effectiveStatus } : p))
+      );
+      showToast(updated?._message || `Product status changed to ${effectiveStatus}`, 'success');
+    } catch (err: any) {
+      console.error('Failed to update product status:', err);
+      showToast(getBackendErrorMessage(err, 'Failed to update product status'), 'error');
+    } finally {
+      setBusyStatusId(null);
+    }
   };
 
-  // ── Delete ─────────────────────────────────────────────────────────────────
+  // ── Bulk status change ─────────────────────────────────────────────────────
+  const handleBulkArchive = async () => {
+    try {
+      await Promise.all(selectedIds.map(id => updateAdminProductStatus(id, 'ARCHIVED')));
+      setProducts(prev =>
+        prev.map(p => (selectedIds.includes(p.id) ? { ...p, status: 'ARCHIVED' } : p))
+      );
+      setSelectedIds([]);
+      showToast(`${selectedIds.length} product(s) archived`, 'success');
+    } catch (err: any) {
+      console.error('Failed to bulk archive:', err);
+      showToast(apiErrorMessage(err, 'Failed to archive products'), 'error');
+    }
+  };
+
+  // ── Delete product ────────────────────────────────────────────────────────
   const handleDelete = async () => {
     if (!deleteModal) return;
     try {
-      await updateAdminProductStatus(deleteModal.id, 'ARCHIVED');
-      setProducts(products.filter(p => p.id !== deleteModal.id));
-    } catch (err) {
-      console.error('Failed to archive product:', err);
+      const msg = await deleteAdminProduct(deleteModal.id);
+      setProducts(prev => prev.filter(p => p.id !== deleteModal.id));
+      showToast(msg || `Product "${deleteModal.name}" deleted successfully`, 'success');
+    } catch (err: any) {
+      console.error('Failed to delete product:', err);
+      showToast(getBackendErrorMessage(err, 'Failed to delete product'), 'error');
     } finally {
       setDeleteModal(null);
+    }
+  };
+
+  // ── Bulk delete ────────────────────────────────────────────────────────────
+  const handleBulkDelete = async () => {
+    if (!window.confirm(`Are you sure you want to permanently delete ${selectedIds.length} product(s)?`)) return;
+    try {
+      await Promise.all(selectedIds.map(id => deleteAdminProduct(id)));
+      setProducts(prev => prev.filter(p => !selectedIds.includes(p.id)));
+      showToast(`${selectedIds.length} product(s) deleted successfully`, 'success');
+      setSelectedIds([]);
+    } catch (err: any) {
+      console.error('Failed to delete selected products:', err);
+      showToast(apiErrorMessage(err, 'Failed to delete selected products'), 'error');
     }
   };
 
@@ -295,6 +379,14 @@ export const AdminProductsPage: React.FC = () => {
       let saved: AdminProduct;
       if (editingId) {
         saved = await updateAdminProduct(editingId, productPayload);
+        if (formData.status) {
+          try {
+            const statusUpdated = await updateAdminProductStatus(editingId, formData.status);
+            if (statusUpdated?.status) saved.status = statusUpdated.status;
+          } catch (statusErr) {
+            console.warn('Status update via endpoint failed:', statusErr);
+          }
+        }
         setProducts(products.map(p => (p.id === editingId ? saved : p)));
       } else {
         saved = await createAdminProduct(productPayload);
@@ -314,11 +406,11 @@ export const AdminProductsPage: React.FC = () => {
         return;
       }
 
-      showToast(editingId ? 'Product updated' : 'Product created', 'success');
+      showToast(saved._message || (editingId ? 'Product updated successfully' : 'Product created successfully'), 'success');
       setIsModalOpen(false);
     } catch (err: any) {
       console.error('Failed to save product:', err);
-      showToast(err?.response?.data?.error?.details?.[0]?.message || err?.response?.data?.message || 'Failed to save product', 'error');
+      showToast(getBackendErrorMessage(err, 'Failed to save product'), 'error');
     } finally {
       setIsSaving(false);
       setSaveProgress('');
@@ -374,6 +466,40 @@ export const AdminProductsPage: React.FC = () => {
         </div>
       </div>
 
+      {/* Catalog KPI Metrics */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="bg-white border border-stone-200 rounded-2xl p-4 shadow-xs space-y-1">
+          <span className="text-[10px] font-bold uppercase text-stone-400">Total Catalog</span>
+          <p className="font-serif text-2xl font-bold text-stone-900">
+            {catalogAnalytics?.totalProducts ?? products.length}
+          </p>
+          <p className="text-[11px] text-stone-500 font-sans">
+            {catalogAnalytics?.totalVariants ?? '—'} Sellable SKUs
+          </p>
+        </div>
+        <div className="bg-white border border-stone-200 rounded-2xl p-4 shadow-xs space-y-1">
+          <span className="text-[10px] font-bold uppercase text-emerald-700">Active Live</span>
+          <p className="font-serif text-2xl font-bold text-emerald-800">
+            {catalogAnalytics?.activeProducts ?? products.filter(p => p.status === 'ACTIVE').length}
+          </p>
+          <p className="text-[11px] text-emerald-700 font-sans">Visible on boutique</p>
+        </div>
+        <div className="bg-white border border-stone-200 rounded-2xl p-4 shadow-xs space-y-1">
+          <span className="text-[10px] font-bold uppercase text-stone-400">Drafts & Archived</span>
+          <p className="font-serif text-2xl font-bold text-stone-900">
+            {catalogAnalytics?.inactiveProducts ?? products.filter(p => p.status !== 'ACTIVE').length}
+          </p>
+          <p className="text-[11px] text-stone-500 font-sans">Unpublished items</p>
+        </div>
+        <div className="bg-white border border-stone-200 rounded-2xl p-4 shadow-xs space-y-1">
+          <span className="text-[10px] font-bold uppercase text-allura-goldDark">Best Sellers</span>
+          <p className="font-serif text-2xl font-bold text-allura-darkBrown">
+            {catalogAnalytics?.bestSellingProducts?.length ?? 0}
+          </p>
+          <p className="text-[11px] text-stone-500 font-sans">High velocity pieces</p>
+        </div>
+      </div>
+
       {/* Toolbar & Filters */}
       <div className="bg-white border border-stone-200 rounded-2xl p-4 shadow-xs space-y-4">
         <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
@@ -407,9 +533,17 @@ export const AdminProductsPage: React.FC = () => {
           <div className="bg-stone-900 text-white p-3 rounded-xl flex items-center justify-between text-xs font-sans animate-slide-up">
             <span className="font-semibold">{selectedIds.length} item(s) selected</span>
             <div className="flex items-center gap-2">
+              {hasPermission('products', 'delete') && (
+                <button
+                  onClick={handleBulkDelete}
+                  className="px-3 py-1 bg-rose-700 hover:bg-rose-800 rounded-lg text-white font-medium transition-colors"
+                >
+                  Delete Selected
+                </button>
+              )}
               <button
                 onClick={handleBulkArchive}
-                className="px-3 py-1 bg-stone-800 hover:bg-stone-700 rounded-lg text-stone-200"
+                className="px-3 py-1 bg-stone-800 hover:bg-stone-700 rounded-lg text-stone-200 transition-colors"
               >
                 Archive Selected
               </button>
@@ -443,7 +577,7 @@ export const AdminProductsPage: React.FC = () => {
               </button>
             </div>
           ) : (
-            <table className="w-full text-left text-xs font-sans border-collapse">
+            <table className="w-full min-w-[720px] text-left text-xs font-sans border-collapse">
               <thead>
                 <tr className="bg-stone-50 border-b border-stone-200 text-stone-500 uppercase tracking-wider text-[10px]">
                   <th className="p-4 w-10">
@@ -537,7 +671,42 @@ export const AdminProductsPage: React.FC = () => {
                         </p>
                       </td>
                       <td className="p-4">
-                        <StatusBadge status={product.status} size="sm" />
+                        {hasPermission('products', 'edit') ? (
+                          <div className="relative inline-flex items-center">
+                            <select
+                              value={product.status || 'DRAFT'}
+                              disabled={busyStatusId === product.id}
+                              onChange={e => handleStatusChange(product.id, e.target.value as AdminProduct['status'])}
+                              title="Click to change product status"
+                              className={`appearance-none cursor-pointer pl-5 pr-6 py-0.5 text-[10px] font-sans font-semibold rounded-full border transition-all focus:outline-none focus:ring-1 focus:ring-stone-400 disabled:opacity-60 disabled:cursor-not-allowed ${getStatusSelectStyle(
+                                product.status
+                              )}`}
+                            >
+                              <option value="ACTIVE" className="bg-white text-stone-900 py-1 font-sans">
+                                ACTIVE
+                              </option>
+                              <option value="DRAFT" className="bg-white text-stone-900 py-1 font-sans">
+                                DRAFT
+                              </option>
+                              <option value="ARCHIVED" className="bg-white text-stone-900 py-1 font-sans">
+                                ARCHIVED
+                              </option>
+                            </select>
+                            <span className="absolute left-2 pointer-events-none flex items-center justify-center">
+                              {busyStatusId === product.id ? (
+                                <Loader2 size={10} className="animate-spin text-current" />
+                              ) : (
+                                <span className="w-1.5 h-1.5 rounded-full bg-current opacity-75" />
+                              )}
+                            </span>
+                            <ChevronDown
+                              size={11}
+                              className="absolute right-1.5 pointer-events-none text-current opacity-60"
+                            />
+                          </div>
+                        ) : (
+                          <StatusBadge status={product.status} size="sm" />
+                        )}
                       </td>
                       <td className="p-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
@@ -553,7 +722,7 @@ export const AdminProductsPage: React.FC = () => {
                           {hasPermission('products', 'delete') && (
                             <button
                               onClick={() => setDeleteModal({ id: product.id, name: product.name })}
-                              title="Archive Product"
+                              title="Delete Product"
                               className="p-1.5 text-stone-400 hover:text-rose-700 rounded-lg hover:bg-rose-50"
                             >
                               <Trash2 size={14} />
@@ -700,6 +869,7 @@ export const AdminProductsPage: React.FC = () => {
                 productSku={formData.sku}
                 isLoading={isLoadingVariants}
                 productPrice={formData.pricing.sellingPrice}
+                productImages={formData.images || []}
               />
 
               <div>
@@ -736,14 +906,14 @@ export const AdminProductsPage: React.FC = () => {
         </div>
       )}
 
-      {/* Confirmation modal for archive */}
+      {/* Confirmation modal for delete */}
       <ConfirmModal
         isOpen={!!deleteModal}
         onClose={() => setDeleteModal(null)}
         onConfirm={handleDelete}
-        title="Archive Product"
-        message={`Are you sure you want to archive "${deleteModal?.name}"? The product will be hidden from the storefront.`}
-        confirmLabel="Archive Product"
+        title="Delete Product"
+        message={`Are you sure you want to permanently delete "${deleteModal?.name}"? This action cannot be undone.`}
+        confirmLabel="Delete Product"
         isDestructive
       />
     </div>

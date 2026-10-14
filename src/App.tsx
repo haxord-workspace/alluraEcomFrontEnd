@@ -46,6 +46,7 @@ import { NotificationsPage } from './pages/customer/NotificationsPage';
 import { OffersPage } from './pages/customer/OffersPage';
 import { FaqPage } from './pages/customer/FaqPage';
 import { AIAssistantPage } from './pages/customer/AIAssistantPage';
+import { CMSPageViewer } from './pages/customer/CMSPageViewer';
 
 // Admin Operations Suite Components & Pages
 import { AdminLayout } from './components/admin/AdminLayout';
@@ -135,6 +136,7 @@ export const AppContent: React.FC = () => {
             <Route path="/admin/marketing/coupons" element={<AdminAccessGuard module="marketing"><AdminCouponsPage /></AdminAccessGuard>} />
             <Route path="/admin/marketing/promotions" element={<AdminAccessGuard module="marketing"><AdminPromotionsPage /></AdminAccessGuard>} />
             <Route path="/admin/marketing/banners" element={<AdminAccessGuard module="marketing"><AdminBannersPage /></AdminAccessGuard>} />
+            <Route path="/admin/banners" element={<Navigate to="/admin/marketing/banners" replace />} />
             <Route path="/admin/marketing/abandoned-carts" element={<AdminAccessGuard module="marketing"><AdminAbandonedCartsPage /></AdminAccessGuard>} />
             <Route path="/admin/notifications" element={<AdminAccessGuard module="notifications"><AdminNotificationsPage /></AdminAccessGuard>} />
             <Route path="/admin/content" element={<AdminAccessGuard module="cms"><AdminContentPage /></AdminAccessGuard>} />
@@ -173,7 +175,7 @@ export const AppContent: React.FC = () => {
       )}
 
       {/* Main Content Area */}
-      <main className="flex-1">
+      <main className="flex-1 pb-16 lg:pb-0">
         <Routes>
           {/* Core Pages */}
           <Route path="/" element={<HomePage />} />
@@ -203,6 +205,13 @@ export const AppContent: React.FC = () => {
           <Route path="/offers" element={<OffersPage />} />
           <Route path="/faq" element={<FaqPage />} />
           <Route path="/ai-assistant" element={<AIAssistantPage />} />
+
+          {/* Dynamic Storefront CMS Pages */}
+          <Route path="/pages/:slug" element={<CMSPageViewer />} />
+          <Route path="/privacy-policy" element={<CMSPageViewer slugOverride="privacy-policy" />} />
+          <Route path="/terms-and-conditions" element={<CMSPageViewer slugOverride="terms-and-conditions" />} />
+          <Route path="/terms-conditions" element={<CMSPageViewer slugOverride="terms-conditions" />} />
+          <Route path="/return-refund-policy" element={<CMSPageViewer slugOverride="return-refund-policy" />} />
 
           {/* Fallback */}
           <Route path="*" element={<HomePage />} />

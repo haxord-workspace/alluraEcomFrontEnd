@@ -13,6 +13,8 @@ import {
   getVariantBarcodePrintImage,
 } from '../../service/adminVariants';
 import type { AdminProduct, AdminProductVariant } from '../../types';
+import { useShop } from '../../context/ShopContext';
+import { getBackendErrorMessage } from '../../utils/apiResponse';
 
 const EMPTY_FORM = {
   productId: '',
@@ -28,6 +30,7 @@ const EMPTY_FORM = {
 };
 
 export const AdminVariantsPage: React.FC = () => {
+  const { showToast } = useShop();
   const [variants, setVariants] = useState<AdminProductVariant[]>([]);
   const [products, setProducts] = useState<AdminProduct[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -124,13 +127,16 @@ export const AdminVariantsPage: React.FC = () => {
       if (editingId) {
         const updated = await updateAdminVariant(editingId, payload);
         setVariants(variants.map(v => (v.id === editingId ? updated : v)));
+        showToast(updated._message || 'Variant updated successfully', 'success');
       } else {
         const created = await createAdminVariant(payload);
         setVariants([created, ...variants]);
+        showToast(created._message || 'Variant created successfully', 'success');
       }
       setIsModalOpen(false);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to save variant:', err);
+      showToast(getBackendErrorMessage(err, 'Failed to save variant'), 'error');
     } finally {
       setIsSaving(false);
     }
@@ -139,10 +145,12 @@ export const AdminVariantsPage: React.FC = () => {
   const handleDelete = async () => {
     if (!deleteModal) return;
     try {
-      await deleteAdminVariant(deleteModal.id);
+      const msg = await deleteAdminVariant(deleteModal.id);
       setVariants(variants.filter(v => v.id !== deleteModal.id));
-    } catch (err) {
+      showToast(msg || 'Variant deleted successfully', 'info');
+    } catch (err: any) {
       console.error('Failed to delete variant:', err);
+      showToast(getBackendErrorMessage(err, 'Failed to delete variant'), 'error');
     } finally {
       setDeleteModal(null);
     }
@@ -155,8 +163,10 @@ export const AdminVariantsPage: React.FC = () => {
         ? await deactivateAdminVariant(v.id)
         : await activateAdminVariant(v.id);
       setVariants(variants.map(item => (item.id === v.id ? updated : item)));
-    } catch (err) {
+      showToast(updated._message || `Variant status changed to ${updated.status}`, 'success');
+    } catch (err: any) {
       console.error('Failed to update variant status:', err);
+      showToast(getBackendErrorMessage(err, 'Failed to update variant status'), 'error');
     } finally {
       setBusyId(null);
     }
@@ -167,8 +177,9 @@ export const AdminVariantsPage: React.FC = () => {
     try {
       const url = await getVariantBarcodePrintImage(v.id);
       window.open(url, '_blank');
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to load barcode image:', err);
+      showToast(getBackendErrorMessage(err, 'Failed to load barcode image'), 'error');
     } finally {
       setBusyId(null);
     }

@@ -71,8 +71,10 @@ export interface AbandonedCartStatus {
 
 const unwrap = (response: any) => response?.data?.data ?? response?.data;
 
+import { getBackendErrorMessage } from '../utils/apiResponse';
+
 export const abandonedCartErrorMessage = (error: any, fallback: string): string =>
-  error?.response?.data?.error?.details?.[0]?.message || error?.response?.data?.message || fallback;
+  getBackendErrorMessage(error, fallback);
 
 const idOf = (v: any) => (v && typeof v === 'object' ? v._id || v.id : v);
 

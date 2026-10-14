@@ -25,7 +25,7 @@ import { productsData } from '../data/products';
 import { mockOrdersData, mockReturnRequestsData } from '../data/mockOrders';
 import { mockCouponsData, mockPromotionsData } from '../data/mockCoupons';
 import { mockCustomersData, mockAbandonedCartsData } from '../data/mockCustomers';
-import { mockBannersData } from '../data/mockBanners';
+import { getAdminBanners, getPublicBanners, type BannerPlacement } from '../service/adminBanners';
 import {
   mockAdminUsers,
   mockDefaultPermissions,
@@ -102,6 +102,7 @@ interface AdminContextType {
   promotions: Promotion[];
   addPromotion: (promo: Omit<Promotion, 'id'>) => Promotion;
   banners: Banner[];
+  setBannersList: (banners: Banner[]) => void;
   addBanner: (banner: Omit<Banner, 'id'>) => Banner;
   updateBanner: (id: string, updates: Partial<Banner>) => void;
   deleteBanner: (id: string) => void;
@@ -253,37 +254,15 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [promotions, setPromotions] = useState<Promotion[]>(mockPromotionsData);
   const [banners, setBanners] = useState<Banner[]>(() => {
     try {
-      const saved = localStorage.getItem('allura_banners');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          // Normalize legacy cached banners
-          return parsed.map((b: Partial<Banner>, idx: number) => ({
-            id: b.id || `ban-${Date.now()}-${idx}`,
-            title: b.title || b.headline || `Luxury Couture Slide ${idx + 1}`,
-            headline: b.headline || b.title || 'HANDCRAFTED MODEST & ETHNIC COUTURE',
-            subtitle: b.subtitle || b.description || 'Heirloom Kasavu zari, pure silk weaves, and graceful modest silhouettes.',
-            description: b.description || b.subtitle || 'Heirloom Kasavu zari, pure silk weaves, and graceful modest silhouettes.',
-            badge: b.badge || 'PERINTHALMANNA ATELIER',
-            eyebrow: b.eyebrow || 'FESTIVE \'26 COLLECTION • HANDCRAFTED',
-            offerPill: b.offerPill || 'Use Code FESTIVE15 for 15% Off • Free Kerala Express Delivery > ₹2,999',
-            ctaText: b.ctaText || 'SHOP NOW',
-            targetUrl: b.targetUrl || '/shop',
-            secondaryCtaText: b.secondaryCtaText || 'AI LUXURY STYLIST',
-            secondaryTargetUrl: b.secondaryTargetUrl || '/ai-assistant',
-            desktopImage: b.desktopImage || `/images/hero-banners/slide-${(idx % 3) + 1}.jpeg`,
-            mobileImage: b.mobileImage || b.desktopImage || `/images/hero-banners/slide-${(idx % 3) + 1}.jpeg`,
-            startDate: b.startDate || '2026-08-01',
-            endDate: b.endDate || '2026-12-31',
-            status: b.status || 'Active',
-            position: b.position || (idx < 3 ? 'Hero' : 'Editorial'),
-            displayOrder: b.displayOrder || idx + 1,
-          }));
-        }
+      const fromSession = sessionStorage.getItem('allura_banners_session');
+      if (fromSession) {
+        const parsed = JSON.parse(fromSession);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
-      return mockBannersData;
+      const saved = localStorage.getItem('allura_banners');
+      return saved ? JSON.parse(saved) : [];
     } catch {
-      return mockBannersData;
+      return [];
     }
   });
   const [abandonedCarts, setAbandonedCarts] = useState<AbandonedCart[]>(mockAbandonedCartsData);
@@ -361,40 +340,119 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }));
   }, [authAdmin]);
 
+  const safeLocalStorageSet = (key: string, value: any) => {
+    try {
+      localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
+    } catch (err) {
+      console.warn(`[AdminContext] Failed to cache ${key} to localStorage:`, err);
+    }
+  };
+
+  const safeSaveBannersToStorage = (list: Banner[]) => {
+    try {
+      sessionStorage.setItem('allura_banners_session', JSON.stringify(list));
+    } catch {
+      // sessionStorage full or unavailable
+    }
+
+    try {
+      localStorage.setItem('allura_banners', JSON.stringify(list));
+    } catch {
+      try {
+        // If localStorage quota is strictly exceeded, trim large base64 strings only for localStorage
+        const sanitized = list.map(b => ({
+          ...b,
+          desktopImage: b.desktopImage?.length > 700000 ? '' : b.desktopImage,
+          mobileImage: b.mobileImage?.length > 700000 ? '' : b.mobileImage,
+        }));
+        localStorage.setItem('allura_banners', JSON.stringify(sanitized));
+      } catch (err) {
+        console.warn('[AdminContext] Could not cache banners to localStorage:', err);
+      }
+    }
+  };
+
   useEffect(() => {
-    localStorage.setItem('allura_current_admin', JSON.stringify(currentAdmin));
+    safeLocalStorageSet('allura_current_admin', currentAdmin);
   }, [currentAdmin]);
 
   useEffect(() => {
-    localStorage.setItem('allura_admin_products', JSON.stringify(products));
+    safeLocalStorageSet('allura_admin_products', products);
   }, [products]);
 
   useEffect(() => {
-    localStorage.setItem('allura_stock_tx', JSON.stringify(stockTransactions));
+    safeLocalStorageSet('allura_stock_tx', stockTransactions);
   }, [stockTransactions]);
 
   useEffect(() => {
-    localStorage.setItem('allura_orders', JSON.stringify(orders));
+    safeLocalStorageSet('allura_orders', orders);
   }, [orders]);
 
   useEffect(() => {
-    localStorage.setItem('allura_returns', JSON.stringify(returns));
+    safeLocalStorageSet('allura_returns', returns);
   }, [returns]);
 
   useEffect(() => {
-    localStorage.setItem('allura_coupons', JSON.stringify(coupons));
+    safeLocalStorageSet('allura_coupons', coupons);
   }, [coupons]);
 
   useEffect(() => {
-    localStorage.setItem('allura_audit_logs', JSON.stringify(auditLogs));
+    safeLocalStorageSet('allura_audit_logs', auditLogs);
   }, [auditLogs]);
 
   useEffect(() => {
-    localStorage.setItem('allura_admin_permissions', JSON.stringify(permissionsMatrix));
+    safeLocalStorageSet('allura_admin_permissions', permissionsMatrix);
   }, [permissionsMatrix]);
 
   useEffect(() => {
-    localStorage.setItem('allura_banners', JSON.stringify(banners));
+    let isMounted = true;
+    const fetchBannersData = async () => {
+      try {
+        const res = await getAdminBanners({ sortBy: 'displayOrder', sortOrder: 'asc' });
+        if (Array.isArray(res) && res.length > 0) {
+          if (isMounted) setBanners(res);
+          return;
+        }
+      } catch {
+        // If unauthenticated or admin endpoint unavailable, fetch public placements
+      }
+
+      try {
+        const placements: BannerPlacement[] = [
+          'HOME_HERO',
+          'HOME_PROMOTION',
+          'SHOP_BANNER',
+          'CATEGORY_BANNER',
+          'COLLECTION_BANNER',
+          'PRODUCT_PROMOTION',
+        ];
+        const responses = await Promise.allSettled(
+          placements.map(p => getPublicBanners(p))
+        );
+        const combined: Banner[] = [];
+        responses.forEach(r => {
+          if (r.status === 'fulfilled' && Array.isArray(r.value)) {
+            combined.push(...r.value);
+          }
+        });
+        if (isMounted && combined.length > 0) {
+          setBanners(combined);
+        }
+      } catch (err) {
+        console.warn('[AdminContext] Could not load public banners:', err);
+      }
+    };
+
+    fetchBannersData();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (banners.length > 0) {
+      safeSaveBannersToStorage(banners);
+    }
   }, [banners]);
 
   // Logging
@@ -730,10 +788,23 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     showToast('Banner deleted', 'info');
   };
 
+  const setBannersList = (list: Banner[]) => {
+    setBanners(list);
+    safeSaveBannersToStorage(list);
+  };
+
   const resetBannersToDefault = () => {
-    setBanners(mockBannersData);
-    localStorage.setItem('allura_banners', JSON.stringify(mockBannersData));
-    showToast('Marketing & Hero Banners reset to atelier defaults', 'gold');
+    getAdminBanners().then(apiList => {
+      setBanners(apiList);
+      safeSaveBannersToStorage(apiList);
+      showToast('Store banners synchronized with live backend API', 'gold');
+    }).catch(() => {
+      setBanners([]);
+      try {
+        localStorage.removeItem('allura_banners');
+      } catch {}
+      showToast('No active backend banners found', 'info');
+    });
   };
 
   const sendCartReminder = (id: string, channel: 'WhatsApp' | 'Email') => {
@@ -855,6 +926,7 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         promotions,
         addPromotion,
         banners,
+        setBannersList,
         addBanner,
         updateBanner,
         deleteBanner,

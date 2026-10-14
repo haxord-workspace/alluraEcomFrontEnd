@@ -6,10 +6,14 @@ import {
   Truck,
   RefreshCw,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  AlertCircle,
+  Clock,
+  CheckCircle2
 } from 'lucide-react';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { getAdminOrders, toBackendStatus, orderErrorMessage } from '../../service/orders';
+import { getDashboardOrders, type OrdersSummaryResponse } from '../../service/adminDashboard';
 import type { Order, OrderStatus } from '../../types';
 import { useAdminOrderCatalog } from '../../hooks/useAdminOrderCatalog';
 
@@ -23,6 +27,7 @@ export const AdminOrdersPage: React.FC = () => {
   const [page, setPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [summary, setSummary] = useState<OrdersSummaryResponse | null>(null);
 
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
@@ -52,14 +57,18 @@ export const AdminOrdersPage: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const result = await getAdminOrders({
-        page,
-        limit: PAGE_SIZE,
-        status: statusFilter === 'All' ? undefined : toBackendStatus(statusFilter),
-        search: search || undefined,
-      });
+      const [result, summaryResult] = await Promise.all([
+        getAdminOrders({
+          page,
+          limit: PAGE_SIZE,
+          status: statusFilter === 'All' ? undefined : toBackendStatus(statusFilter),
+          search: search || undefined,
+        }),
+        getDashboardOrders().catch(() => null),
+      ]);
       setOrders(result.orders);
       setTotal(result.total);
+      if (summaryResult) setSummary(summaryResult);
     } catch (err) {
       setError(orderErrorMessage(err, 'Failed to load orders'));
     } finally {
@@ -108,6 +117,47 @@ export const AdminOrdersPage: React.FC = () => {
         </div>
       </div>
 
+      {/* Summary & Attention Required Cards */}
+      {summary && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="bg-white border border-stone-200 rounded-2xl p-4 shadow-xs space-y-1">
+            <span className="text-[10px] font-bold uppercase text-stone-400">Total Volume</span>
+            <p className="font-serif text-2xl font-bold text-stone-900">{summary.pagination.total}</p>
+            <p className="text-[11px] text-stone-500 font-sans">Across all channels</p>
+          </div>
+          <div className="bg-white border border-stone-200 rounded-2xl p-4 shadow-xs space-y-1">
+            <div className="flex items-center justify-between text-amber-700">
+              <span className="text-[10px] font-bold uppercase">Pending Processing</span>
+              <AlertCircle size={14} />
+            </div>
+            <p className="font-serif text-2xl font-bold text-amber-800">
+              {summary.attentionRequired.pendingProcessing}
+            </p>
+            <p className="text-[11px] text-amber-700 font-sans">Requires atelier packing</p>
+          </div>
+          <div className="bg-white border border-stone-200 rounded-2xl p-4 shadow-xs space-y-1">
+            <div className="flex items-center justify-between text-stone-500">
+              <span className="text-[10px] font-bold uppercase">Awaiting Payment</span>
+              <Clock size={14} />
+            </div>
+            <p className="font-serif text-2xl font-bold text-stone-900">
+              {summary.attentionRequired.pendingPayment}
+            </p>
+            <p className="text-[11px] text-stone-500 font-sans">Checkout incomplete</p>
+          </div>
+          <div className="bg-white border border-stone-200 rounded-2xl p-4 shadow-xs space-y-1">
+            <div className="flex items-center justify-between text-emerald-700">
+              <span className="text-[10px] font-bold uppercase">Delivered</span>
+              <CheckCircle2 size={14} />
+            </div>
+            <p className="font-serif text-2xl font-bold text-emerald-800">
+              {summary.countsByStatus?.['DELIVERED'] ?? 0}
+            </p>
+            <p className="text-[11px] text-emerald-700 font-sans">Successfully received</p>
+          </div>
+        </div>
+      )}
+
       {/* Filter Tabs & Search Bar */}
       <div className="bg-white border border-stone-200 rounded-2xl p-4 shadow-xs space-y-3">
         <div className="flex flex-col sm:flex-row gap-3 justify-between items-center">
@@ -125,22 +175,35 @@ export const AdminOrdersPage: React.FC = () => {
 
         {/* Status Pills */}
         <div className="flex gap-2 overflow-x-auto pb-1 border-t border-stone-100 pt-3">
-          {statuses.map(st => (
-            <button
-              key={st}
-              onClick={() => {
-                setStatusFilter(st);
-                setPage(1);
-              }}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-sans font-semibold transition-colors whitespace-nowrap ${
-                statusFilter === st
-                  ? 'bg-stone-900 text-white shadow-xs'
-                  : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-              }`}
-            >
-              {st}
-            </button>
-          ))}
+          {statuses.map(st => {
+            const count = st === 'All' 
+              ? (summary?.pagination.total ?? total)
+              : summary?.countsByStatus?.[st.toUpperCase()];
+
+            return (
+              <button
+                key={st}
+                onClick={() => {
+                  setStatusFilter(st);
+                  setPage(1);
+                }}
+                className={`px-3.5 py-1.5 rounded-full text-xs font-sans font-semibold transition-colors whitespace-nowrap flex items-center gap-1.5 ${
+                  statusFilter === st
+                    ? 'bg-stone-900 text-white shadow-xs'
+                    : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                }`}
+              >
+                <span>{st}</span>
+                {typeof count === 'number' && (
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                    statusFilter === st ? 'bg-white/20 text-white' : 'bg-stone-200 text-stone-700'
+                  }`}>
+                    {count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -154,7 +217,7 @@ export const AdminOrdersPage: React.FC = () => {
       {/* Orders Table */}
       <div className="bg-white border border-stone-200 rounded-2xl overflow-hidden shadow-xs">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs font-sans border-collapse">
+          <table className="w-full min-w-[850px] text-left text-xs font-sans border-collapse">
             <thead>
               <tr className="bg-stone-50 border-b border-stone-200 text-stone-500 uppercase tracking-wider text-[10px]">
                 <th className="p-4">Order Number & Date</th>

@@ -15,6 +15,7 @@ import { getAdminProducts } from '../../service/adminProducts';
 import { getAdminVariants, getVariantBarcodePrintImage } from '../../service/adminVariants';
 import { generateBarcode, validateBarcode } from '../../service/barcode';
 import type { AdminProduct, AdminProductVariant } from '../../types';
+import { getBackendErrorMessage } from '../../utils/apiResponse';
 
 export const AdminBarcodesPage: React.FC = () => {
   const [products, setProducts] = useState<AdminProduct[]>([]);
@@ -50,7 +51,7 @@ export const AdminBarcodesPage: React.FC = () => {
       setVariants(variantData);
       setProducts(productData);
     } catch (err: any) {
-      setError(err?.response?.data?.message || 'Failed to load barcode data');
+      setError(getBackendErrorMessage(err, 'Failed to load barcode data'));
     } finally {
       setIsLoading(false);
     }

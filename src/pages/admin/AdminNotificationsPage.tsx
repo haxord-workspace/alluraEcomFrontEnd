@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { Send } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Send, CheckCircle2, Clock, AlertTriangle, RefreshCw } from 'lucide-react';
 import { useShop } from '../../context/ShopContext';
+import { getDashboardNotifications, type NotificationAnalyticsResponse } from '../../service/adminDashboard';
 
 export const AdminNotificationsPage: React.FC = () => {
   const { showToast } = useShop();
@@ -10,6 +11,24 @@ export const AdminNotificationsPage: React.FC = () => {
   const [body, setBody] = useState(
     'Dear {{customerName}},\n\nThank you for choosing Allura Boutique. Your handcrafted ensemble {{orderNumber}} for ₹{{amount}} has been placed successfully and is being prepared in our atelier.\n\nTrack shipment: {{trackingUrl}}\n\nWarm regards,\nAllura Atelier Team'
   );
+  const [queueMetrics, setQueueMetrics] = useState<NotificationAnalyticsResponse | null>(null);
+  const [isLoadingQueue, setIsLoadingQueue] = useState(false);
+
+  const fetchQueueMetrics = async () => {
+    setIsLoadingQueue(true);
+    try {
+      const data = await getDashboardNotifications();
+      setQueueMetrics(data);
+    } catch (err) {
+      console.warn('Could not load notification queue metrics:', err);
+    } finally {
+      setIsLoadingQueue(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchQueueMetrics();
+  }, []);
 
   const handleTestBroadcast = (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,6 +49,66 @@ export const AdminNotificationsPage: React.FC = () => {
           <p className="text-xs font-sans text-stone-500">
             WhatsApp business templates, transactional dispatch emails, and customer event triggers.
           </p>
+        </div>
+
+        <button
+          onClick={fetchQueueMetrics}
+          disabled={isLoadingQueue}
+          className="p-2 border border-stone-200 hover:border-stone-400 rounded-xl bg-white text-stone-600 transition-colors self-start sm:self-center"
+          title="Refresh Queue Metrics"
+        >
+          <RefreshCw size={14} className={isLoadingQueue ? 'animate-spin' : ''} />
+        </button>
+      </div>
+
+      {/* Queue & Delivery Analytics */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="bg-white border border-stone-200 rounded-2xl p-4 shadow-xs space-y-1">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-sans font-bold uppercase text-stone-400">DISPATCH QUEUE</span>
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          </div>
+          <p className="font-serif text-2xl font-bold text-stone-900">
+            {queueMetrics?.queueStatus || 'ONLINE'}
+          </p>
+          <p className="text-[11px] text-stone-500 font-sans">
+            {queueMetrics?.channelsSupported ? queueMetrics.channelsSupported.join(' · ') : 'EMAIL · WHATSAPP · FCM'}
+          </p>
+        </div>
+
+        <div className="bg-white border border-stone-200 rounded-2xl p-4 shadow-xs space-y-1">
+          <div className="flex items-center justify-between text-emerald-700">
+            <span className="text-[10px] font-sans font-bold uppercase">COMPLETED</span>
+            <CheckCircle2 size={14} />
+          </div>
+          <p className="font-serif text-2xl font-bold text-emerald-800">
+            {queueMetrics?.counts.completed ?? 0}
+          </p>
+          <p className="text-[11px] text-emerald-700 font-sans">Delivered messages</p>
+        </div>
+
+        <div className="bg-white border border-stone-200 rounded-2xl p-4 shadow-xs space-y-1">
+          <div className="flex items-center justify-between text-amber-700">
+            <span className="text-[10px] font-sans font-bold uppercase">IN FLIGHT / WAITING</span>
+            <Clock size={14} />
+          </div>
+          <p className="font-serif text-2xl font-bold text-stone-900">
+            {(queueMetrics?.counts.waiting ?? 0) + (queueMetrics?.counts.active ?? 0)}
+          </p>
+          <p className="text-[11px] text-stone-500 font-sans">
+            {queueMetrics?.counts.active ?? 0} active, {queueMetrics?.counts.waiting ?? 0} pending
+          </p>
+        </div>
+
+        <div className="bg-white border border-stone-200 rounded-2xl p-4 shadow-xs space-y-1">
+          <div className="flex items-center justify-between text-rose-700">
+            <span className="text-[10px] font-sans font-bold uppercase">FAILED RETRIES</span>
+            <AlertTriangle size={14} />
+          </div>
+          <p className="font-serif text-2xl font-bold text-rose-800">
+            {queueMetrics?.counts.failed ?? 0}
+          </p>
+          <p className="text-[11px] text-rose-700 font-sans">Undelivered alerts</p>
         </div>
       </div>
 

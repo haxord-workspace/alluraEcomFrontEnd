@@ -6,7 +6,7 @@ import { Link, useNavigate } from 'react-router-dom';
 
 export const OffersPage: React.FC = () => {
   const { applyCoupon, appliedCoupon, formatPrice, showToast } = useShop();
-  const { coupons, promotions } = useAdmin();
+  const { coupons, promotions, banners } = useAdmin();
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const navigate = useNavigate();
 
@@ -24,6 +24,11 @@ export const OffersPage: React.FC = () => {
 
   const activePromos = promotions && promotions.length > 0 ? promotions : [];
   const activeCoupons = (coupons || []).filter(c => c.status === 'Active');
+  const activePromoBanners = (banners || []).filter(
+    b => (b.placement === 'HOME_PROMOTION' || b.placement === 'PRODUCT_PROMOTION' || b.placement === 'SHOP_BANNER') &&
+         (b.status?.toLowerCase() === 'active' || b.status === 'Active' || (b as any).isActive === true) &&
+         Boolean(b.desktopImage)
+  );
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-16 space-y-12">
@@ -39,6 +44,55 @@ export const OffersPage: React.FC = () => {
           Quiet luxury courtesies, private invitations, and celebratory privileges for our cherished patrons.
         </p>
       </div>
+
+      {/* Live Visual Promotional Banners */}
+      {activePromoBanners.length > 0 && (
+        <div className={`grid grid-cols-1 ${activePromoBanners.length > 1 ? 'md:grid-cols-2' : ''} gap-6`}>
+          {activePromoBanners.slice(0, 2).map(banner => (
+            <div
+              key={banner.id}
+              className="relative rounded-2xl overflow-hidden shadow-md border border-allura-border aspect-[16/8] group"
+            >
+              <picture className="w-full h-full">
+                {banner.mobileImage && (
+                  <source media="(max-width: 640px)" srcSet={banner.mobileImage} />
+                )}
+                <img
+                  src={banner.desktopImage}
+                  alt={banner.headline || banner.title}
+                  className="w-full h-full object-cover object-[center_35%] group-hover:scale-102 transition-transform duration-700"
+                />
+              </picture>
+              <div className="absolute inset-0 bg-gradient-to-t from-allura-darkBrown/90 via-allura-darkBrown/40 to-transparent flex flex-col justify-end p-6 text-white">
+                {banner.badge && (
+                  <span className="inline-block text-[10px] font-sans font-bold uppercase tracking-[0.2em] text-allura-gold mb-1">
+                    {banner.badge}
+                  </span>
+                )}
+                <h3 className="font-serif text-xl sm:text-2xl font-medium tracking-tight">
+                  {banner.headline || banner.title}
+                </h3>
+                {(banner.subtitle || banner.description) && (
+                  <p className="text-xs font-sans text-allura-bgSecondary/90 mt-1 max-w-sm line-clamp-2">
+                    {banner.subtitle || banner.description}
+                  </p>
+                )}
+                {banner.targetUrl && (
+                  <div className="pt-3">
+                    <Link
+                      to={banner.targetUrl}
+                      className="inline-flex items-center gap-1.5 text-xs font-sans font-bold tracking-wider text-allura-gold hover:text-white uppercase transition-colors"
+                    >
+                      <span>{banner.ctaText || 'REDEEM NOW'}</span>
+                      <ArrowRight size={13} />
+                    </Link>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Active Promotion Banners */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

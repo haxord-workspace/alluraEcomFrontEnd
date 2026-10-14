@@ -27,6 +27,18 @@ export const COLOR_PALETTE: { name: string; hex: string }[] = [
   { name: 'Lavender', hex: '#B9A6D9' },
   { name: 'Purple', hex: '#5B2A6E' },
   { name: 'Brown', hex: '#561C08' },
+  { name: 'Rose Gold', hex: '#B76E79' },
+  { name: 'Rani Pink', hex: '#C71585' },
+  { name: 'Bottle Green', hex: '#004225' },
+  { name: 'Emerald Green', hex: '#046307' },
+  { name: 'Pista Green', hex: '#93C572' },
+  { name: 'Rust', hex: '#B7410E' },
+  { name: 'Coral', hex: '#FF6F61' },
+  { name: 'Turquoise', hex: '#40E0D0' },
+  { name: 'Indigo', hex: '#2E3192' },
+  { name: 'Champagne', hex: '#F7E7CE' },
+  { name: 'Mauve', hex: '#915F6D' },
+  { name: 'Copper', hex: '#B87333' },
 ];
 
 export const SIZE_PRESETS = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL', 'Free Size'];

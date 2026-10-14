@@ -58,15 +58,26 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({ onMobileMenuToggle }) 
     <header className="sticky top-0 z-30 h-16 bg-white/90 backdrop-blur-md border-b border-allura-border flex items-center justify-between px-4 sm:px-6">
       
       {/* Left: Mobile Menu & Search trigger */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 sm:gap-3">
         <button
           onClick={onMobileMenuToggle}
           className="lg:hidden p-2 text-allura-muted hover:text-allura-text rounded-xl hover:bg-stone-100"
+          aria-label="Toggle navigation menu"
         >
           <Menu size={20} />
         </button>
 
-        {/* Global Search button */}
+        {/* Mobile Search Icon Button */}
+        <button
+          onClick={() => setIsCommandOpen(true)}
+          className="sm:hidden p-2 text-allura-muted hover:text-allura-text rounded-xl hover:bg-stone-100"
+          title="Search (Cmd+K)"
+          aria-label="Search"
+        >
+          <Search size={18} />
+        </button>
+
+        {/* Desktop Global Search button */}
         <button
           onClick={() => setIsCommandOpen(true)}
           className="hidden sm:flex items-center gap-2.5 px-3.5 py-1.5 rounded-xl border border-stone-200 bg-stone-50 hover:bg-stone-100 text-stone-500 text-xs font-sans transition-all w-64 md:w-80 shadow-xs"
@@ -80,18 +91,18 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({ onMobileMenuToggle }) 
       </div>
 
       {/* Right: Role Switcher, Notifications, Admin Profile */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 sm:gap-3">
         
         {/* Role Switcher Pill */}
         <div className="relative">
           <button
             onClick={() => setIsRoleDropdownOpen(!isRoleDropdownOpen)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-allura-bgSecondary text-allura-darkBrown border border-allura-gold/30 text-xs font-sans font-semibold hover:bg-stone-200 transition-colors"
+            className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-allura-bgSecondary text-allura-darkBrown border border-allura-gold/30 text-xs font-sans font-semibold hover:bg-stone-200 transition-colors"
           >
-            <Shield size={13} className="text-allura-goldDark" />
+            <Shield size={13} className="text-allura-goldDark flex-shrink-0" />
             <span className="hidden md:inline text-[11px] text-allura-muted font-normal">Role:</span>
-            <span className="font-bold font-mono text-[11px]">{role}</span>
-            <ChevronDown size={13} className="text-allura-muted" />
+            <span className="font-bold font-mono text-[10px] sm:text-[11px] max-w-[75px] sm:max-w-none truncate">{role}</span>
+            <ChevronDown size={12} className="text-allura-muted flex-shrink-0" />
           </button>
 
           {isRoleDropdownOpen && (
@@ -128,7 +139,7 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({ onMobileMenuToggle }) 
           </button>
 
           {isAdminNotificationsOpen && (
-            <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white border border-stone-200 rounded-2xl shadow-2xl overflow-hidden z-50 animate-slide-up">
+            <div className="absolute right-0 mt-2 w-[calc(100vw-2rem)] max-w-sm sm:w-96 bg-white border border-stone-200 rounded-2xl shadow-2xl overflow-hidden z-50 animate-slide-up">
               <div className="p-3.5 bg-stone-50 border-b border-stone-200 flex items-center justify-between">
                 <span className="font-serif text-sm font-bold text-stone-800">
                   Operations Notifications ({unreadCount})

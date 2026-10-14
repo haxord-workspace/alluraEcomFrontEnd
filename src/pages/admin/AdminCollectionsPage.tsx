@@ -11,6 +11,7 @@ import {
 } from '../../service/collection';
 import type { CollectionPayload } from '../../service/collection';
 import { resizeImageSource, slugify } from '../../utils/image';
+import { getBackendErrorMessage, getBackendSuccessMessage } from '../../utils/apiResponse';
 import type { AdminCollection } from '../../types';
 
 const EMPTY_FORM = {
@@ -109,12 +110,13 @@ export const AdminCollectionsPage: React.FC = () => {
     if (!deleteTarget) return;
     setIsDeleting(true);
     try {
-      await deleteAdminCollection(deleteTarget.id);
+      const res = await deleteAdminCollection(deleteTarget.id);
       setCollections(prev => prev.filter(c => c.id !== deleteTarget.id));
+      showToast(getBackendSuccessMessage(res, 'Collection deleted successfully'), 'info');
       setDeleteTarget(null);
     } catch (error: any) {
       console.error('Failed to delete collection:', error);
-      showToast(error?.response?.data?.message || 'Failed to delete collection', 'error');
+      showToast(getBackendErrorMessage(error, 'Failed to delete collection'), 'error');
     } finally {
       setIsDeleting(false);
     }
@@ -172,17 +174,16 @@ export const AdminCollectionsPage: React.FC = () => {
       if (editingId) {
         const updated = await updateAdminCollection(editingId, payload);
         setCollections(collections.map(c => (c.id === editingId ? updated : c)));
-        showToast('Collection updated', 'success');
+        showToast(getBackendSuccessMessage(updated, 'Collection updated successfully'), 'success');
       } else {
         const created = await createAdminCollection(payload);
         setCollections([...collections, created]);
-        showToast('Collection created', 'success');
+        showToast(getBackendSuccessMessage(created, 'Collection created successfully'), 'success');
       }
       setIsModalOpen(false);
     } catch (error: any) {
       console.error('Failed to save collection:', error);
-      const body = error?.response?.data;
-      showToast(body?.error?.details?.[0]?.message || body?.message || 'Failed to save collection', 'error');
+      showToast(getBackendErrorMessage(error, 'Failed to save collection'), 'error');
     } finally {
       setIsSaving(false);
     }

@@ -36,8 +36,10 @@ const unwrap = (response: any) => response?.data?.data ?? response?.data;
 
 const num = firstNumber;
 
+import { getBackendErrorMessage } from '../utils/apiResponse';
+
 const errorMessage = (error: any, fallback: string): string =>
-  error?.response?.data?.error?.details?.[0]?.message || error?.response?.data?.message || fallback;
+  getBackendErrorMessage(error, fallback);
 
 const toDateOnly = (value?: string) => (value ? String(value).split('T')[0] : '');
 

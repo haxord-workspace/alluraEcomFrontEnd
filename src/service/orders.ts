@@ -328,8 +328,10 @@ export const enrichOrder = (order: Order, lookup: OrderCatalogLookup): Order => 
 const cleanParams = (params?: OrderListParams) =>
   Object.fromEntries(Object.entries(params || {}).filter(([, v]) => v !== undefined && v !== '' && v !== 'All'));
 
+import { getBackendErrorMessage } from '../utils/apiResponse';
+
 export const orderErrorMessage = (error: any, fallback: string): string =>
-  error?.response?.data?.error?.details?.[0]?.message || error?.response?.data?.message || fallback;
+  getBackendErrorMessage(error, fallback);
 
 // ── Customer ──────────────────────────────────────────────────────────────────
 

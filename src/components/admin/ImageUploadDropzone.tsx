@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Upload, Link as LinkIcon, Sparkles, X, Check, RefreshCw } from 'lucide-react';
 
 interface PresetOption {
@@ -34,6 +34,19 @@ export const ImageUploadDropzone: React.FC<ImageUploadDropzoneProps> = ({
   const [fileSize, setFileSize] = useState<string>('');
   const [fileError, setFileError] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!value) {
+      setUrlInput('');
+      setFileName('');
+      setFileSize('');
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    } else if (!value.startsWith('data:')) {
+      setUrlInput(value);
+    }
+  }, [value]);
 
   const handleFile = (file: File) => {
     if (!file.type.startsWith('image/')) {

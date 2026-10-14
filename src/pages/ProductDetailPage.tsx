@@ -14,19 +14,29 @@ import {
   Ruler,
   Share2,
   Sparkles,
+  ArrowRight,
 } from 'lucide-react';
 import { useShop } from '../context/ShopContext';
+import { useAdmin } from '../context/AdminContext';
 import { getStoreProductBySlug } from '../service/store';
 import { ProductCard } from '../components/ui/ProductCard';
 import { BottomSheet } from '../components/modals/BottomSheet';
 import type { Product } from '../types';
 import { useAddToBag } from '../hooks/useAddToBag';
 import { AddToBagLabel, addToBagButtonState } from '../components/ui/AddToBagLabel';
+import { SEOHead } from '../components/common/SEOHead';
 
 export const ProductDetailPage: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const { products, addToCart, toggleWishlist, isInWishlist, formatPrice, showToast } = useShop();
+  const { banners } = useAdmin();
+
+  const activeProductPromo = (banners || []).find(
+    b => b.placement === 'PRODUCT_PROMOTION' &&
+         (b.status?.toLowerCase() === 'active' || b.status === 'Active' || (b as any).isActive === true) &&
+         Boolean(b.desktopImage)
+  );
 
   const [product, setProduct] = useState<Product | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -116,11 +126,19 @@ export const ProductDetailPage: React.FC = () => {
   const displayPrice = selectedVariant?.price || product.price;
   const displayMrp = selectedVariant ? (selectedVariant.mrp > displayPrice ? selectedVariant.mrp : undefined) : product.originalPrice;
 
-  const galleryImages = [
-    product.images.primary,
-    product.images.secondary,
-    ...(product.images.gallery || []),
-  ].filter(Boolean).filter((v, i, a) => a.indexOf(v) === i);
+  // If the selected variant or colour has its own photos, showcase them in the gallery
+  const colorVariant = product.variants?.find(v => sameText(v.color?.name, currentColor?.name) && v.images && v.images.length > 0);
+  const variantGallery = selectedVariant?.images?.length
+    ? selectedVariant.images.map(img => img.url)
+    : colorVariant?.images?.map(img => img.url);
+
+  const galleryImages = (variantGallery && variantGallery.length > 0)
+    ? variantGallery.filter(Boolean).filter((v, i, a) => a.indexOf(v) === i)
+    : [
+        product.images.primary,
+        product.images.secondary,
+        ...(product.images.gallery || []),
+      ].filter(Boolean).filter((v, i, a) => a.indexOf(v) === i);
 
   const handleAddToCart = () => {
     bag.add(product, selectedSize, currentColor, quantity);
@@ -159,8 +177,36 @@ export const ProductDetailPage: React.FC = () => {
     .filter(p => p.id !== product.id && (p.category === product.category || p.occasion === product.occasion))
     .slice(0, 4);
 
+  const structuredData = {
+    '@context': 'https://schema.org/',
+    '@type': 'Product',
+    name: product.name,
+    description: product.description || `Luxury handcrafted ${product.name} from Allura Boutique.`,
+    sku: product.id,
+    image: galleryImages,
+    brand: {
+      '@type': 'Brand',
+      name: 'Allura Boutique',
+    },
+    offers: {
+      '@type': 'Offer',
+      priceCurrency: 'INR',
+      price: displayPrice,
+      availability: product.inStock ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
+      url: typeof window !== 'undefined' ? window.location.href : undefined,
+    },
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-12 space-y-16">
+      <SEOHead
+        title={product.name}
+        description={product.description?.slice(0, 160) || `Buy handcrafted ${product.name} at Allura Boutique.`}
+        canonicalUrl={`https://alluraboutique.in/product/${product.slug}`}
+        ogImage={galleryImages[0]}
+        ogType="product"
+        structuredData={structuredData}
+      />
       {/* Breadcrumb */}
       <nav className="text-xs font-sans text-allura-muted flex items-center gap-2">
         <Link to="/" className="hover:text-allura-goldDark">Home</Link>
@@ -486,6 +532,50 @@ export const ProductDetailPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Dynamic Product Promotion Banner from Admin Studio */}
+      {activeProductPromo && (
+        <div className="relative rounded-2xl overflow-hidden shadow-md border border-allura-border/60 aspect-[16/6] sm:aspect-[24/6] min-h-[130px] group">
+          <picture className="w-full h-full">
+            {activeProductPromo.mobileImage && (
+              <source media="(max-width: 640px)" srcSet={activeProductPromo.mobileImage} />
+            )}
+            <img
+              src={activeProductPromo.desktopImage}
+              alt={activeProductPromo.headline || activeProductPromo.title}
+              className="w-full h-full object-cover object-[center_35%] group-hover:scale-102 transition-transform duration-700"
+            />
+          </picture>
+          <div className="absolute inset-0 bg-gradient-to-r from-allura-darkBrown/90 via-allura-darkBrown/60 to-transparent flex items-center p-6 sm:p-10">
+            <div className="max-w-xl text-white space-y-2">
+              {activeProductPromo.badge && (
+                <span className="inline-block text-[10px] font-sans font-bold uppercase tracking-[0.2em] text-allura-gold">
+                  {activeProductPromo.badge}
+                </span>
+              )}
+              <h3 className="font-serif text-lg sm:text-2xl font-medium tracking-tight">
+                {activeProductPromo.headline || activeProductPromo.title}
+              </h3>
+              {(activeProductPromo.subtitle || activeProductPromo.description) && (
+                <p className="text-xs sm:text-sm text-allura-bgSecondary/90 font-sans max-w-md line-clamp-2">
+                  {activeProductPromo.subtitle || activeProductPromo.description}
+                </p>
+              )}
+              {activeProductPromo.targetUrl && (
+                <div className="pt-1">
+                  <Link
+                    to={activeProductPromo.targetUrl}
+                    className="inline-flex items-center gap-1.5 text-xs font-sans font-bold tracking-wider text-allura-gold hover:text-white uppercase transition-colors"
+                  >
+                    <span>{activeProductPromo.ctaText || 'VIEW OFFER'}</span>
+                    <ArrowRight size={13} />
+                  </Link>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Complete The Look Section */}
       <section className="pt-12 border-t border-allura-border/60">

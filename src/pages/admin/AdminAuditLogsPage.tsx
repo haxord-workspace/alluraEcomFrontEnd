@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAdmin } from '../../context/AdminContext';
 import { useShop } from '../../context/ShopContext';
 import { 
@@ -9,23 +9,66 @@ import {
   Activity, 
   UserCheck, 
   ChevronDown, 
-  ChevronRight 
+  ChevronRight,
+  RefreshCw
 } from 'lucide-react';
+import { getDashboardActivity, type ActivityLogsResponse } from '../../service/adminDashboard';
 import type { AuditLogItem } from '../../types';
 
 export const AdminAuditLogsPage: React.FC = () => {
-  const { auditLogs, logAdminAction } = useAdmin();
+  const { auditLogs: localAuditLogs, logAdminAction } = useAdmin();
   const { showToast } = useShop();
 
+  const [serverActivity, setServerActivity] = useState<ActivityLogsResponse | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedModule, setSelectedModule] = useState<string>('All');
   const [selectedAction, setSelectedAction] = useState<string>('All');
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
 
+  const fetchServerActivity = async () => {
+    setIsLoading(true);
+    try {
+      const data = await getDashboardActivity({
+        page: 1,
+        limit: 50,
+        action: selectedAction !== 'All' ? selectedAction : undefined,
+        entityType: selectedModule !== 'All' ? selectedModule : undefined,
+      });
+      setServerActivity(data);
+    } catch (err) {
+      console.warn('Could not load server activity logs, using local session logs:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchServerActivity();
+  }, [selectedAction, selectedModule]);
+
+  // Combine live server logs with local session logs
+  const combinedLogs: AuditLogItem[] = React.useMemo(() => {
+    if (serverActivity?.logs && serverActivity.logs.length > 0) {
+      return serverActivity.logs.map(log => ({
+        id: log._id,
+        timestamp: new Date(log.createdAt).toLocaleString('en-IN'),
+        userName: log.actorId?.profile?.displayName || log.actorId?.email || 'Admin Staff',
+        userRole: (log.actorId?.role as any) || 'ADMIN',
+        action: (log.action as any) || 'Updated',
+        module: log.entityType || 'General',
+        resource: log.entityId || log.entityType || 'System',
+        details: log.metadata ? JSON.stringify(log.metadata) : 'Administrative action logged',
+        ipAddress: log.ipAddress || '127.0.0.1',
+      }));
+    }
+    return localAuditLogs;
+  }, [serverActivity, localAuditLogs]);
+
   const modules = ['All', 'Products', 'Orders', 'Shipping', 'Marketing', 'Inventory', 'Security', 'Admin Management', 'CMS'];
   const actions = ['All', 'Created', 'Updated', 'Deleted', 'Logged In', 'Changed Permission', 'Archived'];
 
-  const filteredLogs = auditLogs.filter((log) => {
+  const filteredLogs = combinedLogs.filter((log) => {
     const matchesSearch =
       log.resource.toLowerCase().includes(searchQuery.toLowerCase()) ||
       log.userName.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -96,6 +139,14 @@ export const AdminAuditLogsPage: React.FC = () => {
 
         <div className="flex items-center gap-3">
           <button
+            onClick={fetchServerActivity}
+            disabled={isLoading}
+            className="p-2 bg-white border border-primary-300 text-primary-800 rounded-lg hover:bg-primary-50 transition-colors shadow-sm"
+            title="Refresh Activity Logs"
+          >
+            <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
+          </button>
+          <button
             onClick={handleExportCSV}
             className="flex items-center gap-2 px-4 py-2 bg-white border border-primary-300 text-primary-800 rounded-lg text-xs font-semibold hover:bg-primary-50 transition-colors shadow-sm"
           >
@@ -113,7 +164,9 @@ export const AdminAuditLogsPage: React.FC = () => {
           </div>
           <div>
             <p className="text-xs text-primary-600 font-medium uppercase tracking-wider">Total Recorded Events</p>
-            <p className="font-serif text-2xl text-primary-950 font-bold">{auditLogs.length}</p>
+            <p className="font-serif text-2xl text-primary-950 font-bold">
+              {serverActivity?.pagination.total ?? combinedLogs.length}
+            </p>
           </div>
         </div>
 

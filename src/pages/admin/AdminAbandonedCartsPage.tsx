@@ -27,6 +27,7 @@ import {
 import type { AbandonedCartRecord } from '../../service/abandonedCarts';
 import { prettyStatus, getAdminOrder } from '../../service/orders';
 import { useAdminOrderCatalog } from '../../hooks/useAdminOrderCatalog';
+import { getDashboardMarketing, type MarketingAnalyticsResponse } from '../../service/adminDashboard';
 import type { Order } from '../../types';
 
 const PAGE_SIZE = 20;
@@ -122,6 +123,7 @@ export const AdminAbandonedCartsPage: React.FC = () => {
   const canAct = hasPermission('marketing', 'edit');
 
   const [carts, setCarts] = useState<AbandonedCartRecord[]>([]);
+  const [marketingAnalytics, setMarketingAnalytics] = useState<MarketingAnalyticsResponse | null>(null);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState('');
@@ -149,9 +151,13 @@ export const AdminAbandonedCartsPage: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const result = await getAdminAbandonedCarts({ page, limit: PAGE_SIZE, status: statusFilter || undefined });
+      const [result, mkt] = await Promise.all([
+        getAdminAbandonedCarts({ page, limit: PAGE_SIZE, status: statusFilter || undefined }),
+        getDashboardMarketing().catch(() => null),
+      ]);
       setCarts(result.carts);
       setTotal(result.total);
+      if (mkt) setMarketingAnalytics(mkt);
     } catch (err) {
       setError(abandonedCartErrorMessage(err, 'Failed to load abandoned carts'));
     } finally {
@@ -300,21 +306,31 @@ export const AdminAbandonedCartsPage: React.FC = () => {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-xs space-y-1">
           <span className="text-[10px] font-sans font-bold uppercase text-stone-400">Abandoned Carts</span>
-          <p className="font-serif text-2xl font-bold text-stone-900">{total}</p>
+          <p className="font-serif text-2xl font-bold text-stone-900">
+            {marketingAnalytics?.abandonedCarts.total ?? total}
+          </p>
+          <p className="text-[10px] text-stone-400">Total left bags</p>
         </div>
         <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-xs space-y-1">
           <span className="text-[10px] font-sans font-bold uppercase text-stone-400">Value at Risk</span>
           <p className="font-serif text-2xl font-bold text-stone-900">{inr(valueAtRisk)}</p>
-          {totalPages > 1 && <p className="text-[10px] text-stone-400">this page</p>}
+          <p className="text-[10px] text-stone-400">{marketingAnalytics?.abandonedCarts.pending ?? openCarts.length} pending recovery</p>
         </div>
         <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-xs space-y-1">
-          <span className="text-[10px] font-sans font-bold uppercase text-emerald-700">Recovered</span>
-          <p className="font-serif text-2xl font-bold text-emerald-800">{recoveredCount}</p>
-          {recoveredValue > 0 && <p className="text-[10px] text-emerald-700">{inr(recoveredValue)} in orders</p>}
+          <span className="text-[10px] font-sans font-bold uppercase text-emerald-700">Recovered Bags</span>
+          <p className="font-serif text-2xl font-bold text-emerald-800">
+            {marketingAnalytics?.abandonedCarts.recovered ?? recoveredCount}
+          </p>
+          <p className="text-[10px] text-emerald-700 font-semibold">
+            {marketingAnalytics ? `${marketingAnalytics.abandonedCarts.recoveryRate}% recovery rate` : recoveredValue > 0 ? `${inr(recoveredValue)} in orders` : 'Converted orders'}
+          </p>
         </div>
         <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-xs space-y-1">
           <span className="text-[10px] font-sans font-bold uppercase text-stone-400">Reminders Sent</span>
-          <p className="font-serif text-2xl font-bold text-allura-goldDark">{remindersSent}</p>
+          <p className="font-serif text-2xl font-bold text-allura-goldDark">
+            {marketingAnalytics?.abandonedCarts.remindersSent ?? remindersSent}
+          </p>
+          <p className="text-[10px] text-stone-400">WhatsApp & email pushes</p>
         </div>
       </div>
 

@@ -32,6 +32,7 @@ import type { CartSnapshot, CartTotals, CartValidationResult } from '../service/
 import { validateCoupon } from '../service/coupons';
 import { newMetaEventId, metaHeaders, trackMetaEvent } from '../utils/metaPixel';
 import { getMyOrders, getMyOrder, cancelMyOrder, orderErrorMessage, enrichOrder } from '../service/orders';
+import { getBackendErrorMessage } from '../utils/apiResponse';
 
 interface ToastNotification {
   id: string;
@@ -478,7 +479,7 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const cartErrorMessage = (error: any, fallback: string): string =>
-    error?.response?.data?.error?.details?.[0]?.message || error?.response?.data?.message || fallback;
+    getBackendErrorMessage(error, fallback);
 
   const applyCartSnapshot = useCallback((snapshot: CartSnapshot) => {
     if (snapshot.id) setCartId(snapshot.id);
@@ -950,13 +951,7 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const getApiErrorMessage = (error: any, defaultMsg: string) => {
-    if (error.response?.data?.error?.details?.[0]?.message) {
-      return error.response.data.error.details[0].message;
-    }
-    if (error.response?.data?.message) {
-      return error.response.data.message;
-    }
-    return defaultMsg;
+    return getBackendErrorMessage(error, defaultMsg);
   };
 
   // Address API Handlers

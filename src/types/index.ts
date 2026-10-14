@@ -43,6 +43,7 @@ export interface AdminProductVariant {
   attributes: { color?: string; size?: string; [key: string]: any };
   pricing: { mrp: number; sellingPrice: number; currency: string };
   status: 'ACTIVE' | 'INACTIVE' | string;
+  images?: { url: string; isPrimary?: boolean; alt?: string }[];
   createdAt?: string;
   updatedAt?: string;
   [key: string]: any;
@@ -90,6 +91,7 @@ export interface ProductVariant {
   stockReserved: number;
   stockAvailable: number;
   lowStockThreshold?: number;
+  images?: { url: string; isPrimary?: boolean; alt?: string }[];
 }
 
 export interface ProductSEO {
@@ -436,7 +438,12 @@ export interface Banner {
   startDate?: string;
   endDate?: string;
   status: 'Active' | 'Scheduled' | 'Draft';
-  position: 'Hero' | 'Editorial' | 'Secondary' | 'Announcement';
+  position?: 'Hero' | 'Editorial' | 'Secondary' | 'Announcement' | string;
+  placement?: 'HOME_HERO' | 'HOME_PROMOTION' | 'CATEGORY' | 'COLLECTION' | string;
+  image?: { url: string; alt?: string };
+  sortOrder?: number;
+  startsAt?: string;
+  endsAt?: string;
   displayOrder?: number;
 }
 

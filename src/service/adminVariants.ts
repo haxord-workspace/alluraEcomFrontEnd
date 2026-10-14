@@ -1,11 +1,14 @@
 import adminApi from './adminApi';
 import type { AdminProductVariant } from '../types';
 
-const mapVariant = (raw: any): AdminProductVariant => {
+export type AdminProductVariantWithMessage = AdminProductVariant & { _message?: string };
+
+const mapVariant = (raw: any, message?: string): AdminProductVariantWithMessage => {
   if (!raw) return raw;
   return {
     ...raw,
     id: raw.id || raw._id,
+    ...(message ? { _message: message } : {}),
   };
 };
 
@@ -15,7 +18,7 @@ const mapVariant = (raw: any): AdminProductVariant => {
 export const getAdminVariants = async (): Promise<AdminProductVariant[]> => {
   const response = await adminApi.get('/admin/product-variants');
   const data = response.data?.data || response.data;
-  return Array.isArray(data) ? data.map(mapVariant) : [];
+  return Array.isArray(data) ? data.map((item: any) => mapVariant(item)) : [];
 };
 
 /**
@@ -24,7 +27,7 @@ export const getAdminVariants = async (): Promise<AdminProductVariant[]> => {
 export const getAdminVariantsByProduct = async (productId: string): Promise<AdminProductVariant[]> => {
   const response = await adminApi.get(`/admin/product-variants/product/${productId}`);
   const data = response.data?.data || response.data;
-  return Array.isArray(data) ? data.map(mapVariant) : [];
+  return Array.isArray(data) ? data.map((item: any) => mapVariant(item)) : [];
 };
 
 /**
@@ -48,9 +51,10 @@ export interface VariantPayload {
 /**
  * POST /admin/product-variants — create a new variant
  */
-export const createAdminVariant = async (data: VariantPayload): Promise<AdminProductVariant> => {
+export const createAdminVariant = async (data: VariantPayload): Promise<AdminProductVariantWithMessage> => {
   const response = await adminApi.post('/admin/product-variants', data);
-  return mapVariant(response.data?.data || response.data);
+  const respData = response.data?.data || response.data;
+  return mapVariant(respData, response.data?.message);
 };
 
 /**
@@ -59,32 +63,36 @@ export const createAdminVariant = async (data: VariantPayload): Promise<AdminPro
 export const updateAdminVariant = async (
   variantId: string,
   data: Partial<VariantPayload>
-): Promise<AdminProductVariant> => {
+): Promise<AdminProductVariantWithMessage> => {
   const response = await adminApi.patch(`/admin/product-variants/${variantId}`, data);
-  return mapVariant(response.data?.data || response.data);
+  const respData = response.data?.data || response.data;
+  return mapVariant(respData, response.data?.message);
 };
 
 /**
  * DELETE /admin/product-variants/{variantId} — delete a variant
  */
-export const deleteAdminVariant = async (variantId: string): Promise<void> => {
-  await adminApi.delete(`/admin/product-variants/${variantId}`);
+export const deleteAdminVariant = async (variantId: string): Promise<string | undefined> => {
+  const response = await adminApi.delete(`/admin/product-variants/${variantId}`);
+  return response.data?.message;
 };
 
 /**
  * PATCH /admin/product-variants/{variantId}/activate
  */
-export const activateAdminVariant = async (variantId: string): Promise<AdminProductVariant> => {
+export const activateAdminVariant = async (variantId: string): Promise<AdminProductVariantWithMessage> => {
   const response = await adminApi.patch(`/admin/product-variants/${variantId}/activate`);
-  return mapVariant(response.data?.data || response.data);
+  const respData = response.data?.data || response.data;
+  return mapVariant(respData, response.data?.message);
 };
 
 /**
  * PATCH /admin/product-variants/{variantId}/deactivate
  */
-export const deactivateAdminVariant = async (variantId: string): Promise<AdminProductVariant> => {
+export const deactivateAdminVariant = async (variantId: string): Promise<AdminProductVariantWithMessage> => {
   const response = await adminApi.patch(`/admin/product-variants/${variantId}/deactivate`);
-  return mapVariant(response.data?.data || response.data);
+  const respData = response.data?.data || response.data;
+  return mapVariant(respData, response.data?.message);
 };
 
 /**

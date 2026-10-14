@@ -2,14 +2,38 @@ import React from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { collectionsData } from '../data/collections';
 import { useShop } from '../context/ShopContext';
+import { useAdmin } from '../context/AdminContext';
 import { ProductCard } from '../components/ui/ProductCard';
 import { ArrowRight } from 'lucide-react';
 
 export const CollectionPage: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
   const { products } = useShop();
+  const { banners } = useAdmin();
 
   const currentCollection = collectionsData.find(c => c.slug === slug) || collectionsData[0];
+
+  // Check for live collection banner configured in Admin Studio
+  const liveCollectionBanner = (banners || []).find(
+    b => b.placement === 'COLLECTION_BANNER' &&
+         (b.status?.toLowerCase() === 'active' || b.status === 'Active' || (b as any).isActive === true) &&
+         Boolean(b.desktopImage) &&
+         (
+           (slug && b.targetUrl?.includes(slug)) ||
+           (slug && b.title?.toLowerCase().includes(slug.replace('-', ' '))) ||
+           (slug && b.headline?.toLowerCase().includes(slug.replace('-', ' ')))
+         )
+  ) || (banners || []).find(
+    b => b.placement === 'COLLECTION_BANNER' &&
+         (b.status?.toLowerCase() === 'active' || b.status === 'Active' || (b as any).isActive === true) &&
+         Boolean(b.desktopImage)
+  );
+
+  const bannerImg = liveCollectionBanner?.desktopImage || currentCollection.image;
+  const bannerMobileImg = liveCollectionBanner?.mobileImage;
+  const bannerTitle = liveCollectionBanner?.headline || liveCollectionBanner?.title || currentCollection.title;
+  const bannerTagline = liveCollectionBanner?.badge || currentCollection.tagline;
+  const bannerDesc = liveCollectionBanner?.subtitle || liveCollectionBanner?.description || currentCollection.description;
 
   const collectionProducts = products.filter(p => {
     if (slug === 'bridal-edit') return p.occasion === 'Bridal' || p.price > 12000;
@@ -24,21 +48,26 @@ export const CollectionPage: React.FC = () => {
     <div className="space-y-12 sm:space-y-16 pb-16">
       {/* Editorial Collection Hero Banner */}
       <section className="relative h-[48vh] sm:h-[55vh] min-h-[380px] w-full overflow-hidden bg-allura-bgSecondary">
-        <img
-          src={currentCollection.image}
-          alt={currentCollection.title}
-          className="w-full h-full object-cover object-[center_top]"
-        />
+        <picture className="w-full h-full">
+          {bannerMobileImg && (
+            <source media="(max-width: 640px)" srcSet={bannerMobileImg} />
+          )}
+          <img
+            src={bannerImg}
+            alt={bannerTitle}
+            className="w-full h-full object-cover object-[center_top]"
+          />
+        </picture>
         <div className="absolute inset-0 bg-gradient-to-t from-allura-darkBrown/85 via-allura-darkBrown/40 to-transparent flex items-end">
           <div className="max-w-7xl mx-auto px-6 lg:px-8 py-10 w-full text-allura-card space-y-3">
             <span className="text-[11px] font-sans font-bold tracking-[0.3em] uppercase text-allura-gold">
-              {currentCollection.tagline}
+              {bannerTagline}
             </span>
             <h1 className="font-serif text-3xl sm:text-5xl lg:text-6xl font-normal uppercase tracking-tight">
-              {currentCollection.title}
+              {bannerTitle}
             </h1>
             <p className="text-xs sm:text-sm text-allura-bgSecondary font-sans max-w-xl leading-relaxed">
-              {currentCollection.description}
+              {bannerDesc}
             </p>
           </div>
         </div>

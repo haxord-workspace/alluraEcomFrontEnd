@@ -102,7 +102,7 @@ export const CheckoutPage: React.FC = () => {
   const [newAddress, setNewAddress] = useState(EMPTY_ADDRESS);
   const [isSavingAddress, setIsSavingAddress] = useState(false);
 
-  const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>('STANDARD');
+  const [deliveryMethod] = useState<DeliveryMethod>('STANDARD');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('upi');
 
   // Load saved addresses once
@@ -537,7 +537,7 @@ export const CheckoutPage: React.FC = () => {
       <form onSubmit={handlePlaceOrder} className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
         <div className="lg:col-span-7 space-y-8">
           {/* Section 1: Delivery Address */}
-          <div className="bg-allura-card p-6 sm:p-8 rounded-2xl border border-allura-border shadow-xs space-y-4">
+          <div className="bg-allura-card p-4 sm:p-8 rounded-xl sm:rounded-2xl border border-allura-border shadow-xs space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="font-serif text-lg font-semibold uppercase text-allura-text tracking-wide">
                 1. Delivery Address
@@ -666,7 +666,7 @@ export const CheckoutPage: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="space-y-1">
                     <label className="text-xs font-bold text-allura-darkBrown uppercase">City *</label>
                     <input type="text" required value={newAddress.city} onChange={e => setNewAddress({ ...newAddress, city: e.target.value })} className={inputClass} />
@@ -710,52 +710,10 @@ export const CheckoutPage: React.FC = () => {
             )}
           </div>
 
-          {/* Section 2: Delivery Method */}
-          <div className="bg-allura-card p-6 sm:p-8 rounded-2xl border border-allura-border shadow-xs space-y-4">
+          {/* Section 2: Payment Method */}
+          <div className="bg-allura-card p-4 sm:p-8 rounded-xl sm:rounded-2xl border border-allura-border shadow-xs space-y-4">
             <h3 className="font-serif text-lg font-semibold uppercase text-allura-text tracking-wide">
-              2. Delivery Method
-            </h3>
-
-            <div className="space-y-2.5">
-              {([
-                ['STANDARD', 'Standard Courier (Kerala & All India)', 'Dispatches in 24 hours, delivered in 2-4 days'],
-                ['STORE_PICKUP', 'In-Store Pickup (Perinthalmanna Salon)', 'Ready for pickup at Ooty Road boutique'],
-              ] as const).map(([value, title, subtitle]) => (
-                <label
-                  key={value}
-                  className={`flex items-center justify-between p-4 rounded-xl border cursor-pointer transition-all ${
-                    deliveryMethod === value
-                      ? 'border-allura-gold bg-allura-bgSecondary/40 ring-1 ring-allura-gold'
-                      : 'border-allura-border bg-allura-bg'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="radio"
-                      name="delivery"
-                      checked={deliveryMethod === value}
-                      onChange={() => setDeliveryMethod(value)}
-                      className="accent-allura-goldDark"
-                    />
-                    <div>
-                      <p className="text-xs font-bold text-allura-text">{title}</p>
-                      <p className="text-[11px] text-allura-muted">{subtitle}</p>
-                    </div>
-                  </div>
-                  {deliveryMethod === value && summary && (
-                    <span className="text-xs font-bold text-allura-darkBrown">
-                      {summary.shippingAmount === 0 ? 'FREE' : formatPrice(summary.shippingAmount)}
-                    </span>
-                  )}
-                </label>
-              ))}
-            </div>
-          </div>
-
-          {/* Section 3: Payment Method */}
-          <div className="bg-allura-card p-6 sm:p-8 rounded-2xl border border-allura-border shadow-xs space-y-4">
-            <h3 className="font-serif text-lg font-semibold uppercase text-allura-text tracking-wide">
-              3. Payment Method
+              2. Payment Method
             </h3>
 
             <div className="space-y-2.5">
@@ -793,7 +751,7 @@ export const CheckoutPage: React.FC = () => {
         </div>
 
         {/* Right: Order Summary */}
-        <div className="lg:col-span-5 bg-allura-card p-6 sm:p-8 rounded-2xl border border-allura-border shadow-luxury space-y-6 sticky top-24">
+        <div className="lg:col-span-5 bg-allura-card p-4 sm:p-8 rounded-xl sm:rounded-2xl border border-allura-border shadow-luxury space-y-6 lg:sticky top-24">
           <h3 className="font-serif text-lg font-semibold uppercase tracking-wide text-allura-text border-b border-allura-border pb-3">
             ORDER ITEMS ({orderItems.reduce((a: number, b: CartItem) => a + b.quantity, 0)})
           </h3>
@@ -901,12 +859,6 @@ export const CheckoutPage: React.FC = () => {
                 {display.shipping === 0 ? <strong className="text-emerald-700 uppercase">FREE</strong> : formatPrice(display.shipping)}
               </span>
             </div>
-            {!isEstimate && (
-              <div className="flex justify-between">
-                <span>Tax</span>
-                <span className="font-semibold text-allura-text">{formatPrice(display.tax)}</span>
-              </div>
-            )}
             <div className="flex justify-between items-center text-base font-serif font-semibold text-allura-text pt-2 border-t border-allura-border">
               <span className="flex items-center gap-2">
                 {isEstimate ? 'Estimated Total' : 'Total Payable'}
@@ -916,7 +868,7 @@ export const CheckoutPage: React.FC = () => {
             </div>
             {isEstimate && !previewError && (
               <p className="text-[11px] text-allura-muted">
-                {isAddingAddress ? 'Save your address to see final shipping & tax.' : 'Calculating final shipping & tax…'}
+                {isAddingAddress ? 'Save your address to see final shipping.' : 'Calculating final shipping…'}
               </p>
             )}
           </div>

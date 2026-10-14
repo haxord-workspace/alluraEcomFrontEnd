@@ -20,6 +20,7 @@ import { AlluraCircleSection } from '../components/ui/AlluraCircleSection';
 import { AbandonedCartBanner } from '../components/customer/AbandonedCartBanner';
 import { useAdmin } from '../context/AdminContext';
 import { useShop } from '../context/ShopContext';
+import { SEOHead } from '../components/common/SEOHead';
 
 export const HomePage: React.FC = () => {
   const navigate = useNavigate();
@@ -29,129 +30,66 @@ export const HomePage: React.FC = () => {
   const touchStartX = useRef<number | null>(null);
   const touchEndX = useRef<number | null>(null);
 
-  // Active Hero Banners from Admin
+  // Helper to extract banner image from any field
+  const getBannerImage = (b: any): string => {
+    return (
+      b?.desktopImage ||
+      b?.images?.desktop?.url ||
+      (typeof b?.image === 'string' ? b?.image : b?.image?.url) ||
+      b?.imageUrl ||
+      b?.mobileImage ||
+      b?.images?.mobile?.url ||
+      ''
+    );
+  };
+
+  const isBannerActive = (b: any): boolean => {
+    const s = String(b?.status || '').toUpperCase();
+    return s === 'ACTIVE' || s === 'PUBLISHED' || b?.isActive === true;
+  };
+
+  // Active Hero Banners from Admin Studio (Strictly HOME_HERO)
   const activeHeroBanners = (banners || []).filter(
-    b => (b.position?.toLowerCase() === 'hero' || !b.position) && 
-         (b.status?.toLowerCase() === 'active' || b.status === 'Active' || (b as any).isActive === true)
+    b => (b.placement === 'HOME_HERO' || (!b.placement && b.position?.toLowerCase() === 'hero')) && 
+         isBannerActive(b) &&
+         Boolean(getBannerImage(b))
   );
 
-  // Active Editorial Banners from Admin
+  // Active Editorial / Promotion Banners from Admin Studio (Strictly HOME_PROMOTION)
   const activeEditorialBanners = (banners || []).filter(
-    b => b.position?.toLowerCase() === 'editorial' && 
-         (b.status?.toLowerCase() === 'active' || b.status === 'Active' || (b as any).isActive === true)
+    b => (b.placement === 'HOME_PROMOTION' || b.placement === 'EDITORIAL' || (!b.placement && b.position?.toLowerCase() === 'editorial')) && 
+         isBannerActive(b) &&
+         Boolean(getBannerImage(b) || b.headline || b.title)
   );
 
-  const fallbackSlides = [
-    {
-      id: 'slide-1',
-      badge: 'PERINTHALMANNA ATELIER',
-      eyebrow: 'FESTIVE \'26 COLLECTION • HANDCRAFTED',
-      headingLines: ['HANDCRAFTED', 'MODEST & ETHNIC', 'COUTURE'],
-      title: 'HANDCRAFTED MODEST & ETHNIC COUTURE',
-      subtitle: 'Heirloom Kasavu zari, pure silk weaves, and graceful modest silhouettes tailored for your most cherished celebrations.',
-      description: 'Heirloom Kasavu zari, pure silk weaves, and graceful modest silhouettes tailored for your most cherished celebrations.',
-      offerPill: 'Use Code FESTIVE15 for 15% Off • Free Kerala Express Delivery > ₹2,999',
-      primaryCta: 'SHOP NOW',
-      primaryLink: '/shop',
-      secondaryCta: 'AI LUXURY STYLIST',
-      secondaryLink: '/ai-assistant',
-      image: '/images/hero-banners/slide-1.jpeg',
-      quickPills: [
-        { label: '✨ Pure Kasavu', path: '/shop' },
-        { label: '👗 Modest Co-ords', path: '/collections/modest-wear' },
-        { label: '🌸 Festive Anarkalis', path: '/shop' },
-        { label: '👰 Bridal Edit', path: '/collections/bridal-edit' },
-      ],
-      socialProof: 'Over 10,000+ patrons styled across Kerala & GCC',
-      rightTags: ['MODEST WEAR', 'ETHNIC COUTURE', 'FESTIVE SETS'],
-      quote: 'MODESTY IS THE HIGHEST FORM OF ELEGANCE',
-    },
-    {
-      id: 'slide-2',
-      badge: 'ROYAL HERITAGE WEAVES',
-      eyebrow: 'BESPOKE BRIDAL & HEIRLOOM ZARI',
-      headingLines: ['BESPOKE', 'ZARDOZI &', 'SILK WEAVES'],
-      title: 'BESPOKE ZARDOZI & SILK WEAVES',
-      subtitle: 'Intricate metallic needlework and ceremonial crimson lehengas woven by Kerala master artisans with custom blouse tailoring.',
-      description: 'Intricate metallic needlework and ceremonial crimson lehengas woven by Kerala master artisans with custom blouse tailoring.',
-      offerPill: 'Complimentary Bridal Concierge • Custom Blouse Stitching Available',
-      primaryCta: 'SHOP BRIDAL',
-      primaryLink: '/collections/bridal-edit',
-      secondaryCta: 'WHATSAPP CONCIERGE',
-      secondaryLink: 'https://wa.me/919037991774',
-      image: '/images/hero-banners/slide-2.jpeg',
-      quickPills: [
-        { label: '👰 Bridal Lehengas', path: '/collections/bridal-edit' },
-        { label: '🪡 Organza Dupattas', path: '/shop' },
-        { label: '✨ Raw Silk Sets', path: '/shop' },
-        { label: '👑 Heirloom Sarees', path: '/collections/festive-curation' },
-      ],
-      socialProof: 'Silk Mark Certified • 100% Authentic Kerala Handlooms',
-      rightTags: ['BRIDAL LEHENGAS', 'ORGANZA DUPATTAS', 'SILK SUITS'],
-      quote: 'MADE FOR YOUR MOST SACRED MOMENTS',
-    },
-    {
-      id: 'slide-3',
-      badge: 'CONTEMPORARY MINIMALISM',
-      eyebrow: 'REFINED LIVING • EVERYDAY LUXURY',
-      headingLines: ['EFFORTLESS', 'MODEST', 'SILHOUETTES'],
-      title: 'EFFORTLESS MODEST SILHOUETTES',
-      subtitle: 'Micro-pleated co-ords and tiered dresses crafted with breathable ease and subtle gold trims for timeless elegance.',
-      description: 'Micro-pleated co-ords and tiered dresses crafted with breathable ease and subtle gold trims for timeless elegance.',
-      offerPill: '48-Hour Dispatch Across Kerala • 7-Day Hassle-Free Doorstep Exchanges',
-      primaryCta: 'SHOP MODEST WEAR',
-      primaryLink: '/collections/modest-wear',
-      secondaryCta: 'VIEW LOOKBOOK',
-      secondaryLink: '/lookbook',
-      image: '/images/hero-banners/hero-4k.jpg',
-      quickPills: [
-        { label: '✨ Pleated Co-ords', path: '/collections/modest-wear' },
-        { label: '🌿 Breathable Linens', path: '/shop' },
-        { label: '💫 Evening Tunics', path: '/shop' },
-        { label: '✨ Casual Luxury', path: '/shop' },
-      ],
-      socialProof: 'Rated 4.9/5 by patrons for exquisite fabric feel',
-      rightTags: ['PLEATED SETS', 'MODEST TUNICS', 'FESTIVE WEAR'],
-      quote: 'TIMELESS DRAPES, REFINED LIVING',
-    },
-  ];
+  // Dynamic slides populated strictly from active Admin Hero Banners (no dummy mock slides)
+  const heroSlides = activeHeroBanners.map((b) => {
+    const fullTitle = b.headline || b.title || 'ALLURA ETHNIC & MODEST COUTURE';
+    const headingLines = fullTitle.includes('\n') 
+      ? fullTitle.split('\n').filter(Boolean)
+      : [fullTitle];
+    const img = getBannerImage(b);
 
-  // Dynamic slides populated from Admin Context (with fallback)
-  const heroSlides = activeHeroBanners.length > 0
-    ? activeHeroBanners.map((b, idx) => {
-        const fullTitle = b.headline || b.title || 'HANDCRAFTED MODEST & ETHNIC COUTURE';
-        const headingLines = fullTitle.includes('\n') 
-          ? fullTitle.split('\n').filter(Boolean)
-          : [fullTitle];
-
-        return {
-          id: b.id,
-          badge: b.badge || 'PERINTHALMANNA ATELIER',
-          eyebrow: b.eyebrow || 'CURATED ATELIER WEAR',
-          headingLines,
-          title: fullTitle,
-          subtitle: b.subtitle || b.description || 'Heirloom Kasavu zari, pure silk weaves, and graceful modest silhouettes.',
-          description: b.subtitle || b.description || 'Heirloom Kasavu zari, pure silk weaves, and graceful modest silhouettes.',
-          offerPill: b.offerPill || 'Complimentary Kerala Express Delivery > ₹2,999',
-          primaryCta: b.ctaText || 'SHOP NOW',
-          primaryLink: b.targetUrl || '/shop',
-          secondaryCta: b.secondaryCtaText || 'AI LUXURY STYLIST',
-          secondaryLink: b.secondaryTargetUrl || '/ai-assistant',
-          image: b.desktopImage || (idx === 0 ? '/images/hero-banners/hero-4k.jpg' : `/images/hero-banners/slide-${(idx % 3) + 1}.jpeg`),
-          quickPills: [
-            { label: '✨ Pure Kasavu', path: '/shop' },
-            { label: '👗 Modest Co-ords', path: '/collections/modest-wear' },
-            { label: '🌸 Festive Anarkalis', path: '/shop' },
-            { label: '👰 Bridal Edit', path: '/collections/bridal-edit' },
-          ],
-          socialProof: 'Over 10,000+ patrons styled across Kerala & GCC',
-          rightTags: ['MODEST WEAR', 'ETHNIC COUTURE', 'FESTIVE SETS'],
-          quote: 'MODESTY IS THE HIGHEST FORM OF ELEGANCE',
-        };
-      })
-    : fallbackSlides;
+    return {
+      id: b.id,
+      badge: b.badge || '',
+      eyebrow: b.eyebrow || '',
+      headingLines,
+      title: fullTitle,
+      subtitle: b.subtitle || b.description || '',
+      description: b.subtitle || b.description || '',
+      offerPill: b.offerPill || '',
+      primaryCta: b.ctaText || 'SHOP NOW',
+      primaryLink: b.targetUrl || '/shop',
+      secondaryCta: b.secondaryCtaText || '',
+      secondaryLink: b.secondaryTargetUrl || '',
+      image: img,
+      mobileImage: b.mobileImage || img,
+    };
+  });
 
   useEffect(() => {
+    if (heroSlides.length <= 1) return;
     const timer = setInterval(() => {
       setCurrentSlide(prev => (prev + 1) % heroSlides.length);
     }, 7500);
@@ -188,97 +126,147 @@ export const HomePage: React.FC = () => {
     : products
   ).slice(0, 4);
 
+  const homeSchema = {
+    '@context': 'https://schema.org',
+    '@type': 'ClothingStore',
+    name: 'Allura Boutique',
+    image: 'https://images.unsplash.com/photo-1610030469983-98e550d6193c?auto=format&fit=crop&w=1200&q=80',
+    description: 'Curated Indian luxury fashion, handcrafted Kasavu weaves, and modest silhouettes in Perinthalmanna, Kerala.',
+    address: {
+      '@type': 'PostalAddress',
+      streetAddress: 'Ooty Road',
+      addressLocality: 'Perinthalmanna',
+      addressRegion: 'Kerala',
+      addressCountry: 'IN',
+    },
+    telephone: '+919037991774',
+    url: 'https://alluraboutique.in',
+  };
+
   return (
     <div className="space-y-12 sm:space-y-20">
+      <SEOHead
+        title="Allura Boutique | Luxury Indian & Modest Couture Atelier"
+        description="Discover bespoke Kasavu weaves, handcrafted celebratory lehengas, and ethereal modest silhouettes from our Perinthalmanna atelier. Free express delivery over ₹2,999."
+        canonicalUrl="https://alluraboutique.in"
+        ogType="website"
+        structuredData={homeSchema}
+      />
       {/* Reminder for customers with an abandoned bag (GET /abandoned-cart/status) */}
       <AbandonedCartBanner />
 
       {/* 1. HIGH-CONVERSION HERO SECTION */}
-      <section 
-        className="relative w-full min-h-[600px] sm:min-h-[580px] lg:h-[84vh] lg:max-h-[820px] overflow-hidden bg-[#F7E6C8]"
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-      >
-        {heroSlides.map((slide, index) => {
-          const isActive = currentSlide === index;
+      {/* 1. HIGH-CONVERSION HERO SECTION */}
+      {heroSlides.length > 0 ? (
+        <section 
+          className="relative w-full min-h-[600px] sm:min-h-[580px] lg:h-[84vh] lg:max-h-[820px] overflow-hidden bg-[#F7E6C8]"
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+        >
+          {heroSlides.map((slide, index) => {
+            const isActive = currentSlide === index;
 
-          return (
-            <div
-              key={slide.id}
-              className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${
-                isActive ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'
-              }`}
-            >
-              {/* Background Model Image with subtle zoom */}
-              <img
-                src={slide.image}
-                alt={slide.headingLines.join(' ')}
-                className="absolute inset-0 w-full h-full object-cover object-[center_20%] sm:object-[center_top] transition-transform duration-[8500ms] ease-out z-0"
-                style={{
-                  transform: isActive ? 'scale(1.04)' : 'scale(1)',
-                }}
-              />
+            return (
+              <div
+                key={slide.id}
+                className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${
+                  isActive ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'
+                }`}
+              >
+                {/* Background Model Image with subtle zoom */}
+                <picture className="absolute inset-0 w-full h-full">
+                  {slide.mobileImage && (
+                    <source media="(max-width: 640px)" srcSet={slide.mobileImage} />
+                  )}
+                  <img
+                    src={slide.image}
+                    alt={slide.headingLines.join(' ')}
+                    className="w-full h-full object-cover object-[center_20%] sm:object-[center_top] transition-transform duration-[8500ms] ease-out z-0"
+                    style={{
+                      transform: isActive ? 'scale(1.04)' : 'scale(1)',
+                    }}
+                  />
+                </picture>
 
-              {/* No Gradient Overlay */}
+                {/* Content Container */}
+                <div className="max-w-7xl mx-auto h-full px-5 sm:px-6 lg:px-8 relative z-30 flex items-end justify-between w-full pb-24 sm:pb-32">
+                  <div className="max-w-xl space-y-4 pt-4 sm:pt-0">
+                    <h1 className="font-heading text-3xl sm:text-5xl lg:text-[54px] text-white font-bold leading-[1.08] tracking-tight uppercase">
+                      {slide.headingLines.map((line, lIdx) => (
+                        <span key={lIdx} className="block">
+                          {line}
+                        </span>
+                      ))}
+                    </h1>
 
-              {/* Content Container (Layered above gradients) */}
-              <div className="max-w-7xl mx-auto h-full px-5 sm:px-6 lg:px-8 relative z-30 flex items-end justify-between w-full pb-24 sm:pb-32">
-                
-                {/* Left High-Conversion Copy & Actions */}
-                <div className="max-w-xl space-y-4 pt-4 sm:pt-0">
-                  
-                  {/* Main High-Impact Typography Heading */}
-                  <h1 className="font-heading text-3xl sm:text-5xl lg:text-[54px] text-white font-bold leading-[1.08] tracking-tight uppercase">
-                    {slide.headingLines.map((line, lIdx) => (
-                      <span key={lIdx} className="block">
-                        {line}
-                      </span>
-                    ))}
-                  </h1>
+                    {slide.description && (
+                      <p className="text-xs sm:text-sm text-[#F7E6C8] font-body max-w-lg leading-relaxed font-normal line-clamp-3 sm:line-clamp-none">
+                        {slide.description}
+                      </p>
+                    )}
 
-                  {/* Benefit-Driven Narrative Subtext */}
-                  <p className="text-xs sm:text-sm text-[#F7E6C8] font-body max-w-lg leading-relaxed font-normal line-clamp-3 sm:line-clamp-none">
-                    {slide.description}
-                  </p>
-
-                  {/* Call-to-Action Button */}
-                  <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                    <Link
-                      to={slide.primaryLink}
-                      className="inline-flex items-center justify-center gap-2 bg-[#F7E6C8] hover:bg-white text-[#561C08] text-xs font-heading font-bold tracking-[0.2em] uppercase py-4 px-8 rounded-xl shadow-md transition-all duration-300 group text-center"
-                    >
-                      <span>{slide.primaryCta}</span>
-                      <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
-                    </Link>
+                    <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                      <Link
+                        to={slide.primaryLink}
+                        className="inline-flex items-center justify-center gap-2 bg-[#F7E6C8] hover:bg-white text-[#561C08] text-xs font-heading font-bold tracking-[0.2em] uppercase py-4 px-8 rounded-xl shadow-md transition-all duration-300 group text-center"
+                      >
+                        <span>{slide.primaryCta}</span>
+                        <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
+                      </Link>
+                    </div>
                   </div>
                 </div>
-
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
 
-        {/* Carousel Arrow Controls */}
-        <div className="absolute bottom-6 right-6 z-30 hidden sm:flex items-center gap-2.5">
-          <button
-            onClick={() =>
-              setCurrentSlide(prev => (prev === 0 ? heroSlides.length - 1 : prev - 1))
-            }
-            className="w-10 h-10 rounded-full bg-white hover:bg-[#561C08] text-[#561C08] hover:text-white border border-[#561C08]/20 flex items-center justify-center transition-all shadow-md hover:scale-105"
-            aria-label="Previous Slide"
-          >
-            <ChevronLeft size={18} />
-          </button>
-          <button
-            onClick={() => setCurrentSlide(prev => (prev + 1) % heroSlides.length)}
-            className="w-10 h-10 rounded-full bg-white hover:bg-[#561C08] text-[#561C08] hover:text-white border border-[#561C08]/20 flex items-center justify-center transition-all shadow-md hover:scale-105"
-            aria-label="Next Slide"
-          >
-            <ChevronRight size={18} />
-          </button>
-        </div>
-      </section>
+          {/* Carousel Arrow Controls */}
+          {heroSlides.length > 1 && (
+            <div className="absolute bottom-6 right-6 z-30 hidden sm:flex items-center gap-2.5">
+              <button
+                onClick={() =>
+                  setCurrentSlide(prev => (prev === 0 ? heroSlides.length - 1 : prev - 1))
+                }
+                className="w-10 h-10 rounded-full bg-white hover:bg-[#561C08] text-[#561C08] hover:text-white border border-[#561C08]/20 flex items-center justify-center transition-all shadow-md hover:scale-105"
+                aria-label="Previous Slide"
+              >
+                <ChevronLeft size={18} />
+              </button>
+              <button
+                onClick={() => setCurrentSlide(prev => (prev + 1) % heroSlides.length)}
+                className="w-10 h-10 rounded-full bg-white hover:bg-[#561C08] text-[#561C08] hover:text-white border border-[#561C08]/20 flex items-center justify-center transition-all shadow-md hover:scale-105"
+                aria-label="Next Slide"
+              >
+                <ChevronRight size={18} />
+              </button>
+            </div>
+          )}
+        </section>
+      ) : (
+        <section className="relative w-full py-20 sm:py-28 bg-[#F7E6C8] border-b border-[#561C08]/15">
+          <div className="max-w-4xl mx-auto px-6 text-center space-y-4">
+            <span className="text-[11px] font-heading font-bold tracking-[0.3em] uppercase text-[#561C08]">
+              ATELIER OF MODEST LUXURY & SILKS
+            </span>
+            <h1 className="font-heading text-3xl sm:text-5xl lg:text-6xl text-[#000000] font-bold uppercase tracking-tight">
+              ALLURA ETHNIC & MODEST COUTURE
+            </h1>
+            <p className="text-sm sm:text-base text-[#561C08] font-body max-w-xl mx-auto leading-relaxed">
+              Curated artisanal sarees, regal lehengas, and refined modest ensembles handcrafted for your moments of celebration.
+            </p>
+            <div className="pt-4 flex justify-center">
+              <Link
+                to="/shop"
+                className="inline-flex items-center gap-2 bg-[#561C08] hover:bg-[#3D1406] text-white text-xs font-heading font-bold tracking-[0.2em] uppercase py-4 px-8 rounded-xl shadow-md transition-all duration-300"
+              >
+                <span>EXPLORE COLLECTION</span>
+                <ArrowRight size={14} />
+              </Link>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* 1.1 HIGH-CONVERSION TRUST & PROMISE STRIP */}
       <section className="max-w-7xl mx-auto px-5 sm:px-6 lg:px-8 -mt-6 sm:-mt-10 relative z-30">
@@ -402,67 +390,60 @@ export const HomePage: React.FC = () => {
       )}
 
       {/* 3. EDITORIAL SPLIT BANNERS (Dynamic from Admin) */}
-      <section className="max-w-7xl mx-auto px-6 lg:px-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8">
-          {(activeEditorialBanners.length > 0 ? activeEditorialBanners.slice(0, 2) : [
-            {
-              id: 'ed-1',
-              title: 'NEW ARRIVALS',
-              headline: 'NEW ARRIVALS',
-              subtitle: 'Fresh modest styles, handpicked for your wardrobe.',
-              description: 'Fresh modest styles, handpicked for your wardrobe.',
-              ctaText: 'SHOP NOW',
-              targetUrl: '/shop?filter=new',
-              desktopImage: '/images/editorial-banners/new-arrivals.jpeg',
-              badge: 'FRESH DROPS'
-            },
-            {
-              id: 'ed-2',
-              title: 'THE ALLURA COLLECTION',
-              headline: 'THE ALLURA COLLECTION',
-              subtitle: 'Curated modest couture for discerning women.',
-              description: 'Curated modest couture for discerning women.',
-              ctaText: 'EXPLORE',
-              targetUrl: '/collections/festive-curation',
-              desktopImage: '/images/editorial-banners/allura-collection.jpeg',
-              badge: 'SIGNATURE EDIT'
-            }
-          ]).map(banner => (
-            <div
-              key={banner.id}
-              className="relative aspect-[16/10] sm:aspect-[16/9] rounded-2xl overflow-hidden group shadow-md border border-[#561C08]/15"
-            >
-              <img
-                src={banner.desktopImage || '/images/editorial-banners/new-arrivals.jpeg'}
-                alt={banner.headline || banner.title}
-                className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-700"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-[#561C08]/95 via-[#561C08]/45 to-transparent flex flex-col justify-end p-6 sm:p-8 text-white">
-                {banner.badge && (
-                  <span className="inline-block text-[10px] font-heading font-bold uppercase tracking-[0.2em] text-[#F7E6C8] mb-1">
-                    {banner.badge}
-                  </span>
-                )}
-                <h3 className="font-heading text-2xl sm:text-3xl font-bold tracking-wide text-white">
-                  {banner.headline || banner.title}
-                </h3>
-                <p className="text-xs sm:text-sm font-body text-[#F7E6C8] mt-1.5 max-w-xs leading-relaxed font-normal">
-                  {banner.subtitle || banner.description}
-                </p>
-                <div className="pt-4">
-                  <Link
-                    to={banner.targetUrl || '/shop'}
-                    className="inline-flex items-center gap-2 bg-[#561C08] hover:bg-[#3D1406] text-white text-[11px] font-heading font-bold tracking-[0.2em] uppercase py-3 px-6 rounded-xl transition-all duration-300 shadow-md group/btn border border-white/20"
-                  >
-                    <span>{banner.ctaText || 'SHOP NOW'}</span>
-                    <ArrowRight size={13} className="group-hover/btn:translate-x-1 transition-transform" />
-                  </Link>
+      {activeEditorialBanners.length > 0 && (
+        <section className="max-w-7xl mx-auto px-6 lg:px-8">
+          <div className={`grid grid-cols-1 ${activeEditorialBanners.length > 1 ? 'md:grid-cols-2' : ''} gap-6 lg:gap-8`}>
+            {activeEditorialBanners.slice(0, 2).map(banner => {
+              const bgImg = getBannerImage(banner);
+              return (
+                <div
+                  key={banner.id}
+                  className="relative aspect-[16/10] sm:aspect-[16/9] rounded-2xl overflow-hidden group shadow-md border border-[#561C08]/15 bg-[#561C08]"
+                >
+                  {bgImg ? (
+                    <picture className="w-full h-full">
+                      {(banner.mobileImage || banner.images?.mobile?.url) && (
+                        <source media="(max-width: 640px)" srcSet={banner.mobileImage || banner.images?.mobile?.url} />
+                      )}
+                      <img
+                        src={bgImg}
+                        alt={banner.headline || banner.title}
+                        className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-700"
+                      />
+                    </picture>
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-br from-[#561C08] via-[#7A280F] to-[#3D1406]" />
+                  )}
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#561C08]/95 via-[#561C08]/45 to-transparent flex flex-col justify-end p-6 sm:p-8 text-white">
+                    {banner.badge && (
+                      <span className="inline-block text-[10px] font-heading font-bold uppercase tracking-[0.2em] text-[#F7E6C8] mb-1">
+                        {banner.badge}
+                      </span>
+                    )}
+                    <h3 className="font-heading text-2xl sm:text-3xl font-bold tracking-wide text-white">
+                      {banner.headline || banner.title}
+                    </h3>
+                    {(banner.subtitle || banner.description) && (
+                      <p className="text-xs sm:text-sm font-body text-[#F7E6C8] mt-1.5 max-w-xs leading-relaxed font-normal">
+                        {banner.subtitle || banner.description}
+                      </p>
+                    )}
+                    <div className="pt-4">
+                      <Link
+                        to={banner.targetUrl || '/shop'}
+                        className="inline-flex items-center gap-2 bg-[#561C08] hover:bg-[#3D1406] text-white text-[11px] font-heading font-bold tracking-[0.2em] uppercase py-3 px-6 rounded-xl transition-all duration-300 shadow-md group/btn border border-white/20"
+                      >
+                        <span>{banner.ctaText || 'SHOP NOW'}</span>
+                        <ArrowRight size={13} className="group-hover/btn:translate-x-1 transition-transform" />
+                      </Link>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {/* 4. BEST SELLERS PRODUCT GRID */}
       <section className="max-w-7xl mx-auto px-6 lg:px-8">

@@ -3,6 +3,7 @@ import { Package, X, Loader2, Search, Minus, Plus, ArrowRight, ChevronLeft, Pack
 import { useShop } from '../../context/ShopContext';
 import { getInventoryByVariant, stockIn, stockOut, adjustStock } from '../../service/adminInventory';
 import type { InventoryRecord } from '../../service/adminInventory';
+import { getBackendErrorMessage, getBackendSuccessMessage } from '../../utils/apiResponse';
 
 export type StockOperation = 'Add' | 'Remove' | 'Set';
 
@@ -151,11 +152,10 @@ export const StockAdjustModal: React.FC<StockAdjustModalProps> = ({
           };
 
       onAdjusted?.(merged);
-      showToast(`${liveRecord.sku || liveRecord.productName || 'Variant'}: ${currentStock} → ${newStock} units`, 'success');
+      showToast(getBackendSuccessMessage(updated, `${liveRecord.sku || liveRecord.productName || 'Variant'}: ${currentStock} → ${newStock} units`), 'success');
       onClose();
     } catch (error: any) {
-      const body = error.response?.data;
-      showToast(body?.error?.details?.[0]?.message || body?.message || 'Failed to update stock', 'error');
+      showToast(getBackendErrorMessage(error, 'Failed to update stock'), 'error');
     } finally {
       setIsSubmitting(false);
     }

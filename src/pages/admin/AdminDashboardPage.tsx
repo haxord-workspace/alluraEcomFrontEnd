@@ -13,15 +13,59 @@ import { getLowStockInventory } from '../../service/adminInventory';
 import type { InventoryRecord } from '../../service/adminInventory';
 import { getAdminOrders } from '../../service/orders';
 import { getAdminAbandonedCarts } from '../../service/abandonedCarts';
+import {
+  getDashboardOverview,
+  getDashboardSales,
+  getDashboardSystemHealth,
+  type OverviewMetrics,
+  type SalesAnalyticsResponse,
+  type SystemHealthResponse
+} from '../../service/adminDashboard';
 import type { Order } from '../../types';
 
 export const AdminDashboardPage: React.FC = () => {
   const { currentAdmin, products } = useAdmin();
   const [timeRange, setTimeRange] = useState<'7D' | '30D' | '90D' | '1Y'>('30D');
 
-  const { overview, salesChart, funnel } = mockAnalyticsData;
+  const { overview: mockOverview, salesChart: mockSalesChart, funnel } = mockAnalyticsData;
+
+  const [overviewData, setOverviewData] = useState<OverviewMetrics | null>(null);
+  const [salesData, setSalesData] = useState<SalesAnalyticsResponse | null>(null);
+  const [systemHealth, setSystemHealth] = useState<SystemHealthResponse | null>(null);
 
   const [lowStockItems, setLowStockItems] = useState<InventoryRecord[]>([]);
+
+  // Calculate start date based on timeRange
+  const getDateRange = (range: '7D' | '30D' | '90D' | '1Y') => {
+    const end = new Date();
+    const start = new Date();
+    if (range === '7D') start.setDate(start.getDate() - 7);
+    else if (range === '30D') start.setDate(start.getDate() - 30);
+    else if (range === '90D') start.setDate(start.getDate() - 90);
+    else if (range === '1Y') start.setFullYear(start.getFullYear() - 1);
+    return {
+      startDate: start.toISOString(),
+      endDate: end.toISOString(),
+    };
+  };
+
+  useEffect(() => {
+    const { startDate, endDate } = getDateRange(timeRange);
+
+    getDashboardOverview({ startDate, endDate })
+      .then(setOverviewData)
+      .catch(err => console.warn('Could not load dashboard overview API, using fallback:', err));
+
+    getDashboardSales({ startDate, endDate, interval: timeRange === '7D' ? 'day' : 'week' })
+      .then(setSalesData)
+      .catch(err => console.warn('Could not load sales analytics API, using fallback:', err));
+  }, [timeRange]);
+
+  useEffect(() => {
+    getDashboardSystemHealth()
+      .then(setSystemHealth)
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     getLowStockInventory()
@@ -67,8 +111,16 @@ export const AdminDashboardPage: React.FC = () => {
             <span className="text-[10px] font-sans font-bold tracking-[0.2em] text-allura-goldDark uppercase">
               OPERATIONS OVERVIEW
             </span>
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-            <span className="text-[11px] text-emerald-700 font-semibold font-sans">Live Storefront Synced</span>
+            <span className={`w-1.5 h-1.5 rounded-full ${
+              systemHealth?.status === 'HEALTHY'
+                ? 'bg-emerald-500'
+                : systemHealth?.status === 'DEGRADED'
+                ? 'bg-amber-500'
+                : 'bg-emerald-500'
+            }`} />
+            <span className="text-[11px] text-emerald-700 font-semibold font-sans">
+              {systemHealth ? `System ${systemHealth.status} · Live Synced` : 'Live Storefront Synced'}
+            </span>
           </div>
           <h1 className="font-serif text-3xl sm:text-4xl text-stone-900 font-normal mt-1">
             Good Morning, {currentAdmin.name}
@@ -116,14 +168,16 @@ export const AdminDashboardPage: React.FC = () => {
           <div className="flex justify-between items-start text-stone-500">
             <span className="text-[10px] font-sans font-bold uppercase tracking-wider">Gross Revenue</span>
             <div className="flex items-center text-emerald-700 text-xs font-semibold">
-              <span>{overview.revenueGrowth}</span>
+              <span>{mockOverview.revenueGrowth}</span>
               <ArrowUpRight size={14} />
             </div>
           </div>
           <p className="font-serif text-2xl sm:text-3xl font-bold text-stone-900">
-            ₹ {overview.revenue.toLocaleString('en-IN')}
+            ₹ {(overviewData?.sales.grossSales ?? mockOverview.revenue).toLocaleString('en-IN')}
           </p>
-          <p className="text-[11px] font-sans text-stone-400">AOV: ₹{overview.averageOrderValue.toLocaleString('en-IN')}</p>
+          <p className="text-[11px] font-sans text-stone-400">
+            AOV: ₹{(overviewData?.sales.averageOrderValue ?? mockOverview.averageOrderValue).toLocaleString('en-IN')}
+          </p>
         </Link>
 
         {/* Orders */}
@@ -134,14 +188,16 @@ export const AdminDashboardPage: React.FC = () => {
           <div className="flex justify-between items-start text-stone-500">
             <span className="text-[10px] font-sans font-bold uppercase tracking-wider">Total Orders</span>
             <div className="flex items-center text-emerald-700 text-xs font-semibold">
-              <span>{overview.ordersGrowth}</span>
+              <span>{mockOverview.ordersGrowth}</span>
               <ArrowUpRight size={14} />
             </div>
           </div>
           <p className="font-serif text-2xl sm:text-3xl font-bold text-stone-900">
-            {totalOrders}
+            {overviewData?.orders.totalOrders ?? (totalOrders || mockOverview.orders)}
           </p>
-          <p className="text-[11px] font-sans text-amber-700 font-medium">{pendingCount} awaiting confirmation</p>
+          <p className="text-[11px] font-sans text-amber-700 font-medium">
+            {overviewData?.orders.awaitingPayment ?? pendingCount} awaiting confirmation
+          </p>
         </Link>
 
         {/* Customers */}
@@ -152,14 +208,16 @@ export const AdminDashboardPage: React.FC = () => {
           <div className="flex justify-between items-start text-stone-500">
             <span className="text-[10px] font-sans font-bold uppercase tracking-wider">Active Customers</span>
             <div className="flex items-center text-emerald-700 text-xs font-semibold">
-              <span>{overview.customersGrowth}</span>
+              <span>{mockOverview.customersGrowth}</span>
               <ArrowUpRight size={14} />
             </div>
           </div>
           <p className="font-serif text-2xl sm:text-3xl font-bold text-stone-900">
-            {overview.customers}
+            {overviewData?.customers.totalCustomers ?? mockOverview.customers}
           </p>
-          <p className="text-[11px] font-sans text-stone-400">Conversion Rate: {overview.conversionRate}%</p>
+          <p className="text-[11px] font-sans text-stone-400">
+            New this period: {overviewData?.customers.newCustomersInPeriod ?? 0}
+          </p>
         </Link>
 
         {/* Products & Inventory */}
@@ -169,12 +227,16 @@ export const AdminDashboardPage: React.FC = () => {
         >
           <div className="flex justify-between items-start text-stone-500">
             <span className="text-[10px] font-sans font-bold uppercase tracking-wider">Atelier Products</span>
-            <span className="text-stone-400 text-xs font-mono">{products.length} SKUs</span>
+            <span className="text-stone-400 text-xs font-mono">
+              {overviewData?.catalog.totalVariants ?? products.length} Variants
+            </span>
           </div>
           <p className="font-serif text-2xl sm:text-3xl font-bold text-stone-900">
-            {products.length}
+            {overviewData?.catalog.totalProducts ?? products.length}
           </p>
-          <p className="text-[11px] font-sans text-rose-700 font-medium">{lowStockItems.length} items low on stock</p>
+          <p className="text-[11px] font-sans text-rose-700 font-medium">
+            {overviewData?.catalog.lowStockVariants ?? lowStockItems.length} items low on stock
+          </p>
         </Link>
       </div>
 
@@ -185,31 +247,43 @@ export const AdminDashboardPage: React.FC = () => {
         <div className="lg:col-span-2 bg-white border border-stone-200 rounded-2xl p-6 shadow-xs space-y-6">
           <div className="flex justify-between items-center">
             <div>
-              <h3 className="font-serif text-xl font-normal text-stone-900">Weekly Revenue & Order Trajectory</h3>
-              <p className="text-xs font-sans text-stone-500">Gross online sales and dispatch volume</p>
+              <h3 className="font-serif text-xl font-normal text-stone-900">Revenue & Order Trajectory</h3>
+              <p className="text-xs font-sans text-stone-500">
+                {salesData ? `Gross ₹${salesData.totals.grossSales.toLocaleString('en-IN')} (Net ₹${salesData.totals.netSales.toLocaleString('en-IN')})` : 'Gross online sales and dispatch volume'}
+              </p>
             </div>
-            <span className="text-xs font-sans font-bold text-allura-goldDark">Last 7 Days</span>
+            <span className="text-xs font-sans font-bold text-allura-goldDark">{timeRange} Window</span>
           </div>
 
-          {/* Bar chart mockup */}
+          {/* Bar chart */}
           <div className="h-48 flex items-end justify-between gap-3 pt-4 px-2 border-b border-stone-100">
-            {salesChart.map((day, idx) => {
-              const maxVal = 120000;
-              const heightPct = Math.round((day.revenue / maxVal) * 100);
+            {(() => {
+              const chartItems = salesData?.timeSeries && salesData.timeSeries.length > 0
+                ? salesData.timeSeries.slice(-7).map(item => ({
+                    label: item.period.split('T')[0] || item.period,
+                    revenue: item.grossSales,
+                  }))
+                : mockSalesChart;
 
-              return (
-                <div key={idx} className="flex-1 flex flex-col items-center gap-2 group h-full justify-end">
-                  <div className="opacity-0 group-hover:opacity-100 transition-opacity text-[10px] font-sans font-bold text-stone-800 bg-stone-100 px-1.5 py-0.5 rounded">
-                    ₹{Math.round(day.revenue / 1000)}k
+              const maxVal = Math.max(1, ...chartItems.map(d => d.revenue));
+
+              return chartItems.map((day, idx) => {
+                const heightPct = Math.min(100, Math.max(8, Math.round((day.revenue / maxVal) * 100)));
+
+                return (
+                  <div key={idx} className="flex-1 flex flex-col items-center gap-2 group h-full justify-end">
+                    <div className="opacity-0 group-hover:opacity-100 transition-opacity text-[10px] font-sans font-bold text-stone-800 bg-stone-100 px-1.5 py-0.5 rounded whitespace-nowrap">
+                      ₹{Math.round(day.revenue / 1000)}k
+                    </div>
+                    <div
+                      className="w-full max-w-[40px] bg-stone-900 group-hover:bg-allura-gold transition-colors rounded-t-lg"
+                      style={{ height: `${heightPct}%` }}
+                    />
+                    <span className="text-[10px] font-sans text-stone-500 truncate max-w-[48px]">{day.label}</span>
                   </div>
-                  <div
-                    className="w-full max-w-[40px] bg-stone-900 group-hover:bg-allura-gold transition-colors rounded-t-lg"
-                    style={{ height: `${heightPct}%` }}
-                  />
-                  <span className="text-[11px] font-sans text-stone-500">{day.label}</span>
-                </div>
-              );
-            })}
+                );
+              });
+            })()}
           </div>
 
           <div className="flex items-center justify-between text-xs font-sans text-stone-500 pt-2">
@@ -222,7 +296,7 @@ export const AdminDashboardPage: React.FC = () => {
         <div className="bg-white border border-stone-200 rounded-2xl p-6 shadow-xs space-y-4">
           <div className="flex justify-between items-center">
             <h3 className="font-serif text-xl font-normal text-stone-900">Conversion Funnel</h3>
-            <span className="text-xs font-bold text-emerald-800 font-sans">{overview.conversionRate}%</span>
+            <span className="text-xs font-bold text-emerald-800 font-sans">{mockOverview.conversionRate}%</span>
           </div>
 
           <div className="space-y-3 pt-2">
@@ -256,7 +330,7 @@ export const AdminDashboardPage: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         
         {/* Recent Orders (2 Cols) */}
-        <div className="lg:col-span-2 bg-white border border-stone-200 rounded-2xl p-6 shadow-xs space-y-4">
+        <div className="lg:col-span-2 bg-white border border-stone-200 rounded-2xl p-4 sm:p-6 shadow-xs space-y-4">
           <div className="flex justify-between items-center border-b border-stone-100 pb-3">
             <div>
               <h3 className="font-serif text-xl font-normal text-stone-900">Recent Customer Orders</h3>
@@ -272,7 +346,7 @@ export const AdminDashboardPage: React.FC = () => {
           </div>
 
           <div className="divide-y divide-stone-100 overflow-x-auto">
-            <table className="w-full text-left text-xs font-sans border-collapse">
+            <table className="w-full min-w-[500px] text-left text-xs font-sans border-collapse">
               <thead>
                 <tr className="text-stone-400 uppercase tracking-wider text-[10px] pb-2">
                   <th className="py-2">Order</th>

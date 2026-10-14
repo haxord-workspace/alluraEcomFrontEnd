@@ -16,7 +16,9 @@ import { getInventory, getLowStockInventory } from '../../service/adminInventory
 import type { InventoryRecord } from '../../service/adminInventory';
 import { getAdminVariants } from '../../service/adminVariants';
 import { getAdminProducts } from '../../service/adminProducts';
+import { getDashboardInventory, type InventoryAnalyticsResponse } from '../../service/adminDashboard';
 import type { AdminProduct, AdminProductVariant } from '../../types';
+import { getBackendErrorMessage } from '../../utils/apiResponse';
 
 const DEFAULT_LOW_STOCK_THRESHOLD = 6;
 
@@ -30,6 +32,7 @@ export const AdminInventoryPage: React.FC = () => {
   const [lowStock, setLowStock] = useState<InventoryRecord[]>([]);
   const [variants, setVariants] = useState<AdminProductVariant[]>([]);
   const [products, setProducts] = useState<AdminProduct[]>([]);
+  const [inventoryAnalytics, setInventoryAnalytics] = useState<InventoryAnalyticsResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -41,19 +44,21 @@ export const AdminInventoryPage: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const [inventoryData, lowStockData, variantData, productData] = await Promise.all([
+      const [inventoryData, lowStockData, variantData, productData, analyticsData] = await Promise.all([
         getInventory(),
         getLowStockInventory().catch(() => []),
         // Variants give us every sellable SKU (including ones never stocked) plus names / images
         getAdminVariants().catch(() => []),
         getAdminProducts().catch(() => []),
+        getDashboardInventory().catch(() => null),
       ]);
       setInventory(inventoryData);
       setLowStock(lowStockData);
       setVariants(variantData);
       setProducts(productData);
+      if (analyticsData) setInventoryAnalytics(analyticsData);
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to load inventory');
+      setError(getBackendErrorMessage(err, 'Failed to load inventory'));
     } finally {
       setIsLoading(false);
     }
@@ -159,11 +164,33 @@ export const AdminInventoryPage: React.FC = () => {
   };
 
   const statCards: { label: string; value: number; tone: string; filter?: StockFilter }[] = [
-    { label: 'Total Units On Hand', value: totalUnits, tone: 'text-stone-900' },
-    { label: 'Healthy Stock', value: healthyCount, tone: 'text-emerald-800' },
-    { label: 'Low Stock', value: lowStockCount, tone: 'text-amber-800', filter: 'Low' },
-    { label: 'Out of Stock', value: outOfStockCount, tone: 'text-rose-800', filter: 'Out' },
-    { label: 'Not Stocked Yet', value: untrackedCount, tone: 'text-stone-500', filter: 'Untracked' },
+    {
+      label: 'Units On Hand',
+      value: inventoryAnalytics?.stockMovementSummary.totalOnHand ?? totalUnits,
+      tone: 'text-stone-900',
+    },
+    {
+      label: 'Reserved (Orders)',
+      value: inventoryAnalytics?.stockMovementSummary.totalReserved ?? 0,
+      tone: 'text-amber-800',
+    },
+    {
+      label: 'Available to Sell',
+      value: inventoryAnalytics?.stockMovementSummary.totalAvailable ?? healthyCount,
+      tone: 'text-emerald-800',
+    },
+    {
+      label: 'Low Stock',
+      value: inventoryAnalytics?.lowStockCount ?? lowStockCount,
+      tone: 'text-amber-800',
+      filter: 'Low',
+    },
+    {
+      label: 'Out of Stock',
+      value: inventoryAnalytics?.outOfStockCount ?? outOfStockCount,
+      tone: 'text-rose-800',
+      filter: 'Out',
+    },
   ];
 
   return (
@@ -276,7 +303,7 @@ export const AdminInventoryPage: React.FC = () => {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs font-sans border-collapse">
+          <table className="w-full min-w-[700px] text-left text-xs font-sans border-collapse">
             <thead>
               <tr className="bg-stone-50 border-b border-stone-200 text-stone-500 uppercase tracking-wider text-[10px]">
                 <th className="p-4">Product / Variant</th>

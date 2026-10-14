@@ -36,6 +36,7 @@ const mapStoreVariant = (raw: any): ProductVariant => {
     stockOnHand: raw.stockOnHand ?? raw.inventory?.quantityOnHand ?? 0,
     stockReserved: raw.stockReserved ?? raw.inventory?.quantityReserved ?? 0,
     stockAvailable: raw.stockAvailable ?? raw.inventory?.quantityAvailable ?? 0,
+    images: Array.isArray(raw.images) ? raw.images : [],
   };
 };
 

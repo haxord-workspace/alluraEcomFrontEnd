@@ -103,7 +103,14 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
       )}
 
       {/* Scrollable Navigation */}
-      <nav className="flex-1 overflow-y-auto p-3 space-y-4 text-xs font-sans">
+      <nav
+        onClick={(e) => {
+          if ((e.target as HTMLElement).closest('a')) {
+            onClose?.();
+          }
+        }}
+        className="flex-1 overflow-y-auto p-3 space-y-4 text-xs font-sans"
+      >
         
         {/* Dashboard */}
         {hasPermission('dashboard') && (

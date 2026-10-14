@@ -16,7 +16,7 @@ const MAX_DIMENSION = 1600;
 const JPEG_QUALITY = 0.85;
 
 /** Reads an image file and downsizes it so product payloads stay small (images are sent as base64). */
-const fileToResizedDataUrl = (file: File): Promise<string> =>
+export const fileToResizedDataUrl = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(reader.error);

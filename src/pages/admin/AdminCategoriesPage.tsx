@@ -7,6 +7,7 @@ import { getCategories, createCategory, updateCategory, deleteCategory } from '.
 import type { Category } from '../../types';
 import { useConfirm } from '../../context/ConfirmContext';
 import { useShop } from '../../context/ShopContext';
+import { getBackendErrorMessage } from '../../utils/apiResponse';
 
 export const AdminCategoriesPage: React.FC = () => {
   const { products } = useAdmin();
@@ -76,12 +77,12 @@ export const AdminCategoriesPage: React.FC = () => {
     });
     if (!ok) return;
     try {
-      await deleteCategory(id);
+      const msg = await deleteCategory(id);
       setCategories(prev => prev.filter(c => c.id !== id));
-      showToast(`Category "${category?.name || ''}" deleted`, 'info');
+      showToast(msg || `Category "${category?.name || ''}" deleted successfully`, 'info');
     } catch (error: any) {
       console.error('Failed to delete category:', error);
-      showToast(error?.response?.data?.message || 'Failed to delete category', 'error');
+      showToast(getBackendErrorMessage(error, 'Failed to delete category'), 'error');
     }
   };
 
@@ -101,13 +102,16 @@ export const AdminCategoriesPage: React.FC = () => {
       if (editingCategoryId) {
         const updated = await updateCategory(editingCategoryId, payload);
         setCategories(categories.map(c => (c.id === editingCategoryId ? updated : c)));
+        showToast(updated?._message || 'Category updated successfully', 'success');
       } else {
         const added = await createCategory(payload);
         setCategories([...categories, added]);
+        showToast(added?._message || 'Category created successfully', 'success');
       }
       setIsModalOpen(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to save category:', error);
+      showToast(getBackendErrorMessage(error, 'Failed to save category'), 'error');
     }
   };
 
