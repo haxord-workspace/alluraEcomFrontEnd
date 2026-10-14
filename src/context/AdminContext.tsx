@@ -362,8 +362,8 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         // If localStorage quota is strictly exceeded, trim large base64 strings only for localStorage
         const sanitized = list.map(b => ({
           ...b,
-          desktopImage: b.desktopImage?.length > 700000 ? '' : b.desktopImage,
-          mobileImage: b.mobileImage?.length > 700000 ? '' : b.mobileImage,
+          desktopImage: (b.desktopImage?.length ?? 0) > 700000 ? '' : b.desktopImage,
+          mobileImage: (b.mobileImage?.length ?? 0) > 700000 ? '' : b.mobileImage,
         }));
         localStorage.setItem('allura_banners', JSON.stringify(sanitized));
       } catch (err) {

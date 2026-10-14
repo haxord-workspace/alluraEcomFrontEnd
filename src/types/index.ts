@@ -441,6 +441,10 @@ export interface Banner {
   position?: 'Hero' | 'Editorial' | 'Secondary' | 'Announcement' | string;
   placement?: 'HOME_HERO' | 'HOME_PROMOTION' | 'CATEGORY' | 'COLLECTION' | string;
   image?: { url: string; alt?: string };
+  images?: {
+    desktop?: { url: string; alt?: string; width?: number; height?: number };
+    mobile?: { url: string; alt?: string; width?: number; height?: number };
+  };
   sortOrder?: number;
   startsAt?: string;
   endsAt?: string;

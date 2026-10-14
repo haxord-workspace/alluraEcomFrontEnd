@@ -31,7 +31,7 @@ export interface BannerPayload {
   position?: 'Hero' | 'Editorial' | 'Secondary' | string;
   image?: { url: string; alt?: string } | string;
   images?: {
-    desktop: { url: string; alt?: string; width?: number; height?: number };
+    desktop?: { url: string; alt?: string; width?: number; height?: number };
     mobile?: { url: string; alt?: string; width?: number; height?: number };
   };
   desktopImage?: string;
