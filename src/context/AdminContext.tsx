@@ -25,7 +25,7 @@ import { productsData } from '../data/products';
 import { mockOrdersData, mockReturnRequestsData } from '../data/mockOrders';
 import { mockCouponsData, mockPromotionsData } from '../data/mockCoupons';
 import { mockCustomersData, mockAbandonedCartsData } from '../data/mockCustomers';
-import { getAdminBanners, getPublicBanners, type BannerPlacement } from '../service/adminBanners';
+import { getAdminBanners, getPublicBanners } from '../service/adminBanners';
 import {
   mockAdminUsers,
   mockDefaultPermissions,
@@ -350,25 +350,17 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const safeSaveBannersToStorage = (list: Banner[]) => {
     try {
-      sessionStorage.setItem('allura_banners_session', JSON.stringify(list));
-    } catch {
-      // sessionStorage full or unavailable
-    }
-
-    try {
-      localStorage.setItem('allura_banners', JSON.stringify(list));
-    } catch {
-      try {
-        // If localStorage quota is strictly exceeded, trim large base64 strings only for localStorage
-        const sanitized = list.map(b => ({
-          ...b,
-          desktopImage: (b.desktopImage?.length ?? 0) > 700000 ? '' : b.desktopImage,
-          mobileImage: (b.mobileImage?.length ?? 0) > 700000 ? '' : b.mobileImage,
-        }));
-        localStorage.setItem('allura_banners', JSON.stringify(sanitized));
-      } catch (err) {
-        console.warn('[AdminContext] Could not cache banners to localStorage:', err);
-      }
+      // Exclude oversized base64 strings from local storage cache to keep storage light (<20KB) and prevent main-thread freeze
+      const sanitized = list.map(b => ({
+        ...b,
+        desktopImage: (b.desktopImage?.startsWith('data:') && b.desktopImage.length > 30000) ? '' : b.desktopImage,
+        mobileImage: (b.mobileImage?.startsWith('data:') && b.mobileImage.length > 30000) ? '' : b.mobileImage,
+      }));
+      const serialized = JSON.stringify(sanitized);
+      sessionStorage.setItem('allura_banners_session', serialized);
+      localStorage.setItem('allura_banners', serialized);
+    } catch (err) {
+      console.warn('[AdminContext] Could not cache banners to storage:', err);
     }
   };
 
@@ -407,36 +399,25 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   useEffect(() => {
     let isMounted = true;
     const fetchBannersData = async () => {
-      try {
-        const res = await getAdminBanners({ sortBy: 'displayOrder', sortOrder: 'asc' });
-        if (Array.isArray(res) && res.length > 0) {
-          if (isMounted) setBanners(res);
-          return;
+      // 1. If authenticated as an admin, query the admin banners endpoint
+      if (isAdminAuthenticated) {
+        try {
+          const res = await getAdminBanners({ sortBy: 'displayOrder', sortOrder: 'asc' });
+          if (Array.isArray(res) && res.length > 0) {
+            if (isMounted) setBanners(res);
+            return;
+          }
+        } catch (err) {
+          console.warn('[AdminContext] Admin banners fetch failed, falling back to public banners endpoint:', err);
         }
-      } catch {
-        // If unauthenticated or admin endpoint unavailable, fetch public placements
       }
 
+      // 2. For storefront visitors and unauthenticated users, directly call public banners:
+      // GET /api/v1/banners?sortBy=displayOrder&sortOrder=asc
       try {
-        const placements: BannerPlacement[] = [
-          'HOME_HERO',
-          'HOME_PROMOTION',
-          'SHOP_BANNER',
-          'CATEGORY_BANNER',
-          'COLLECTION_BANNER',
-          'PRODUCT_PROMOTION',
-        ];
-        const responses = await Promise.allSettled(
-          placements.map(p => getPublicBanners(p))
-        );
-        const combined: Banner[] = [];
-        responses.forEach(r => {
-          if (r.status === 'fulfilled' && Array.isArray(r.value)) {
-            combined.push(...r.value);
-          }
-        });
-        if (isMounted && combined.length > 0) {
-          setBanners(combined);
+        const publicBanners = await getPublicBanners({ sortBy: 'displayOrder', sortOrder: 'asc' });
+        if (isMounted && Array.isArray(publicBanners) && publicBanners.length > 0) {
+          setBanners(publicBanners);
         }
       } catch (err) {
         console.warn('[AdminContext] Could not load public banners:', err);
@@ -447,7 +428,7 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [isAdminAuthenticated]);
 
   useEffect(() => {
     if (banners.length > 0) {
@@ -794,17 +775,23 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const resetBannersToDefault = () => {
-    getAdminBanners().then(apiList => {
-      setBanners(apiList);
-      safeSaveBannersToStorage(apiList);
-      showToast('Store banners synchronized with live backend API', 'gold');
-    }).catch(() => {
-      setBanners([]);
-      try {
-        localStorage.removeItem('allura_banners');
-      } catch {}
-      showToast('No active backend banners found', 'info');
-    });
+    const fetchPromise = isAdminAuthenticated
+      ? getAdminBanners({ sortBy: 'displayOrder', sortOrder: 'asc' })
+      : getPublicBanners({ sortBy: 'displayOrder', sortOrder: 'asc' });
+
+    fetchPromise
+      .then(apiList => {
+        setBanners(apiList);
+        safeSaveBannersToStorage(apiList);
+        showToast('Store banners synchronized with live backend API', 'gold');
+      })
+      .catch(() => {
+        setBanners([]);
+        try {
+          localStorage.removeItem('allura_banners');
+        } catch {}
+        showToast('No active backend banners found', 'info');
+      });
   };
 
   const sendCartReminder = (id: string, channel: 'WhatsApp' | 'Email') => {

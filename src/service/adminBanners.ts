@@ -22,6 +22,13 @@ export interface BannerFilterParams {
   sortOrder?: 'asc' | 'desc';
 }
 
+export interface PublicBannerParams {
+  placement?: BannerPlacement;
+  contextId?: string;
+  sortBy?: 'displayOrder' | 'createdAt' | 'title';
+  sortOrder?: 'asc' | 'desc';
+}
+
 export interface BannerPayload {
   title: string;
   headline?: string;
@@ -142,13 +149,17 @@ export const mapBanner = (raw: any, message?: string): BannerWithMessage => {
       ? 'Editorial'
       : 'Secondary');
 
-  // Normalize status casing
-  let status: 'Active' | 'Scheduled' | 'Draft' = 'Draft';
-  const rawStatus = (raw.status || '').toUpperCase();
-  if (rawStatus === 'ACTIVE' || rawStatus === 'PUBLISHED') {
-    status = 'Active';
-  } else if (rawStatus === 'SCHEDULED') {
-    status = 'Scheduled';
+  // Normalize status casing. If status is omitted (as in public storefront endpoint IPublicBanner), default to 'Active'
+  let status: 'Active' | 'Scheduled' | 'Draft' = 'Active';
+  if (raw.status) {
+    const rawStatus = (raw.status || '').toUpperCase();
+    if (rawStatus === 'ACTIVE' || rawStatus === 'PUBLISHED') {
+      status = 'Active';
+    } else if (rawStatus === 'SCHEDULED') {
+      status = 'Scheduled';
+    } else if (rawStatus === 'DRAFT' || rawStatus === 'ARCHIVED') {
+      status = 'Draft';
+    }
   }
 
   const ctaText = raw.cta?.label || raw.ctaText || 'SHOP NOW';
@@ -174,6 +185,7 @@ export const mapBanner = (raw: any, message?: string): BannerWithMessage => {
     placement,
     position,
     status,
+    isActive: raw.isActive ?? (status === 'Active'),
     startDate: raw.startDate || raw.startAt,
     endDate: raw.endDate || raw.endAt,
     startsAt: raw.startsAt || raw.startAt || raw.startDate,
@@ -391,12 +403,22 @@ export const unpublishAdminBanner = async (id: string): Promise<BannerWithMessag
 };
 
 /**
- * GET /banners — Public storefront endpoint for fetching active banners by placement
- * Example: GET /banners?placement=HOME_HERO
+ * GET /banners — Public storefront endpoint for fetching active banners
+ * Supports optional placement, contextId, sortBy, and sortOrder.
+ * Example: GET /banners?sortBy=displayOrder&sortOrder=asc
  */
-export const getPublicBanners = async (placement: BannerPlacement = 'HOME_HERO'): Promise<Banner[]> => {
+export const getPublicBanners = async (
+  paramsOrPlacement?: PublicBannerParams | BannerPlacement
+): Promise<Banner[]> => {
   try {
-    const response = await api.get('/banners', { params: { placement } });
+    let queryParams: PublicBannerParams = {};
+    if (typeof paramsOrPlacement === 'string') {
+      queryParams = { placement: paramsOrPlacement };
+    } else if (paramsOrPlacement) {
+      queryParams = paramsOrPlacement;
+    }
+
+    const response = await api.get('/banners', { params: queryParams });
     const rawList =
       response.data?.data?.banners ||
       response.data?.banners ||
@@ -404,7 +426,7 @@ export const getPublicBanners = async (placement: BannerPlacement = 'HOME_HERO')
       response.data;
     return Array.isArray(rawList) ? rawList.map((item: any) => mapBanner(item)) : [];
   } catch (err) {
-    console.warn(`[Banner API] Failed to fetch public banners for placement "${placement}":`, err);
+    console.warn('[Banner API] Failed to fetch public banners:', err);
     return [];
   }
 };
