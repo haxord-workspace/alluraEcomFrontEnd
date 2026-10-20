@@ -3,7 +3,7 @@
  * Returns the original source when it is already small enough, isn't a raster image, or can't be read
  * (e.g. a cross-origin URL without CORS headers).
  */
-export const resizeImageSource = (src: string, maxDimension: number, quality = 0.85): Promise<string> =>
+export const resizeImageSource = (src: string, maxDimension = 1400, quality = 0.78): Promise<string> =>
   new Promise(resolve => {
     if (!src || /^data:image\/(svg\+xml|gif)/.test(src)) return resolve(src);
 
@@ -11,20 +11,24 @@ export const resizeImageSource = (src: string, maxDimension: number, quality = 0
     img.crossOrigin = 'anonymous';
     img.onerror = () => resolve(src);
     img.onload = () => {
-      const scale = Math.min(1, maxDimension / Math.max(img.width, img.height));
-      if (scale === 1 && src.startsWith('data:')) return resolve(src);
       try {
+        const scale = Math.min(1, maxDimension / Math.max(img.width, img.height));
         const canvas = document.createElement('canvas');
-        canvas.width = Math.round(img.width * scale);
-        canvas.height = Math.round(img.height * scale);
+        canvas.width = Math.max(1, Math.round(img.width * scale));
+        canvas.height = Math.max(1, Math.round(img.height * scale));
         const ctx = canvas.getContext('2d');
         if (!ctx) return resolve(src);
+
+        // Fill background white for PNGs before converting to JPEG to prevent black backgrounds
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        const type = src.startsWith('data:image/png') ? 'image/png' : 'image/jpeg';
-        const out = canvas.toDataURL(type, quality);
-        resolve(src.startsWith('data:') && out.length >= src.length ? src : out);
+
+        // Always compress to JPEG for optimal payload size (<150KB vs 3-10MB)
+        const out = canvas.toDataURL('image/jpeg', quality);
+        resolve(out && out.length > 0 && (out.length < src.length || scale < 1) ? out : src);
       } catch {
-        // Tainted canvas (cross-origin image): keep the original URL
+        // Tainted canvas (cross-origin image): keep original
         resolve(src);
       }
     };

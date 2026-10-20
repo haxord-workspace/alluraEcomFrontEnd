@@ -51,8 +51,8 @@ export const ImageUploadDropzone: React.FC<ImageUploadDropzoneProps> = ({
 
   const compressImageFile = async (
     file: File,
-    maxDimension = 1920,
-    quality = 0.82
+    maxDimension = 1440,
+    quality = 0.78
   ): Promise<{ dataUrl: string; sizeKb: number }> => {
     if (/image\/(svg\+xml|gif)/.test(file.type)) {
       return new Promise((resolve) => {
@@ -88,6 +88,9 @@ export const ImageUploadDropzone: React.FC<ImageUploadDropzoneProps> = ({
             return resolve({ dataUrl: rawDataUrl, sizeKb: Math.round(file.size / 1024) });
           }
 
+          // Fill white background for transparent images converting to JPEG
+          ctx.fillStyle = '#FFFFFF';
+          ctx.fillRect(0, 0, targetWidth, targetHeight);
           ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
 
           let compressed = '';
@@ -97,7 +100,7 @@ export const ImageUploadDropzone: React.FC<ImageUploadDropzoneProps> = ({
             compressed = rawDataUrl;
           }
 
-          const finalUrl = compressed && compressed.length < rawDataUrl.length ? compressed : rawDataUrl;
+          const finalUrl = compressed && (compressed.length < rawDataUrl.length || scale < 1) ? compressed : rawDataUrl;
           const approxBytes = Math.round((finalUrl.length * 3) / 4);
           resolve({ dataUrl: finalUrl, sizeKb: Math.round(approxBytes / 1024) });
         };

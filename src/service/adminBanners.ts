@@ -199,14 +199,26 @@ export const mapBanner = (raw: any, message?: string): BannerWithMessage => {
 /**
  * GET /admin/banners — List banners with filtering, searching, and pagination
  */
+let inFlightAdminBannersPromise: Promise<Banner[]> | null = null;
+
 export const getAdminBanners = async (params?: BannerFilterParams): Promise<Banner[]> => {
-  const response = await adminApi.get('/admin/banners', { params });
-  const rawList =
-    response.data?.data?.banners ||
-    response.data?.banners ||
-    response.data?.data ||
-    response.data;
-  return Array.isArray(rawList) ? rawList.map((item: any) => mapBanner(item)) : [];
+  if (inFlightAdminBannersPromise) return inFlightAdminBannersPromise;
+
+  inFlightAdminBannersPromise = (async () => {
+    try {
+      const response = await adminApi.get('/admin/banners', { params });
+      const rawList =
+        response.data?.data?.banners ||
+        response.data?.banners ||
+        response.data?.data ||
+        response.data;
+      return Array.isArray(rawList) ? rawList.map((item: any) => mapBanner(item)) : [];
+    } finally {
+      inFlightAdminBannersPromise = null;
+    }
+  })();
+
+  return inFlightAdminBannersPromise;
 };
 
 /**
@@ -234,17 +246,17 @@ export const createAdminBanner = async (payload: BannerPayload): Promise<BannerW
   );
 
   const body: any = {
-    title: payload.title || payload.headline || 'Boutique Banner',
+    title: (payload.headline || payload.title || 'Boutique Banner').toString().trim(),
     placement,
     description: payload.description || payload.subtitle || '',
     images: {
       desktop: {
         url: desktopUrl,
-        alt: payload.title || payload.headline || 'Banner Image',
+        alt: (payload.headline || payload.title || 'Banner Image').toString().trim(),
       },
       mobile: {
         url: mobileUrl,
-        alt: payload.title || payload.headline || 'Banner Mobile Image',
+        alt: (payload.headline || payload.title || 'Banner Mobile Image').toString().trim(),
       },
     },
     cta: {
@@ -287,8 +299,11 @@ export const createAdminBanner = async (payload: BannerPayload): Promise<BannerW
  */
 export const updateAdminBanner = async (id: string, payload: Partial<BannerPayload>): Promise<BannerWithMessage> => {
   const body: any = {};
-  if (payload.title !== undefined || payload.headline !== undefined) {
-    body.title = payload.title || payload.headline;
+  if (payload.headline !== undefined || payload.title !== undefined) {
+    const resolvedTitle = payload.headline !== undefined && payload.headline !== ''
+      ? payload.headline
+      : (payload.title ?? payload.headline);
+    body.title = typeof resolvedTitle === 'string' ? resolvedTitle.trim() : resolvedTitle;
   }
   if (payload.placement !== undefined) {
     body.placement = payload.placement;
@@ -405,28 +420,37 @@ export const unpublishAdminBanner = async (id: string): Promise<BannerWithMessag
 /**
  * GET /banners — Public storefront endpoint for fetching active banners
  * Supports optional placement, contextId, sortBy, and sortOrder.
- * Example: GET /banners?sortBy=displayOrder&sortOrder=asc
  */
+let inFlightPublicBannersPromise: Promise<Banner[]> | null = null;
+
 export const getPublicBanners = async (
   paramsOrPlacement?: PublicBannerParams | BannerPlacement
 ): Promise<Banner[]> => {
-  try {
-    let queryParams: PublicBannerParams = {};
-    if (typeof paramsOrPlacement === 'string') {
-      queryParams = { placement: paramsOrPlacement };
-    } else if (paramsOrPlacement) {
-      queryParams = paramsOrPlacement;
-    }
+  if (inFlightPublicBannersPromise) return inFlightPublicBannersPromise;
 
-    const response = await api.get('/banners', { params: queryParams });
-    const rawList =
-      response.data?.data?.banners ||
-      response.data?.banners ||
-      response.data?.data ||
-      response.data;
-    return Array.isArray(rawList) ? rawList.map((item: any) => mapBanner(item)) : [];
-  } catch (err) {
-    console.warn('[Banner API] Failed to fetch public banners:', err);
-    return [];
-  }
+  inFlightPublicBannersPromise = (async () => {
+    try {
+      let queryParams: PublicBannerParams = {};
+      if (typeof paramsOrPlacement === 'string') {
+        queryParams = { placement: paramsOrPlacement };
+      } else if (paramsOrPlacement) {
+        queryParams = paramsOrPlacement;
+      }
+
+      const response = await api.get('/banners', { params: queryParams });
+      const rawList =
+        response.data?.data?.banners ||
+        response.data?.banners ||
+        response.data?.data ||
+        response.data;
+      return Array.isArray(rawList) ? rawList.map((item: any) => mapBanner(item)) : [];
+    } catch (err) {
+      console.warn('[Banner API] Failed to fetch public banners:', err);
+      return [];
+    } finally {
+      inFlightPublicBannersPromise = null;
+    }
+  })();
+
+  return inFlightPublicBannersPromise;
 };

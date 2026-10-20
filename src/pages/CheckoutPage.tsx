@@ -213,12 +213,12 @@ export const CheckoutPage: React.FC = () => {
         contact: typeof customer?.phone === 'string' ? customer.phone.replace(/\s+/g, '') : undefined,
       },
     });
-    if (outcome.ok) {
-      setPaymentState('paid');
-      setPaymentMessage('');
-    } else {
+    if (outcome.ok === false) {
       setPaymentState('pending');
       setPaymentMessage(outcome.message);
+    } else {
+      setPaymentState('paid');
+      setPaymentMessage('');
     }
     refreshOrders();
     refreshCart(); // the backend removes the ordered items; anything set aside stays

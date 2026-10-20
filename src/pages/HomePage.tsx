@@ -44,8 +44,11 @@ export const HomePage: React.FC = () => {
   };
 
   const isBannerActive = (b: any): boolean => {
-    const s = String(b?.status || '').toUpperCase();
-    return s === 'ACTIVE' || s === 'PUBLISHED' || b?.isActive === true;
+    if (!b) return false;
+    if (b.isActive === false || b.status === 'Draft' || b.status === 'DRAFT') return false;
+    if (b.status === undefined && b.isActive === undefined) return true;
+    const s = String(b.status || '').toUpperCase();
+    return s === 'ACTIVE' || s === 'PUBLISHED' || b.isActive === true;
   };
 
   // Active Hero Banners from Admin Studio (Strictly HOME_HERO)
@@ -159,13 +162,14 @@ export const HomePage: React.FC = () => {
       {/* 1. HIGH-CONVERSION HERO SECTION */}
       {heroSlides.length > 0 ? (
         <section 
-          className="relative w-full min-h-[600px] sm:min-h-[580px] lg:h-[84vh] lg:max-h-[820px] overflow-hidden bg-[#F7E6C8]"
+          className="relative w-full min-h-[520px] h-[78vh] sm:h-auto sm:min-h-[580px] lg:h-[84vh] lg:max-h-[820px] overflow-hidden bg-[#F7E6C8]"
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
         >
           {heroSlides.map((slide, index) => {
             const isActive = currentSlide === index;
+            const hasCustomMobileImage = Boolean(slide.mobileImage && slide.mobileImage !== slide.image);
 
             return (
               <div
@@ -174,7 +178,7 @@ export const HomePage: React.FC = () => {
                   isActive ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'
                 }`}
               >
-                {/* Background Model Image with subtle zoom */}
+                {/* Background Model Image with subtle zoom & intelligent focal alignment */}
                 <picture className="absolute inset-0 w-full h-full">
                   {slide.mobileImage && (
                     <source media="(max-width: 640px)" srcSet={slide.mobileImage} />
@@ -182,17 +186,24 @@ export const HomePage: React.FC = () => {
                   <img
                     src={slide.image}
                     alt={slide.headingLines.join(' ')}
-                    className="w-full h-full object-cover object-[center_20%] sm:object-[center_top] transition-transform duration-[8500ms] ease-out z-0"
+                    className={`w-full h-full object-cover transition-transform duration-[8500ms] ease-out z-0 ${
+                      hasCustomMobileImage
+                        ? 'object-[center_top]'
+                        : 'object-[82%_20%] sm:object-[center_top]'
+                    }`}
                     style={{
                       transform: isActive ? 'scale(1.04)' : 'scale(1)',
                     }}
                   />
                 </picture>
 
+                {/* Protective Luxury Gradient Overlay for contrast & mobile legibility */}
+                <div className="absolute inset-0 bg-gradient-to-t from-stone-950/90 via-stone-950/35 to-transparent sm:from-stone-950/70 sm:via-stone-950/20 sm:to-transparent z-10 pointer-events-none" />
+
                 {/* Content Container */}
-                <div className="max-w-7xl mx-auto h-full px-5 sm:px-6 lg:px-8 relative z-30 flex items-end justify-between w-full pb-24 sm:pb-32">
-                  <div className="max-w-xl space-y-4 pt-4 sm:pt-0">
-                    <h1 className="font-heading text-3xl sm:text-5xl lg:text-[54px] text-white font-bold leading-[1.08] tracking-tight uppercase">
+                <div className="max-w-7xl mx-auto h-full px-5 sm:px-6 lg:px-8 relative z-30 flex items-end justify-between w-full pb-20 sm:pb-28 lg:pb-32">
+                  <div className="max-w-xl space-y-3 sm:space-y-4 pt-4 sm:pt-0 pr-14 sm:pr-0">
+                    <h1 className="font-heading text-3xl sm:text-5xl lg:text-[54px] text-white font-bold leading-[1.08] tracking-tight uppercase drop-shadow-md">
                       {slide.headingLines.map((line, lIdx) => (
                         <span key={lIdx} className="block">
                           {line}
@@ -201,7 +212,7 @@ export const HomePage: React.FC = () => {
                     </h1>
 
                     {slide.description && (
-                      <p className="text-xs sm:text-sm text-[#F7E6C8] font-body max-w-lg leading-relaxed font-normal line-clamp-3 sm:line-clamp-none">
+                      <p className="text-xs sm:text-sm text-[#F7E6C8] font-body max-w-lg leading-relaxed font-normal line-clamp-3 sm:line-clamp-none drop-shadow-sm">
                         {slide.description}
                       </p>
                     )}
@@ -209,7 +220,7 @@ export const HomePage: React.FC = () => {
                     <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
                       <Link
                         to={slide.primaryLink}
-                        className="inline-flex items-center justify-center gap-2 bg-[#F7E6C8] hover:bg-white text-[#561C08] text-xs font-heading font-bold tracking-[0.2em] uppercase py-4 px-8 rounded-xl shadow-md transition-all duration-300 group text-center"
+                        className="inline-flex items-center justify-center gap-2 bg-[#F7E6C8] hover:bg-white text-[#561C08] text-xs font-heading font-bold tracking-[0.2em] uppercase py-3.5 px-7 sm:py-4 sm:px-8 rounded-xl shadow-md transition-all duration-300 group text-center"
                       >
                         <span>{slide.primaryCta}</span>
                         <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />

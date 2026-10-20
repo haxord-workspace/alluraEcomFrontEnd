@@ -224,7 +224,11 @@ export const ShopPage: React.FC = () => {
             <img
               src={activeShopBanner.desktopImage}
               alt={activeShopBanner.headline || activeShopBanner.title}
-              className="w-full h-full object-cover object-[center_35%] group-hover:scale-102 transition-transform duration-700"
+              className={`w-full h-full object-cover transition-transform duration-700 group-hover:scale-102 ${
+                activeShopBanner.mobileImage && activeShopBanner.mobileImage !== activeShopBanner.desktopImage
+                  ? 'object-[center_35%]'
+                  : 'object-[80%_35%] sm:object-[center_35%]'
+              }`}
             />
           </picture>
           <div className="absolute inset-0 bg-gradient-to-r from-allura-darkBrown/90 via-allura-darkBrown/50 to-transparent flex items-center p-6 sm:p-10">

@@ -55,7 +55,11 @@ export const CollectionPage: React.FC = () => {
           <img
             src={bannerImg}
             alt={bannerTitle}
-            className="w-full h-full object-cover object-[center_top]"
+            className={`w-full h-full object-cover ${
+              bannerMobileImg && bannerMobileImg !== bannerImg
+                ? 'object-[center_top]'
+                : 'object-[80%_20%] sm:object-[center_top]'
+            }`}
           />
         </picture>
         <div className="absolute inset-0 bg-gradient-to-t from-allura-darkBrown/85 via-allura-darkBrown/40 to-transparent flex items-end">

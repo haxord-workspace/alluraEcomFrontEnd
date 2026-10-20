@@ -151,12 +151,12 @@ const QUICK_DESTINATIONS = [
 ];
 
 export const AdminBannersPage: React.FC = () => {
-  const { setBannersList, hasPermission } = useAdmin();
+  const { setBannersList, banners: contextBanners, hasPermission } = useAdmin();
   const { showToast } = useShop();
 
-  // Local banners list & fetch states
-  const [banners, setBanners] = useState<Banner[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  // Local banners list & fetch states (pre-populated from context cache for zero-delay instant UI)
+  const [banners, setBanners] = useState<Banner[]>(contextBanners && contextBanners.length > 0 ? contextBanners : []);
+  const [isLoading, setIsLoading] = useState(!contextBanners || contextBanners.length === 0);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [actionBusyId, setActionBusyId] = useState<string | null>(null);
 
@@ -204,30 +204,28 @@ export const AdminBannersPage: React.FC = () => {
 
   // Fetch banners strictly from Backend API
   const fetchBanners = useCallback(async (quiet = false) => {
-    if (!quiet) setIsLoading(true);
+    if (!quiet && banners.length === 0) setIsLoading(true);
     else setIsRefreshing(true);
     try {
       const data = await getAdminBanners({
         sortBy: 'displayOrder',
         sortOrder: 'asc'
       });
-      setBanners(data || []);
-      try {
-        setBannersList(data || []);
-      } catch (contextErr) {
-        console.warn('[AdminBannersPage] Failed to update context banners list:', contextErr);
+      if (Array.isArray(data)) {
+        setBanners(data);
+        try {
+          setBannersList(data);
+        } catch (contextErr) {
+          console.warn('[AdminBannersPage] Failed to update context banners list:', contextErr);
+        }
       }
     } catch (err: any) {
       console.warn('[AdminBannersPage] Failed to fetch from backend API:', err);
-      setBanners([]);
-      try {
-        setBannersList([]);
-      } catch {}
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [setBannersList]);
+  }, [setBannersList, banners.length]);
 
   useEffect(() => {
     fetchBanners();
@@ -268,9 +266,9 @@ export const AdminBannersPage: React.FC = () => {
   // Handle Form Open for Edit
   const handleOpenEdit = (banner: Banner) => {
     setEditingBanner(banner);
-    setTitle(banner.title);
-    setHeadline(banner.headline || banner.title);
-    setSubtitle(banner.subtitle || banner.description);
+    setTitle(banner.headline || banner.title || '');
+    setHeadline(banner.headline || banner.title || '');
+    setSubtitle(banner.subtitle || banner.description || '');
     setBadge(banner.badge || 'PERINTHALMANNA ATELIER');
     setEyebrow(banner.eyebrow || 'CURATED ATELIER WEAR');
     setOfferPill(banner.offerPill || '');
@@ -378,25 +376,36 @@ export const AdminBannersPage: React.FC = () => {
     setIsSaving(true);
     const position = placement === 'HOME_HERO' ? 'Hero' : placement === 'HOME_PROMOTION' ? 'Editorial' : 'Secondary';
 
-    // Compress any oversized raw base64 data URLs before transmitting
+    // Compress any oversized raw base64 data URLs before transmitting (under 150KB for fast instant API calls)
     let optimizedDesktop = desktopImage;
     let optimizedMobile = mobileImage || desktopImage;
-    if (optimizedDesktop.startsWith('data:') && optimizedDesktop.length > 200000) {
+    if (optimizedDesktop.startsWith('data:') && optimizedDesktop.length > 50000) {
       try {
-        optimizedDesktop = await resizeImageSource(optimizedDesktop, 1920, 0.82);
-      } catch {}
+        optimizedDesktop = await resizeImageSource(optimizedDesktop, 1400, 0.78);
+      } catch (e) {
+        console.warn('Failed desktop compression:', e);
+      }
     }
-    if (optimizedMobile.startsWith('data:') && optimizedMobile.length > 200000) {
+    if (optimizedMobile.startsWith('data:') && optimizedMobile.length > 50000) {
       try {
-        optimizedMobile = await resizeImageSource(optimizedMobile, 1080, 0.82);
-      } catch {}
+        if (!mobileImage || mobileImage === desktopImage) {
+          optimizedMobile = optimizedDesktop;
+        } else {
+          optimizedMobile = await resizeImageSource(optimizedMobile, 900, 0.78);
+        }
+      } catch (e) {
+        console.warn('Failed mobile compression:', e);
+      }
     }
 
+    const cleanHeading = (headline || title).trim();
+    const cleanSubtitle = subtitle.trim();
+
     const payload = {
-      title: title || headline,
-      headline: headline || title,
-      subtitle,
-      description: subtitle,
+      title: cleanHeading,
+      headline: cleanHeading,
+      subtitle: cleanSubtitle,
+      description: cleanSubtitle,
       badge,
       eyebrow,
       offerPill,
@@ -423,7 +432,7 @@ export const AdminBannersPage: React.FC = () => {
         const nextBanners = banners.map(b => (b.id === editingBanner.id ? { ...b, ...payload, ...updated } : b));
         setBanners(nextBanners);
         setBannersList(nextBanners);
-        showToast(updated._message || 'Banner updated successfully! Live storefront synchronized.', 'success');
+        showToast(updated._message || 'Banner updated successfully in database!', 'success');
       } else {
         // 2. CREATE on backend database
         const created = await createAdminBanner(payload);
@@ -441,23 +450,8 @@ export const AdminBannersPage: React.FC = () => {
       setIsModalOpen(false);
     } catch (err: any) {
       console.warn('[AdminBannersPage] Backend save banner error:', err);
-      // Fallback: save locally so the user's change is never lost
-      const fallbackBanner: Banner = {
-        id: editingBanner?.id || `ban-local-${Date.now()}`,
-        ...payload,
-        status: status as any,
-        desktopImage: payload.desktopImage,
-        mobileImage: payload.mobileImage || payload.desktopImage,
-        placement,
-        position,
-      };
-      const nextBanners = editingBanner
-        ? banners.map(b => (b.id === editingBanner.id ? { ...b, ...payload, ...fallbackBanner } : b))
-        : [fallbackBanner, ...banners];
-      setBanners(nextBanners);
-      setBannersList(nextBanners);
-      showToast('Banner placement & content saved! Updated on storefront.', 'gold');
-      setIsModalOpen(false);
+      const errorMsg = getBackendErrorMessage(err);
+      showToast(errorMsg || 'Failed to save banner to backend database. Please check image size and connection.', 'error');
     } finally {
       setIsSaving(false);
     }
@@ -1005,7 +999,11 @@ export const AdminBannersPage: React.FC = () => {
                   <img
                     src={selectedViewport === 'mobile' ? (banner.mobileImage || banner.desktopImage) : banner.desktopImage}
                     alt={banner.headline || banner.title}
-                    className="w-full h-full object-cover object-[center_20%] sm:object-[center_top]"
+                    className={`w-full h-full object-cover ${
+                      selectedViewport === 'mobile'
+                        ? (banner.mobileImage && banner.mobileImage !== banner.desktopImage ? 'object-[center_top]' : 'object-[82%_20%]')
+                        : 'sm:object-[center_top]'
+                    }`}
                     onError={(e) => {
                       (e.target as HTMLElement).setAttribute('src', IMAGE_PRESETS[0].url);
                     }}
@@ -1469,7 +1467,10 @@ export const AdminBannersPage: React.FC = () => {
                       type="text"
                       required
                       value={headline}
-                      onChange={e => setHeadline(e.target.value)}
+                      onChange={e => {
+                        setHeadline(e.target.value);
+                        setTitle(e.target.value);
+                      }}
                       placeholder="E.g. ROYAL HEIRLOOM BRIDAL COUTURE"
                       className="w-full p-3 bg-stone-50 border border-stone-200 rounded-xl text-sm font-serif font-medium text-stone-900 focus:outline-none focus:border-stone-800"
                     />
@@ -1697,7 +1698,11 @@ export const AdminBannersPage: React.FC = () => {
                     <img
                       src={modalPreviewViewport === 'mobile' ? (mobileImage || desktopImage) : desktopImage}
                       alt="Banner Preview"
-                      className="w-full h-full object-cover object-top"
+                      className={`w-full h-full object-cover ${
+                        modalPreviewViewport === 'mobile'
+                          ? (mobileImage && mobileImage !== desktopImage ? 'object-[center_top]' : 'object-[82%_20%]')
+                          : 'object-top'
+                      }`}
                       onError={(e) => {
                         (e.target as HTMLElement).setAttribute('src', IMAGE_PRESETS[0].url);
                       }}
