@@ -96,6 +96,7 @@ const ScrollToTop: React.FC = () => {
 export const AppContent: React.FC = () => {
   const location = useLocation();
   const isCheckout = location.pathname === '/checkout';
+  const isProductPage = location.pathname.startsWith('/product/');
   const isAdminRoute = location.pathname.startsWith('/admin');
 
   // Meta Pixel: the app never reloads between pages, so send a PageView on every route change
@@ -175,7 +176,7 @@ export const AppContent: React.FC = () => {
       )}
 
       {/* Main Content Area */}
-      <main className="flex-1 pb-16 lg:pb-0">
+      <main className={`flex-1 ${isProductPage ? 'pb-0' : 'pb-16'} lg:pb-0`}>
         <Routes>
           {/* Core Pages */}
           <Route path="/" element={<HomePage />} />
@@ -223,7 +224,7 @@ export const AppContent: React.FC = () => {
         <>
           <AlluraAIAssistant />
           <WhatsAppButton />
-          <MobileBottomNav />
+          {!isProductPage && <MobileBottomNav />}
           <Footer />
         </>
       )}

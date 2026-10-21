@@ -28,7 +28,7 @@ export const ContactPage: React.FC = () => {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-16 space-y-16">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-16 space-y-8 sm:space-y-16">
       {/* Header */}
       <div className="text-center max-w-2xl mx-auto space-y-2">
         <span className="text-[11px] font-sans font-bold tracking-[0.28em] uppercase text-allura-goldDark">

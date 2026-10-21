@@ -23,8 +23,57 @@ export const QuickViewModal: React.FC = () => {
 
   const product = quickViewProduct;
   const inWishlist = isInWishlist(product.id);
-  const currentSize = selectedSize || product.sizes[0];
   const currentColor = product.colors[selectedColorIdx] || product.colors[0];
+
+  const isColorMatching = (variantColor?: { name?: string }, targetColorName?: string) => {
+    if (!targetColorName) return true;
+    const vName = variantColor?.name?.trim();
+    if (!vName) {
+      return (product.colors?.length || 0) <= 1;
+    }
+    return vName.toLowerCase() === targetColorName.toLowerCase().trim();
+  };
+
+  const availableSizes = React.useMemo(() => {
+    if (!product.variants || product.variants.length === 0) {
+      return product.sizes || [];
+    }
+    const matchingVariants = product.variants.filter(v =>
+      isColorMatching(v.color, currentColor?.name) && Boolean(v.size?.trim())
+    );
+    if (matchingVariants.length === 0) {
+      return product.sizes || [];
+    }
+    const colorSizeSet = new Set(matchingVariants.map(v => v.size.trim().toLowerCase()));
+    const ordered = (product.sizes || []).filter(s => colorSizeSet.has(s.trim().toLowerCase()));
+    if (ordered.length > 0) return ordered;
+    const uniqueSizes: string[] = [];
+    matchingVariants.forEach(v => {
+      const s = v.size.trim();
+      if (!uniqueSizes.some(existing => existing.toLowerCase() === s.toLowerCase())) {
+        uniqueSizes.push(s);
+      }
+    });
+    return uniqueSizes;
+  }, [product, currentColor?.name]);
+
+  const currentSize = (availableSizes.some(s => s.toLowerCase() === selectedSize.toLowerCase()) ? selectedSize : availableSizes[0]) || product.sizes[0] || '';
+
+  const handleColorSelect = (idx: number) => {
+    setSelectedColorIdx(idx);
+    setActiveImageIdx(0);
+    const newColor = product.colors?.[idx];
+    if (!product.variants || product.variants.length === 0) return;
+    const matchingVariants = product.variants.filter(v =>
+      isColorMatching(v.color, newColor?.name) && Boolean(v.size?.trim())
+    );
+    if (matchingVariants.length > 0) {
+      const colorSizes = matchingVariants.map(v => v.size.trim());
+      if (!colorSizes.some(s => s.toLowerCase() === selectedSize.toLowerCase().trim())) {
+        setSelectedSize(colorSizes[0]);
+      }
+    }
+  };
 
   const allImages = [
     product.images.primary,
@@ -132,7 +181,7 @@ export const QuickViewModal: React.FC = () => {
                 {product.colors.map((c, idx) => (
                   <button
                     key={c.name}
-                    onClick={() => setSelectedColorIdx(idx)}
+                    onClick={() => handleColorSelect(idx)}
                     className={`w-6 h-6 rounded-full border-2 transition-all flex items-center justify-center ${
                       selectedColorIdx === idx ? 'border-allura-gold scale-110' : 'border-allura-border'
                     }`}
@@ -149,7 +198,7 @@ export const QuickViewModal: React.FC = () => {
             )}
 
             {/* Sizes */}
-            {product.sizes.length > 0 && (
+            {availableSizes.length > 0 && (
             <div className="mt-4">
               <div className="flex items-center justify-between text-xs">
                 <span className="font-semibold text-allura-text">Select Size</span>
@@ -162,12 +211,12 @@ export const QuickViewModal: React.FC = () => {
                 </Link>
               </div>
               <div className="flex flex-wrap gap-2 mt-2">
-                {product.sizes.map(size => (
+                {availableSizes.map(size => (
                   <button
                     key={size}
                     onClick={() => setSelectedSize(size)}
                     className={`px-3 py-1.5 rounded text-xs font-sans font-medium transition-all ${
-                      currentSize === size
+                      currentSize.toLowerCase().trim() === size.toLowerCase().trim()
                         ? 'bg-allura-darkBrown text-allura-card border border-allura-darkBrown'
                         : 'border border-allura-border bg-allura-bg hover:border-allura-gold text-allura-text'
                     }`}

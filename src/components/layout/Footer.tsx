@@ -19,7 +19,7 @@ export const Footer: React.FC = () => {
             </div>
           </div>
 
-          {/* Col 2: Shop */}
+          {/* Col 2: Shop
           <div className="space-y-4">
             <h4 className="text-[12px] font-heading font-bold tracking-[0.25em] text-white uppercase">
               SHOP
@@ -51,9 +51,9 @@ export const Footer: React.FC = () => {
                 </Link>
               </li>
             </ul>
-          </div>
+          </div> */}
 
-          {/* Col 3: About */}
+          {/* Col 3: About
           <div className="space-y-4">
             <h4 className="text-[12px] font-heading font-bold tracking-[0.25em] text-white uppercase">
               ABOUT
@@ -83,7 +83,7 @@ export const Footer: React.FC = () => {
                 <span className="text-[#F7E6C8]/50 cursor-not-allowed">Careers (Coming Soon)</span>
               </li>
             </ul>
-          </div>
+          </div> */}
 
           {/* Col 4: Customer Care */}
           <div className="space-y-4">
@@ -203,10 +203,7 @@ export const Footer: React.FC = () => {
         <div className="pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-[11px] font-body text-[#F7E6C8]/70 tracking-wide">
           <p>© 2026 Allura Boutique. All rights reserved.</p>
           <div className="flex items-center gap-4">
-            <Link to="/admin" className="text-[#F7E6C8] hover:text-white font-heading font-bold uppercase tracking-wider text-[11px]">
-              Staff / Admin Portal →
-            </Link>
-            <span className="opacity-40">•</span>
+          
             <p className="flex items-center gap-1.5 font-heading font-semibold uppercase text-xs text-[#F7E6C8]">
               WEAR YOUR STORY WITH ALLURA
             </p>

@@ -54,7 +54,10 @@ export const AlluraAIAssistant: React.FC = () => {
       {!isAIAssistantOpen && (
         <button
           onClick={() => setIsAIAssistantOpen(true)}
-          className="fixed bottom-[calc(9rem+env(safe-area-inset-bottom))] lg:bottom-[6.5rem] right-4 sm:right-5 z-40 bg-allura-card text-allura-darkBrown border border-allura-gold/40 shadow-luxury hover:shadow-2xl rounded-full p-1.5 sm:pl-2 sm:pr-5 sm:py-2 flex items-center gap-2.5 transition-all duration-300 hover:scale-105 group"
+          style={{
+            bottom: 'calc(9.25rem + env(safe-area-inset-bottom, 0px))',
+          }}
+          className="fixed right-4 sm:right-5 z-40 bg-allura-card text-allura-darkBrown border border-allura-gold/40 shadow-luxury hover:shadow-2xl rounded-full p-1.5 sm:pl-2 sm:pr-5 sm:py-2 flex items-center gap-2.5 transition-all duration-300 hover:scale-105 group lg:!bottom-[6.5rem]"
           aria-label="Open Allura AI Assistant"
         >
           <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-gradient-to-tr from-allura-gold to-allura-goldLight flex items-center justify-center text-white shadow-sm">

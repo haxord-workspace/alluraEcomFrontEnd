@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   Heart,
@@ -25,6 +25,7 @@ import type { Product } from '../types';
 import { useAddToBag } from '../hooks/useAddToBag';
 import { AddToBagLabel, addToBagButtonState } from '../components/ui/AddToBagLabel';
 import { SEOHead } from '../components/common/SEOHead';
+import { ProductDetailSkeleton } from '../components/ui/ProductDetailSkeleton';
 
 export const ProductDetailPage: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
@@ -67,10 +68,25 @@ export const ProductDetailPage: React.FC = () => {
       .then(fetched => {
         if (cancelled) return;
         setProduct(fetched);
-        setSelectedSize(fetched.sizes[0] || '');
         setSelectedColorIdx(0);
         setActiveImageIdx(0);
         setQuantity(1);
+
+        const firstColor = fetched.colors?.[0];
+        let initialSize = '';
+        if (fetched.variants && fetched.variants.length > 0) {
+          const matching = fetched.variants.filter(v =>
+            (!firstColor?.name || !v.color?.name || v.color.name.toLowerCase().trim() === firstColor.name.toLowerCase().trim()) &&
+            Boolean(v.size?.trim())
+          );
+          if (matching.length > 0) {
+            initialSize = matching[0].size.trim();
+          }
+        }
+        if (!initialSize) {
+          initialSize = fetched.sizes?.[0] || '';
+        }
+        setSelectedSize(initialSize);
       })
       .catch(() => {
         if (!cancelled) setNotFound(true);
@@ -86,13 +102,87 @@ export const ProductDetailPage: React.FC = () => {
     setOpenAccordions(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
-  if (isLoading) {
-    return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 text-center">
-        <div className="w-6 h-6 border-2 border-allura-goldDark border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-        <p className="text-xs font-sans text-allura-muted">Loading product...</p>
-      </div>
+  const currentColor = product?.colors?.[selectedColorIdx] || product?.colors?.[0];
+
+  // Helper: check if a variant's color matches the target color name
+  const isColorMatching = useCallback((variantColor?: { name?: string }, targetColorName?: string) => {
+    if (!targetColorName) return true;
+    const vName = variantColor?.name?.trim();
+    if (!vName) {
+      return (product?.colors?.length || 0) <= 1;
+    }
+    return vName.toLowerCase() === targetColorName.toLowerCase().trim();
+  }, [product?.colors?.length]);
+
+  // Dynamically compute the sizes available for the currently selected color
+  const availableSizes = useMemo(() => {
+    if (!product) return [];
+    if (!product.variants || product.variants.length === 0) {
+      return product.sizes || [];
+    }
+
+    const matchingVariants = product.variants.filter(v =>
+      isColorMatching(v.color, currentColor?.name) && Boolean(v.size?.trim())
     );
+
+    if (matchingVariants.length === 0) {
+      return product.sizes || [];
+    }
+
+    const colorSizeSet = new Set(matchingVariants.map(v => v.size.trim().toLowerCase()));
+
+    // Preserve the canonical product.sizes ordering if possible
+    const ordered = (product.sizes || []).filter(s => colorSizeSet.has(s.trim().toLowerCase()));
+    if (ordered.length > 0) {
+      return ordered;
+    }
+
+    const uniqueSizes: string[] = [];
+    matchingVariants.forEach(v => {
+      const s = v.size.trim();
+      if (!uniqueSizes.some(existing => existing.toLowerCase() === s.toLowerCase())) {
+        uniqueSizes.push(s);
+      }
+    });
+    return uniqueSizes;
+  }, [product, currentColor?.name, isColorMatching]);
+
+  // Keep selectedSize in sync with the sizes available for the selected color
+  useEffect(() => {
+    if (!availableSizes || availableSizes.length === 0) return;
+    const isCurrentSizeValid = availableSizes.some(
+      s => s.toLowerCase().trim() === selectedSize.toLowerCase().trim()
+    );
+    if (!isCurrentSizeValid) {
+      setSelectedSize(availableSizes[0]);
+    }
+  }, [availableSizes, selectedSize]);
+
+  // Handler for color change: switches color and immediately auto-selects a valid size
+  const handleColorSelect = (idx: number) => {
+    setSelectedColorIdx(idx);
+    setActiveImageIdx(0);
+
+    const newColor = product?.colors?.[idx];
+    if (!product?.variants || product.variants.length === 0) return;
+
+    const matchingVariants = product.variants.filter(v =>
+      isColorMatching(v.color, newColor?.name) && Boolean(v.size?.trim())
+    );
+
+    if (matchingVariants.length > 0) {
+      const colorSizes = matchingVariants.map(v => v.size.trim());
+      const isStillAvailable = colorSizes.some(
+        s => s.toLowerCase() === selectedSize.toLowerCase().trim()
+      );
+      if (!isStillAvailable) {
+        setSelectedSize(colorSizes[0]);
+      }
+    }
+  };
+
+  if (isLoading) {
+    return <ProductDetailSkeleton />;
   }
 
   if (notFound || !product) {
@@ -116,12 +206,17 @@ export const ProductDetailPage: React.FC = () => {
   }
 
   const inWishlist = isInWishlist(product.id);
-  const currentColor = product.colors[selectedColorIdx] || product.colors[0];
 
   // Variants can be priced differently from the product: show the price of the selected size / colour
-  const sameText = (a?: string, b?: string) => !a || !b || a.toLowerCase() === b.toLowerCase();
+  const sameText = (a?: string, b?: string) => !a || !b || a.toLowerCase().trim() === b.toLowerCase().trim();
   const selectedVariant =
-    product.variants?.find(v => sameText(v.size, selectedSize) && sameText(v.color?.name, currentColor?.name)) ||
+    product.variants?.find(v => 
+      isColorMatching(v.color, currentColor?.name) && 
+      v.size?.trim().toLowerCase() === selectedSize.trim().toLowerCase()
+    ) ||
+    product.variants?.find(v => 
+      sameText(v.size, selectedSize) && sameText(v.color?.name, currentColor?.name)
+    ) ||
     (product.variants?.length === 1 ? product.variants[0] : undefined);
   const displayPrice = selectedVariant?.price || product.price;
   const displayMrp = selectedVariant ? (selectedVariant.mrp > displayPrice ? selectedVariant.mrp : undefined) : product.originalPrice;
@@ -198,7 +293,8 @@ export const ProductDetailPage: React.FC = () => {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-12 space-y-16">
+    <>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-2 sm:pt-6 pb-24 lg:pb-12">
       <SEOHead
         title={product.name}
         description={product.description?.slice(0, 160) || `Buy handcrafted ${product.name} at Allura Boutique.`}
@@ -208,7 +304,7 @@ export const ProductDetailPage: React.FC = () => {
         structuredData={structuredData}
       />
       {/* Breadcrumb */}
-      <nav className="text-xs font-sans text-allura-muted flex items-center gap-2">
+      <nav className="text-xs font-sans text-allura-muted flex items-center gap-2 mb-3 sm:mb-6">
         <Link to="/" className="hover:text-allura-goldDark">Home</Link>
         <span>/</span>
         <Link to="/shop" className="hover:text-allura-goldDark">Shop</Link>
@@ -321,7 +417,7 @@ export const ProductDetailPage: React.FC = () => {
               {product.colors.map((color, idx) => (
                 <button
                   key={color.name}
-                  onClick={() => setSelectedColorIdx(idx)}
+                  onClick={() => handleColorSelect(idx)}
                   className={`flex items-center gap-2 p-1.5 pr-3 rounded-full border transition-all ${
                     selectedColorIdx === idx
                       ? 'border-allura-goldDark bg-allura-bgSecondary/60 shadow-xs ring-1 ring-allura-goldDark'
@@ -344,7 +440,7 @@ export const ProductDetailPage: React.FC = () => {
           )}
 
           {/* Size Selection & Size Guide */}
-          {product.sizes.length > 0 && (
+          {availableSizes.length > 0 && (
           <div className="space-y-2">
             <div className="flex justify-between items-center text-xs">
               <span className="font-bold text-allura-darkBrown uppercase tracking-wider">
@@ -359,19 +455,29 @@ export const ProductDetailPage: React.FC = () => {
               </button>
             </div>
             <div className="flex flex-wrap gap-2.5">
-              {product.sizes.map(size => (
-                <button
-                  key={size}
-                  onClick={() => setSelectedSize(size)}
-                  className={`min-w-[48px] h-11 px-4 rounded text-xs font-sans font-semibold transition-all duration-200 ${
-                    selectedSize === size
-                      ? 'bg-allura-darkBrown text-allura-card border border-allura-darkBrown shadow-xs'
-                      : 'border border-allura-border bg-allura-card text-allura-text hover:border-allura-gold'
-                  }`}
-                >
-                  {size}
-                </button>
-              ))}
+              {availableSizes.map(size => {
+                const isSelected = selectedSize.toLowerCase().trim() === size.toLowerCase().trim();
+                const variantForSize = product.variants?.find(v =>
+                  isColorMatching(v.color, currentColor?.name) &&
+                  v.size?.trim().toLowerCase() === size.trim().toLowerCase()
+                );
+                const isOutOfStock = variantForSize ? variantForSize.stockAvailable !== undefined && variantForSize.stockAvailable <= 0 : false;
+
+                return (
+                  <button
+                    key={size}
+                    onClick={() => setSelectedSize(size)}
+                    className={`min-w-[48px] h-11 px-4 rounded text-xs font-sans font-semibold transition-all duration-200 relative ${
+                      isSelected
+                        ? 'bg-allura-darkBrown text-allura-card border border-allura-darkBrown shadow-xs'
+                        : 'border border-allura-border bg-allura-card text-allura-text hover:border-allura-gold'
+                    } ${isOutOfStock ? 'opacity-60' : ''}`}
+                    title={isOutOfStock ? `${size} (Out of stock)` : size}
+                  >
+                    {size}
+                  </button>
+                );
+              })}
             </div>
           </div>
           )}
@@ -400,8 +506,8 @@ export const ProductDetailPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Desktop Purchase CTA Buttons */}
-          <div className="space-y-3 pt-4">
+          {/* Desktop Purchase CTA Buttons (Hidden on mobile where sticky bar is active) */}
+          <div className="hidden lg:block space-y-3 pt-4">
             <div className="grid grid-cols-2 gap-3">
               <button
                 onClick={handleAddToCart}
@@ -418,7 +524,7 @@ export const ProductDetailPage: React.FC = () => {
               <button
                 onClick={handleBuyNow}
                 disabled={isBuyingNow}
-                className="bg-allura-goldDark hover:bg-allura-darkBrown text-allura-card text-xs font-sans font-bold tracking-[0.2em] uppercase py-3.5 px-4 rounded-sm transition-all flex items-center justify-center gap-2 shadow-luxury disabled:opacity-60"
+                className="bg-allura-darkBrown hover:bg-allura-darkBrown/90 text-white text-xs font-sans font-bold tracking-[0.2em] uppercase py-3.5 px-4 rounded-sm transition-all flex items-center justify-center gap-2 shadow-luxury disabled:opacity-60"
               >
                 <span>{isBuyingNow ? 'PLEASE WAIT…' : 'BUY NOW'}</span>
               </button>
@@ -535,7 +641,7 @@ export const ProductDetailPage: React.FC = () => {
 
       {/* Dynamic Product Promotion Banner from Admin Studio */}
       {activeProductPromo && (
-        <div className="relative rounded-2xl overflow-hidden shadow-md border border-allura-border/60 aspect-[16/6] sm:aspect-[24/6] min-h-[130px] group">
+        <div className="mt-8 sm:mt-12 relative rounded-2xl overflow-hidden shadow-md border border-allura-border/60 aspect-[16/6] sm:aspect-[24/6] min-h-[130px] group">
           <picture className="w-full h-full">
             {activeProductPromo.mobileImage && (
               <source media="(max-width: 640px)" srcSet={activeProductPromo.mobileImage} />
@@ -582,7 +688,7 @@ export const ProductDetailPage: React.FC = () => {
       )}
 
       {/* Complete The Look Section */}
-      <section className="pt-12 border-t border-allura-border/60">
+      <section className="mt-8 sm:mt-14 pt-8 sm:pt-12 border-t border-allura-border/60">
         <div className="flex items-center justify-between mb-8">
           <div>
             <span className="text-[11px] font-sans font-bold tracking-[0.25em] uppercase text-allura-goldDark block mb-1">
@@ -606,29 +712,40 @@ export const ProductDetailPage: React.FC = () => {
           ))}
         </div>
       </section>
+    </div>
 
-      {/* Mobile Sticky Purchase Bar */}
-      <div className="lg:hidden fixed bottom-16 left-0 right-0 z-30 bg-allura-card/95 backdrop-blur-md border-t border-allura-border p-3 flex gap-2.5 shadow-bottom-sheet safe-bottom">
+    {/* Mobile Sticky Purchase Bar - Fixed at the very bottom, exactly matching Oxbo reference */}
+    <aside
+      aria-label="Mobile Purchase Bar"
+      className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/98 backdrop-blur-md border-t border-allura-border/60 px-4 pt-3 shadow-[0_-4px_25px_rgba(0,0,0,0.08)]"
+      style={{
+        paddingBottom: 'max(0.75rem, calc(0.5rem + env(safe-area-inset-bottom, 0px)))',
+      }}
+    >
+      <div className="flex items-center gap-3 max-w-md mx-auto">
         <button
           onClick={handleAddToCart}
           disabled={bag.isAdding || isBuyingNow}
-          className={`flex-1 border text-xs font-sans font-bold tracking-wider uppercase py-3 rounded-sm flex items-center justify-center gap-1.5 ${addToBagButtonState(bag.state)} ${
+          className={`flex-1 h-12 border-2 border-allura-darkBrown text-allura-darkBrown bg-white hover:bg-stone-50 text-xs font-sans font-bold tracking-wider uppercase px-3 rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-xs active:scale-[0.98] ${addToBagButtonState(bag.state)} ${
             bag.justAdded
-              ? 'bg-emerald-700 border-emerald-700 text-white'
-              : 'bg-allura-card hover:bg-allura-bgSecondary border-allura-darkBrown text-allura-darkBrown'
+              ? '!bg-emerald-700 !border-emerald-700 !text-white'
+              : ''
           }`}
         >
-          <AddToBagLabel state={bag.state} label="ADD TO BAG" iconSize={14} />
+          <AddToBagLabel state={bag.state} label="ADD TO BAG" iconSize={15} />
         </button>
 
         <button
           onClick={handleBuyNow}
           disabled={isBuyingNow}
-          className="flex-1 bg-allura-goldDark text-allura-card text-xs font-sans font-bold tracking-wider uppercase py-3 rounded-sm flex items-center justify-center gap-1.5 shadow-sm disabled:opacity-60"
+          className="flex-1 h-12 bg-allura-darkBrown hover:bg-allura-darkBrown/90 text-white text-xs font-sans font-bold tracking-wider uppercase px-3 rounded-xl flex items-center justify-center gap-1.5 shadow-sm disabled:opacity-60 transition-all active:scale-[0.98] truncate"
         >
-          <span>{isBuyingNow ? 'PLEASE WAIT…' : `BUY NOW (${formatPrice(displayPrice)})`}</span>
+          <span className="truncate">
+            {isBuyingNow ? 'PLEASE WAIT…' : `BUY NOW • ${formatPrice(displayPrice)}`}
+          </span>
         </button>
       </div>
+    </aside>
 
       {/* Size Guide BottomSheet */}
       <BottomSheet
@@ -671,6 +788,6 @@ export const ProductDetailPage: React.FC = () => {
           </div>
         </div>
       </BottomSheet>
-    </div>
+    </>
   );
 };

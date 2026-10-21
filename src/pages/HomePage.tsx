@@ -13,9 +13,7 @@ import {
   Feather,
   Heart
 } from 'lucide-react';
-import { occasionsData } from '../data/occasions';
 import { ProductCard } from '../components/ui/ProductCard';
-import { OccasionCard } from '../components/ui/OccasionCard';
 import { AlluraCircleSection } from '../components/ui/AlluraCircleSection';
 import { AbandonedCartBanner } from '../components/customer/AbandonedCartBanner';
 import { useAdmin } from '../context/AdminContext';
@@ -71,6 +69,12 @@ export const HomePage: React.FC = () => {
     const headingLines = fullTitle.includes('\n') 
       ? fullTitle.split('\n').filter(Boolean)
       : [fullTitle];
+    const rawDesc = b.subtitle || b.description || '';
+    // Avoid rendering AI prompt descriptions that look like image generation instructions
+    const isAiPrompt = /^(a woman|a model|a photo|a picture|high resolution|cinematic|full body shot|portrait of)/i.test(rawDesc.trim());
+    const description = isAiPrompt
+      ? (b.subtitle && !/^(a woman|a model|a photo)/i.test(b.subtitle) ? b.subtitle : '')
+      : rawDesc;
     const img = getBannerImage(b);
 
     return {
@@ -79,8 +83,8 @@ export const HomePage: React.FC = () => {
       eyebrow: b.eyebrow || '',
       headingLines,
       title: fullTitle,
-      subtitle: b.subtitle || b.description || '',
-      description: b.subtitle || b.description || '',
+      subtitle: b.subtitle || '',
+      description,
       offerPill: b.offerPill || '',
       primaryCta: b.ctaText || 'SHOP NOW',
       primaryLink: b.targetUrl || '/shop',
@@ -232,26 +236,43 @@ export const HomePage: React.FC = () => {
             );
           })}
 
-          {/* Carousel Arrow Controls */}
+          {/* Carousel Controls: Elegant side arrows and bottom-center slide dots (preventing overlap with floating buttons) */}
           {heroSlides.length > 1 && (
-            <div className="absolute bottom-6 right-6 z-30 hidden sm:flex items-center gap-2.5">
+            <>
+              {/* Previous Slide Button */}
               <button
                 onClick={() =>
                   setCurrentSlide(prev => (prev === 0 ? heroSlides.length - 1 : prev - 1))
                 }
-                className="w-10 h-10 rounded-full bg-white hover:bg-[#561C08] text-[#561C08] hover:text-white border border-[#561C08]/20 flex items-center justify-center transition-all shadow-md hover:scale-105"
+                className="absolute left-3 sm:left-6 top-1/2 -translate-y-1/2 z-20 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white/80 hover:bg-white text-[#561C08] border border-white/60 backdrop-blur-md flex items-center justify-center transition-all shadow-lg hover:scale-110 active:scale-95"
                 aria-label="Previous Slide"
               >
-                <ChevronLeft size={18} />
+                <ChevronLeft size={20} />
               </button>
+
+              {/* Next Slide Button */}
               <button
                 onClick={() => setCurrentSlide(prev => (prev + 1) % heroSlides.length)}
-                className="w-10 h-10 rounded-full bg-white hover:bg-[#561C08] text-[#561C08] hover:text-white border border-[#561C08]/20 flex items-center justify-center transition-all shadow-md hover:scale-105"
+                className="absolute right-3 sm:right-6 top-1/2 -translate-y-1/2 z-20 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white/80 hover:bg-white text-[#561C08] border border-white/60 backdrop-blur-md flex items-center justify-center transition-all shadow-lg hover:scale-110 active:scale-95"
                 aria-label="Next Slide"
               >
-                <ChevronRight size={18} />
+                <ChevronRight size={20} />
               </button>
-            </div>
+
+              {/* Center Pagination Dots */}
+              <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 bg-stone-900/40 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/20">
+                {heroSlides.map((_, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setCurrentSlide(idx)}
+                    className={`h-2 rounded-full transition-all duration-300 ${
+                      currentSlide === idx ? 'w-6 bg-[#F7E6C8]' : 'w-2 bg-white/50 hover:bg-white'
+                    }`}
+                    aria-label={`Go to slide ${idx + 1}`}
+                  />
+                ))}
+              </div>
+            </>
           )}
         </section>
       ) : (
@@ -279,81 +300,9 @@ export const HomePage: React.FC = () => {
         </section>
       )}
 
-      {/* 1.1 HIGH-CONVERSION TRUST & PROMISE STRIP */}
-      <section className="max-w-7xl mx-auto px-5 sm:px-6 lg:px-8 -mt-6 sm:-mt-10 relative z-30">
-        <div className="bg-white border border-[#561C08]/15 rounded-2xl p-4 sm:p-6 shadow-md grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 text-xs font-body">
-          
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[#F7E6C8] text-[#561C08] flex items-center justify-center flex-shrink-0">
-              <Truck size={18} />
-            </div>
-            <div>
-              <p className="font-bold text-[#000000] font-heading text-sm">48-Hr Kerala Dispatch</p>
-              <p className="text-[11px] text-[#561C08]/80 font-medium">Free on orders &gt; ₹2,999</p>
-            </div>
-          </div>
+  
 
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[#F7E6C8] text-[#561C08] flex items-center justify-center flex-shrink-0">
-              <ShieldCheck size={18} />
-            </div>
-            <div>
-              <p className="font-bold text-[#000000] font-heading text-sm">Silk Mark Certified</p>
-              <p className="text-[11px] text-[#561C08]/80 font-medium">100% genuine artisan handlooms</p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[#F7E6C8] text-[#561C08] flex items-center justify-center flex-shrink-0">
-              <RefreshCw size={18} />
-            </div>
-            <div>
-              <p className="font-bold text-[#000000] font-heading text-sm">7-Day Doorstep Swaps</p>
-              <p className="text-[11px] text-[#561C08]/80 font-medium">Hassle-free size & style exchange</p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[#F7E6C8] text-[#561C08] flex items-center justify-center flex-shrink-0">
-              <MessageSquare size={18} />
-            </div>
-            <div>
-              <p className="font-bold text-[#000000] font-heading text-sm">WhatsApp Concierge</p>
-              <p className="text-[11px] text-[#561C08]/80 font-medium">Styling advice at 9037991774</p>
-            </div>
-          </div>
-
-        </div>
-      </section>
-
-      {/* 2. SHOP BY OCCASION (5 Arched Cards) */}
-      <section className="max-w-7xl mx-auto px-6 lg:px-8">
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-8 sm:mb-12 border-b border-[#561C08]/15 pb-4">
-          <div>
-            <span className="text-[11px] font-heading font-bold tracking-[0.25em] uppercase text-[#561C08] block mb-1">
-              FIND YOUR LOOK
-            </span>
-            <h2 className="font-heading text-2xl sm:text-4xl text-[#000000] font-bold uppercase tracking-tight">
-              SHOP BY OCCASION
-            </h2>
-          </div>
-          <Link
-            to="/shop"
-            className="inline-flex items-center gap-1.5 text-xs font-heading font-bold tracking-[0.2em] text-[#561C08] hover:text-[#3D1406] transition-colors mt-3 sm:mt-0 uppercase"
-          >
-            <span>EXPLORE ALL</span>
-            <ArrowRight size={14} />
-          </Link>
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 sm:gap-6">
-          {occasionsData.map(item => (
-            <OccasionCard key={item.id} item={item} />
-          ))}
-        </div>
-      </section>
-
-      {/* 2B. SHOP BY CATEGORY (Live from Catalog) */}
+      {/* 2. SHOP BY CATEGORY (Live from Store Catalog) */}
       {categories.length > 0 && (
         <section className="max-w-7xl mx-auto px-6 lg:px-8">
           <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-8 sm:mb-12 border-b border-[#561C08]/15 pb-4">
@@ -374,20 +323,28 @@ export const HomePage: React.FC = () => {
             </Link>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 sm:gap-6">
-            {categories.slice(0, 5).map(cat => {
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
+            {categories.map(cat => {
               const imageUrl = typeof cat.image === 'string' ? cat.image : cat.image?.url;
               return (
                 <Link
                   key={cat.id}
                   to={`/shop?category=${encodeURIComponent(cat.name)}`}
-                  className="group relative aspect-[3/4] rounded-2xl overflow-hidden border border-[#561C08]/15 shadow-xs"
+                  className="group relative aspect-[3/4] rounded-2xl overflow-hidden border border-[#561C08]/15 shadow-xs bg-[#561C08]/5"
                 >
-                  <img
-                    src={imageUrl || '/images/best-sellers/classic-cream-anarkali.jpeg'}
-                    alt={cat.name}
-                    className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500"
-                  />
+                  {imageUrl ? (
+                    <img
+                      src={imageUrl}
+                      alt={cat.name}
+                      className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-t from-[#561C08]/85 via-[#561C08]/40 to-transparent flex items-center justify-center p-4">
+                      <span className="text-white/30 font-heading text-2xl font-bold uppercase">
+                        {cat.name}
+                      </span>
+                    </div>
+                  )}
                   <div className="absolute inset-0 bg-gradient-to-t from-[#561C08]/85 via-[#561C08]/20 to-transparent flex items-end justify-center p-3 text-center">
                     <h4 className="font-heading text-xs sm:text-sm font-bold tracking-wider uppercase text-white">
                       {cat.name}
@@ -457,7 +414,8 @@ export const HomePage: React.FC = () => {
       )}
 
       {/* 4. BEST SELLERS PRODUCT GRID */}
-      <section className="max-w-7xl mx-auto px-6 lg:px-8">
+      {bestSellers.length > 0 && (
+        <section className="max-w-7xl mx-auto px-6 lg:px-8">
         <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-8 border-b border-[#561C08]/15 pb-4">
           <div>
             <h2 className="font-heading text-2xl sm:text-4xl text-[#000000] font-bold uppercase tracking-tight">
@@ -481,7 +439,8 @@ export const HomePage: React.FC = () => {
             <ProductCard key={product.id} product={product} />
           ))}
         </div>
-      </section>
+        </section>
+      )}
 
       {/* 5. TRUST STRIP / SERVICE FEATURES */}
       <section className="border-y border-[#561C08]/15 bg-[#F7E6C8] py-10">

@@ -36,7 +36,7 @@ export const MobileBottomNav: React.FC = () => {
             >
               {/* Active Indicator Top Line */}
               {isActive && (
-                <span className="absolute top-0 w-8 h-[2px] bg-allura-gold rounded-full" />
+                <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-[2px] bg-allura-gold rounded-full" />
               )}
 
               <div className="relative">

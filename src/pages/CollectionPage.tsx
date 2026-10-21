@@ -45,9 +45,9 @@ export const CollectionPage: React.FC = () => {
   });
 
   return (
-    <div className="space-y-12 sm:space-y-16 pb-16">
+    <div className="space-y-6 sm:space-y-14 pb-16">
       {/* Editorial Collection Hero Banner */}
-      <section className="relative h-[48vh] sm:h-[55vh] min-h-[380px] w-full overflow-hidden bg-allura-bgSecondary">
+      <section className="relative h-[44vh] sm:h-[55vh] min-h-[340px] sm:min-h-[380px] w-full overflow-hidden bg-allura-bgSecondary">
         <picture className="w-full h-full">
           {bannerMobileImg && (
             <source media="(max-width: 640px)" srcSet={bannerMobileImg} />
@@ -63,11 +63,11 @@ export const CollectionPage: React.FC = () => {
           />
         </picture>
         <div className="absolute inset-0 bg-gradient-to-t from-allura-darkBrown/85 via-allura-darkBrown/40 to-transparent flex items-end">
-          <div className="max-w-7xl mx-auto px-6 lg:px-8 py-10 w-full text-allura-card space-y-3">
-            <span className="text-[11px] font-sans font-bold tracking-[0.3em] uppercase text-allura-gold">
+          <div className="max-w-7xl mx-auto px-6 lg:px-8 py-8 sm:py-10 w-full text-allura-card space-y-2 sm:space-y-3">
+            <span className="text-[10px] sm:text-[11px] font-sans font-bold tracking-[0.3em] uppercase text-allura-gold">
               {bannerTagline}
             </span>
-            <h1 className="font-serif text-3xl sm:text-5xl lg:text-6xl font-normal uppercase tracking-tight">
+            <h1 className="font-serif text-2xl sm:text-5xl lg:text-6xl font-normal uppercase tracking-tight">
               {bannerTitle}
             </h1>
             <p className="text-xs sm:text-sm text-allura-bgSecondary font-sans max-w-xl leading-relaxed">
@@ -79,7 +79,7 @@ export const CollectionPage: React.FC = () => {
 
       {/* Product Grid */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between mb-8 pb-3 border-b border-allura-border/60">
+        <div className="flex items-center justify-between mb-4 sm:mb-6 pb-2.5 border-b border-allura-border/60">
           <span className="text-xs font-sans text-allura-muted tracking-wider uppercase">
             Showing <strong className="text-allura-text">{collectionProducts.length}</strong> curated pieces
           </span>
@@ -92,16 +92,23 @@ export const CollectionPage: React.FC = () => {
           </Link>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6 lg:gap-8">
-          {collectionProducts.map(product => (
-            <ProductCard key={product.id} product={product} />
-          ))}
-        </div>
+        {collectionProducts.length === 0 ? (
+          <div className="text-center py-6 sm:py-8 text-allura-muted font-sans text-xs space-y-1.5 bg-allura-card/60 rounded-xl border border-allura-border/50 p-4 sm:p-6 mb-2">
+            <p className="text-sm font-serif text-allura-darkBrown font-medium">New curation arriving soon</p>
+            <p>We are tailoring exclusive new pieces for this collection edit. Explore our other edits below.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6 lg:gap-8">
+            {collectionProducts.map(product => (
+              <ProductCard key={product.id} product={product} />
+            ))}
+          </div>
+        )}
       </section>
 
       {/* Other Curated Edits Carousel / Links */}
-      <section className="max-w-7xl mx-auto px-6 lg:px-8 pt-8 border-t border-allura-border/60">
-        <div className="text-center mb-8">
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 sm:pt-8 border-t border-allura-border/60">
+        <div className="text-center mb-4 sm:mb-8">
           <span className="text-[11px] font-sans font-bold tracking-[0.25em] uppercase text-allura-goldDark block mb-1">
             CONTINUE BROWSING
           </span>
