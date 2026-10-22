@@ -84,6 +84,8 @@ const initialState: AdminAuthState = {
  * Login: POST /admin/auth/login
  * Stores access token in cookie; backend sets httpOnly refresh token cookie.
  */
+import { getBackendErrorMessage } from '../../utils/apiResponse';
+
 export const loginAdmin = createAsyncThunk(
   'adminAuth/login',
   async (
@@ -100,7 +102,7 @@ export const loginAdmin = createAsyncThunk(
       return data?.admin || data?.user || data;
     } catch (error: any) {
       return rejectWithValue(
-        error?.response?.data?.message || 'Login failed. Check your credentials.'
+        getBackendErrorMessage(error, 'Login failed. Check your credentials.')
       );
     }
   }
@@ -124,7 +126,7 @@ export const fetchAdminProfile = createAsyncThunk(
       return data?.admin || data?.user || data;
     } catch (error: any) {
       return rejectWithValue(
-        error?.response?.data?.message || 'Session expired'
+        getBackendErrorMessage(error, 'Session expired')
       );
     }
   }

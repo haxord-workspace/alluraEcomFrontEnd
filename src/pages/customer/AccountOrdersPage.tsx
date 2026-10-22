@@ -4,6 +4,7 @@ import { Package, Search, Eye, RotateCcw, FileText, ArrowLeft, ShoppingBag } fro
 import { useShop } from '../../context/ShopContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { InvoiceModal } from '../../components/common/InvoiceModal';
+import { OrderCardSkeleton } from '../../components/ui/OrderCardSkeleton';
 
 export const AccountOrdersPage: React.FC = () => {
   const { orders, formatPrice, invoiceOrder, setInvoiceOrder, addToCart, refreshOrders, isLoadingOrders } = useShop();
@@ -77,10 +78,7 @@ export const AccountOrdersPage: React.FC = () => {
 
       {/* Orders List */}
       {isLoadingOrders && orders.length === 0 ? (
-        <div className="py-16 flex flex-col items-center gap-3 text-allura-muted">
-          <div className="w-7 h-7 border-2 border-allura-goldDark border-t-transparent rounded-full animate-spin" />
-          <p className="text-xs font-sans uppercase tracking-widest">Loading your orders…</p>
-        </div>
+        <OrderCardSkeleton count={3} />
       ) : filteredOrders.length === 0 ? (
         <div className="bg-allura-card border border-allura-border rounded-2xl p-12 text-center space-y-4 shadow-subtle">
           <div className="w-14 h-14 rounded-full bg-allura-bgSecondary text-allura-goldDark flex items-center justify-center mx-auto">

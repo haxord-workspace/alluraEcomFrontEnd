@@ -14,7 +14,8 @@ import {
   Eye, 
   Phone, 
   ChevronRight, 
-  ArrowLeft 
+  ArrowLeft,
+  Loader2
 } from 'lucide-react';
 import { productsData as initialProducts } from '../data/products';
 import type { Product } from '../types';
@@ -24,6 +25,7 @@ export const AdminPage: React.FC = () => {
   const [products, setProducts] = useState<Product[]>(initialProducts);
   const [searchQuery, setSearchQuery] = useState('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isSavingProduct] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('All');
 
   // New Product Form State
@@ -34,7 +36,7 @@ export const AdminPage: React.FC = () => {
     category: 'Ethnic Wear',
     occasion: 'Festive',
     stockCount: '10',
-    image: '/images/best-sellers/classic-cream-anarkali.jpeg',
+    image: '',
     description: '',
   });
 
@@ -148,9 +150,9 @@ export const AdminPage: React.FC = () => {
       colors: [{ name: 'Default', hex: '#EBE3D5' }],
       sizes: ['S', 'M', 'L', 'XL'],
       images: {
-        primary: newProduct.image || '/images/best-sellers/classic-cream-anarkali.jpeg',
-        secondary: newProduct.image || '/images/best-sellers/aura-cream-embroidered.jpeg',
-        gallery: [newProduct.image || '/images/best-sellers/classic-cream-anarkali.jpeg']
+        primary: newProduct.image || '',
+        secondary: newProduct.image || '',
+        gallery: newProduct.image ? [newProduct.image] : []
       },
       description: newProduct.description || 'Curated luxury garment from Allura Boutique.',
       fabricDetails: 'Premium Fabric with full modest inner lining.',
@@ -168,7 +170,7 @@ export const AdminPage: React.FC = () => {
       category: 'Ethnic Wear',
       occasion: 'Festive',
       stockCount: '10',
-      image: '/images/best-sellers/classic-cream-anarkali.jpeg',
+      image: '',
       description: '',
     });
   };
@@ -830,7 +832,7 @@ export const AdminPage: React.FC = () => {
                 <label className="block font-semibold text-[#2C2926] mb-1">Image URL / Path</label>
                 <input
                   type="text"
-                  placeholder="/images/best-sellers/classic-cream-anarkali.jpeg"
+                  placeholder="https://... or /images/products/..."
                   value={newProduct.image}
                   onChange={e => setNewProduct({ ...newProduct, image: e.target.value })}
                   className="w-full bg-[#EFE5D5]/60 border border-[#DED2C1] rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-[#561C08]"
@@ -858,9 +860,11 @@ export const AdminPage: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="bg-[#561C08] hover:bg-[#2C2926] text-[#FCFAF6] text-xs font-bold uppercase tracking-wider px-5 py-2 rounded-lg shadow-xs transition-colors"
+                  disabled={isSavingProduct}
+                  className="bg-[#561C08] hover:bg-[#2C2926] disabled:opacity-50 text-[#FCFAF6] text-xs font-bold uppercase tracking-wider px-5 py-2 rounded-lg shadow-xs transition-colors flex items-center gap-1.5"
                 >
-                  Save Product
+                  {isSavingProduct && <Loader2 size={13} className="animate-spin" />}
+                  <span>{isSavingProduct ? 'Saving...' : 'Save Product'}</span>
                 </button>
               </div>
             </form>

@@ -98,6 +98,7 @@ interface ShopContextType {
   logoutCustomer: () => Promise<void>;
 
   // Address Management
+  isLoadingAddresses: boolean;
   fetchCustomerAddresses: () => Promise<void>;
   addCustomerAddress: (data: Omit<SavedAddress, 'id'>) => Promise<SavedAddress | undefined>;
   updateCustomerAddress: (id: string, data: Partial<SavedAddress>) => Promise<void>;
@@ -315,6 +316,7 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [orders, setOrders] = useState<Order[]>([]);
   const [ordersTotal, setOrdersTotal] = useState(0);
   const [isLoadingOrders, setIsLoadingOrders] = useState(false);
+  const [isLoadingAddresses, setIsLoadingAddresses] = useState(false);
 
   // Return requests state
   const [returns, setReturns] = useState<ReturnRequest[]>(() => {
@@ -461,9 +463,10 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const showToast = useCallback((message: string, type: 'success' | 'info' | 'gold' | 'error' = 'gold') => {
     const id = Math.random().toString(36).substring(2, 9);
     setToasts(prev => [...prev, { id, message, type }]);
+    const duration = type === 'error' ? 6500 : 3600;
     setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id));
-    }, 3600);
+    }, duration);
   }, []);
   showToastRef.current = showToast;
 
@@ -957,11 +960,14 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Address API Handlers
   const fetchCustomerAddresses = async () => {
     if (!customer) return;
+    setIsLoadingAddresses(true);
     try {
       const addresses = await getAddresses();
       setCustomer((prev) => prev ? { ...prev, addresses } : prev);
     } catch (error) {
       console.error('Failed to fetch addresses:', error);
+    } finally {
+      setIsLoadingAddresses(false);
     }
   };
 
@@ -1314,6 +1320,7 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
         completeProfile,
         logoutCustomer,
         fetchCustomerAddresses,
+        isLoadingAddresses,
         addCustomerAddress,
         updateCustomerAddress,
         deleteCustomerAddress,

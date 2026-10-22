@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit3, Trash2 } from 'lucide-react';
+import { Plus, Edit3, Trash2, Folder, Loader2 } from 'lucide-react';
 import { useAdmin } from '../../context/AdminContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { ImageUploadDropzone } from '../../components/admin/ImageUploadDropzone';
@@ -9,6 +9,8 @@ import { useConfirm } from '../../context/ConfirmContext';
 import { useShop } from '../../context/ShopContext';
 import { getBackendErrorMessage } from '../../utils/apiResponse';
 
+import { AdminErrorBanner } from '../../components/admin/AdminErrorBanner';
+
 export const AdminCategoriesPage: React.FC = () => {
   const { products } = useAdmin();
   const confirm = useConfirm();
@@ -16,24 +18,30 @@ export const AdminCategoriesPage: React.FC = () => {
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [pageError, setPageError] = useState<string | null>(null);
+  const [modalError, setModalError] = useState<string | null>(null);
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   
   const [formData, setFormData] = useState({
     name: '',
     slug: '',
     status: 'ACTIVE',
-    image: { url: '/images/best-sellers/classic-cream-anarkali.jpeg' },
+    image: { url: '' },
   });
 
   const fetchCategories = async () => {
     setIsLoading(true);
+    setPageError(null);
     try {
       const data = await getCategories();
       setCategories(data);
     } catch (error) {
       console.error('Failed to fetch categories:', error);
+      setPageError(getBackendErrorMessage(error, 'Failed to fetch categories'));
     } finally {
       setIsLoading(false);
     }
@@ -45,24 +53,26 @@ export const AdminCategoriesPage: React.FC = () => {
 
   const handleOpenAdd = () => {
     setEditingCategoryId(null);
+    setModalError(null);
     setFormData({
       name: '',
       slug: '',
       status: 'ACTIVE',
-      image: { url: '/images/best-sellers/classic-cream-anarkali.jpeg' },
+      image: { url: '' },
     });
     setIsModalOpen(true);
   };
 
   const handleOpenEdit = (cat: Category) => {
     setEditingCategoryId(cat.id);
+    setModalError(null);
     setFormData({
       name: cat.name,
       slug: cat.slug,
       status: cat.status || 'ACTIVE',
       image: typeof cat.image === 'string'
         ? { url: cat.image }
-        : cat.image || { url: '/images/best-sellers/classic-cream-anarkali.jpeg' },
+        : { url: cat.image?.url || '' },
     });
     setIsModalOpen(true);
   };
@@ -76,6 +86,7 @@ export const AdminCategoriesPage: React.FC = () => {
       isDestructive: true,
     });
     if (!ok) return;
+    setDeletingId(id);
     try {
       const msg = await deleteCategory(id);
       setCategories(prev => prev.filter(c => c.id !== id));
@@ -83,19 +94,23 @@ export const AdminCategoriesPage: React.FC = () => {
     } catch (error: any) {
       console.error('Failed to delete category:', error);
       showToast(getBackendErrorMessage(error, 'Failed to delete category'), 'error');
+    } finally {
+      setDeletingId(null);
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name) return;
+    setModalError(null);
+    setIsSaving(true);
     
     // Build payload — send only fields the backend accepts
     const payload = {
       name: formData.name,
       slug: formData.slug,
       status: formData.status,
-      image: formData.image,
+      image: formData.image?.url ? formData.image : undefined,
     };
 
     try {
@@ -111,7 +126,11 @@ export const AdminCategoriesPage: React.FC = () => {
       setIsModalOpen(false);
     } catch (error: any) {
       console.error('Failed to save category:', error);
-      showToast(getBackendErrorMessage(error, 'Failed to save category'), 'error');
+      const errText = getBackendErrorMessage(error, 'Failed to save category');
+      setModalError(errText);
+      showToast(errText, 'error');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -144,6 +163,14 @@ export const AdminCategoriesPage: React.FC = () => {
         </button>
       </div>
 
+      {pageError && (
+        <AdminErrorBanner
+          title="Failed to Load Categories"
+          error={pageError}
+          onDismiss={() => setPageError(null)}
+        />
+      )}
+
       {/* Categories Table */}
       <div className="bg-white border border-stone-200 rounded-2xl overflow-hidden shadow-xs">
         <div className="overflow-x-auto">
@@ -169,14 +196,23 @@ export const AdminCategoriesPage: React.FC = () => {
                     </td>
                     <td className="p-4">
                       <div className="flex items-center gap-3">
-                        <img
-                          src={
-                            (typeof cat.image === 'object' ? (cat.image as any)?.url : cat.image)
-                            || '/images/best-sellers/classic-cream-anarkali.jpeg'
-                          }
-                          alt={cat.name}
-                          className="w-10 h-12 object-cover rounded-lg bg-stone-100"
-                        />
+                        {(() => {
+                          const imgUrl = typeof cat.image === 'object' ? (cat.image as any)?.url : cat.image;
+                          return imgUrl ? (
+                            <img
+                              src={imgUrl}
+                              alt={cat.name}
+                              className="w-10 h-12 object-cover rounded-lg bg-stone-100"
+                              onError={(e) => {
+                                (e.target as HTMLElement).style.display = 'none';
+                              }}
+                            />
+                          ) : (
+                            <div className="w-10 h-12 rounded-lg bg-stone-100 border border-stone-200 flex items-center justify-center text-stone-400">
+                              <Folder size={18} />
+                            </div>
+                          );
+                        })()}
                         <span className="font-serif text-sm font-medium text-stone-900">{cat.name}</span>
                       </div>
                     </td>
@@ -198,10 +234,11 @@ export const AdminCategoriesPage: React.FC = () => {
                         </button>
                         <button 
                           onClick={() => handleDelete(cat.id)}
-                          className="p-1.5 text-stone-400 hover:text-red-500 rounded-lg"
+                          disabled={deletingId === cat.id}
+                          className="p-1.5 text-stone-400 hover:text-red-500 rounded-lg disabled:opacity-50"
                           title="Delete"
                         >
-                          <Trash2 size={14} />
+                          {deletingId === cat.id ? <Loader2 size={14} className="animate-spin text-stone-400" /> : <Trash2 size={14} />}
                         </button>
                       </div>
                     </td>
@@ -227,6 +264,15 @@ export const AdminCategoriesPage: React.FC = () => {
             <h3 className="font-serif text-xl text-stone-900">
               {editingCategoryId ? 'Edit Category' : 'Add New Category'}
             </h3>
+
+            {modalError && (
+              <AdminErrorBanner
+                title="Category Save Failed"
+                error={modalError}
+                onDismiss={() => setModalError(null)}
+              />
+            )}
+
             <form onSubmit={handleSubmit} className="space-y-3 text-xs font-sans">
               <div>
                 <label className="block text-[10px] uppercase font-bold text-stone-500 mb-1">Category Name</label>
@@ -269,7 +315,7 @@ export const AdminCategoriesPage: React.FC = () => {
               <div className="pt-2">
                 <ImageUploadDropzone
                   label="Category Cover & Banner Image"
-                  value={typeof formData.image === 'object' ? (formData.image as any).url : formData.image}
+                  value={typeof formData.image === 'object' ? (formData.image as any)?.url || '' : (formData.image || '')}
                   onChange={(url) => setFormData({ ...formData, image: { url } })}
                   aspectRatioLabel="Recommended: 400×500px"
                   presets={[
@@ -283,16 +329,19 @@ export const AdminCategoriesPage: React.FC = () => {
               <div className="flex justify-end gap-2 pt-3">
                 <button
                   type="button"
+                  disabled={isSaving}
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 border border-stone-200 rounded-xl text-stone-500 hover:bg-stone-50"
+                  className="px-4 py-2 border border-stone-200 rounded-xl text-stone-500 hover:bg-stone-50 disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-xl font-bold uppercase tracking-wider"
+                  disabled={isSaving}
+                  className="px-5 py-2 bg-stone-900 hover:bg-stone-800 disabled:opacity-50 text-white rounded-xl font-bold uppercase tracking-wider flex items-center justify-center gap-2 shadow-sm"
                 >
-                  Save Category
+                  {isSaving && <Loader2 size={14} className="animate-spin" />}
+                  <span>{isSaving ? 'Saving...' : 'Save Category'}</span>
                 </button>
               </div>
             </form>

@@ -147,10 +147,10 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                   <Boxes size={15} />
                   {!isCollapsed && <span>Collections</span>}
                 </NavLink>
-                <NavLink to="/admin/variants" className={navLinkClass}>
+                {/* <NavLink to="/admin/variants" className={navLinkClass}>
                   <Layers size={15} />
                   {!isCollapsed && <span>Variants</span>}
-                </NavLink>
+                </NavLink> */}
                 <NavLink to="/admin/barcodes" className={navLinkClass}>
                   <Barcode size={15} />
                   {!isCollapsed && <span>Barcodes & Scanner</span>}
@@ -252,10 +252,10 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                   <Sparkles size={15} />
                   {!isCollapsed && <span>Promotions</span>}
                 </NavLink>
-                <NavLink to="/admin/marketing/banners" className={navLinkClass}>
+                {/* <NavLink to="/admin/marketing/banners" className={navLinkClass}>
                   <ImageIcon size={15} />
                   {!isCollapsed && <span>Store Banners</span>}
-                </NavLink>
+                </NavLink> */}
                 <NavLink to="/admin/marketing/abandoned-carts" className={navLinkClass}>
                   <ShoppingBag size={15} />
                   {!isCollapsed && <span>Abandoned Carts</span>}
@@ -283,6 +283,10 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
             </button>
             {(openSections.content || isCollapsed) && (
               <div className="space-y-0.5 pl-1">
+                 <NavLink to="/admin/marketing/banners" className={navLinkClass}>
+                  <ImageIcon size={15} />
+                  {!isCollapsed && <span>Store Banners</span>}
+                </NavLink>
                 <NavLink to="/admin/content" className={navLinkClass}>
                   <FileText size={15} />
                   {!isCollapsed && <span>Pages & Policies</span>}
@@ -318,12 +322,12 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                   <Globe size={15} />
                   {!isCollapsed && <span>Search Analytics</span>}
                 </NavLink>
-                {hasPermission('ai') && (
+                {/* {hasPermission('ai') && (
                   <NavLink to="/admin/ai" className={navLinkClass}>
                     <Sparkles size={15} />
                     {!isCollapsed && <span>AI Stylist Admin</span>}
                   </NavLink>
-                )}
+                )} */}
                 {hasPermission('seo') && (
                   <NavLink to="/admin/seo" className={navLinkClass}>
                     <Globe size={15} />
@@ -359,12 +363,12 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                     {!isCollapsed && <span>Admin Roles & Matrix</span>}
                   </NavLink>
                 )}
-                {hasPermission('auditLogs') && (
+                {/* {hasPermission('auditLogs') && (
                   <NavLink to="/admin/audit-logs" className={navLinkClass}>
                     <FileText size={15} />
                     {!isCollapsed && <span>System Audit Logs</span>}
                   </NavLink>
-                )}
+                )} */}
               </div>
             )}
           </div>

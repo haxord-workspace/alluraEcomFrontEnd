@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { 
   ArrowRight, 
@@ -14,19 +14,83 @@ import {
   Heart
 } from 'lucide-react';
 import { ProductCard } from '../components/ui/ProductCard';
+import { ProductCardSkeleton } from '../components/ui/ProductCardSkeleton';
+import { HeroBannerSkeleton } from '../components/ui/HeroBannerSkeleton';
+import { CategoryCardSkeleton } from '../components/ui/CategoryCardSkeleton';
 import { AlluraCircleSection } from '../components/ui/AlluraCircleSection';
 import { AbandonedCartBanner } from '../components/customer/AbandonedCartBanner';
 import { useAdmin } from '../context/AdminContext';
 import { useShop } from '../context/ShopContext';
 import { SEOHead } from '../components/common/SEOHead';
+import { getStoreCollections, type StoreCollection } from '../service/store';
 
 export const HomePage: React.FC = () => {
   const navigate = useNavigate();
-  const { banners } = useAdmin();
-  const { products, categories } = useShop();
+  const { banners, isLoadingBanners } = useAdmin();
+  const { products, categories, isLoadingProducts } = useShop();
   const [currentSlide, setCurrentSlide] = useState(0);
   const touchStartX = useRef<number | null>(null);
   const touchEndX = useRef<number | null>(null);
+
+  // Dynamic store collections fetched via API (/store/collections or Admin /collections)
+  const [storeCollections, setStoreCollections] = useState<StoreCollection[]>([]);
+  const [tile1Index, setTile1Index] = useState(0);
+  const [tile2Index, setTile2Index] = useState(1);
+
+  // Category carousel scroll ref and state
+  const categoryScrollRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeftCat, setCanScrollLeftCat] = useState(false);
+  const [canScrollRightCat, setCanScrollRightCat] = useState(true);
+
+  const checkCategoryScroll = () => {
+    if (categoryScrollRef.current) {
+      const { scrollLeft, scrollWidth, clientWidth } = categoryScrollRef.current;
+      setCanScrollLeftCat(scrollLeft > 10);
+      setCanScrollRightCat(scrollLeft < scrollWidth - clientWidth - 10);
+    }
+  };
+
+  const scrollCategory = (direction: 'left' | 'right') => {
+    if (categoryScrollRef.current) {
+      const scrollAmount = categoryScrollRef.current.clientWidth * 0.75;
+      categoryScrollRef.current.scrollBy({
+        left: direction === 'left' ? -scrollAmount : scrollAmount,
+        behavior: 'smooth',
+      });
+    }
+  };
+
+  useEffect(() => {
+    const el = categoryScrollRef.current;
+    if (el) {
+      el.addEventListener('scroll', checkCategoryScroll, { passive: true });
+      checkCategoryScroll();
+      const timeout = setTimeout(checkCategoryScroll, 300);
+      return () => {
+        el.removeEventListener('scroll', checkCategoryScroll);
+        clearTimeout(timeout);
+      };
+    }
+  }, [categories]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchCollections = async () => {
+      try {
+        const data = await getStoreCollections();
+        if (isMounted && Array.isArray(data) && data.length > 0) {
+          setStoreCollections(data);
+          if (data.length > 1) {
+            setTile2Index(1);
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to load store collections from API:', err);
+      }
+    };
+    fetchCollections();
+    return () => { isMounted = false; };
+  }, []);
 
   // Helper to extract banner image from any field
   const getBannerImage = (b: any): string => {
@@ -56,12 +120,123 @@ export const HomePage: React.FC = () => {
          Boolean(getBannerImage(b))
   );
 
-  // Active Editorial / Promotion Banners from Admin Studio (Strictly HOME_PROMOTION)
-  const activeEditorialBanners = (banners || []).filter(
-    b => (b.placement === 'HOME_PROMOTION' || b.placement === 'EDITORIAL' || (!b.placement && b.position?.toLowerCase() === 'editorial')) && 
-         isBannerActive(b) &&
-         Boolean(getBannerImage(b) || b.headline || b.title)
-  );
+
+
+  // Curated collections with luxury boutique styling
+  const CURATED_COLLECTIONS = useMemo(() => [
+    {
+      id: 'curated-bridal',
+      badge: 'HERITAGE BRIDAL',
+      title: 'BRIDAL COUTURE',
+      subtitle: 'Heritage bridal lehengas, bespoke zardozi embroidery, and timeless royal ensembles.',
+      image: '/images/shop-by-occasion/bridal.jpeg',
+      ctaText: 'EXPLORE',
+      targetUrl: '/collections/bridal',
+    },
+    {
+      id: 'curated-new-arrivals',
+      badge: 'FRESH DROPS',
+      title: 'NEW ARRIVALS',
+      subtitle: 'Fresh modest styles, handpicked for your celebratory wardrobe.',
+      image: '/images/editorial-banners/new-arrivals.jpeg',
+      ctaText: 'SHOP NOW',
+      targetUrl: '/shop?filter=new',
+    },
+    {
+      id: 'curated-allura-collection',
+      badge: 'SIGNATURE EDIT',
+      title: 'THE ALLURA COLLECTION',
+      subtitle: 'Curated modest couture designed in Kerala for discerning women worldwide.',
+      image: '/images/editorial-banners/allura-collection.jpeg',
+      ctaText: 'EXPLORE',
+      targetUrl: '/collections/festive-curation',
+    },
+    {
+      id: 'curated-festive-edit',
+      badge: 'CELEBRATION EDIT',
+      title: 'FESTIVE COLLECTION',
+      subtitle: 'Celebration-ready silhouettes crafted with rich silks, radiant zari, and hand-embroidery.',
+      image: '/images/shop-by-occasion/festive.jpeg',
+      ctaText: 'EXPLORE',
+      targetUrl: '/collections/festive-edit',
+    },
+    {
+      id: 'curated-modest-wear',
+      badge: 'CONTEMPORARY MODESTY',
+      title: 'MODEST SILHOUETTES',
+      subtitle: 'Structured modest co-ord sets, fluid pleated tunics, and graceful modest silhouettes.',
+      image: '/images/shop-by-occasion/modest-wear.jpeg',
+      ctaText: 'EXPLORE',
+      targetUrl: '/collections/modest-wear',
+    },
+    {
+      id: 'curated-party-wear',
+      badge: 'STATEMENT EVENINGS',
+      title: 'OCCASION COUTURE',
+      subtitle: 'Luxe embroidered gowns and festive modesty crafted to make an indelible impression.',
+      image: '/images/shop-by-occasion/party-wear.jpeg',
+      ctaText: 'EXPLORE',
+      targetUrl: '/collections/party-wear',
+    },
+  ], []);
+
+  // Collections list strictly from API (/store/collections), with local fallback only if API has 0 items
+  const allCollections = useMemo(() => {
+    if (storeCollections && storeCollections.length > 0) {
+      return storeCollections.map((col, idx) => {
+        const rawImg = typeof col.image === 'string'
+          ? col.image
+          : (col.image?.url || col.image?.thumbnailUrl);
+
+        const colTitle = col.name?.toUpperCase() || 'COLLECTION';
+        const colDesc = col.description?.trim();
+
+        return {
+          id: col.id || `api-col-${idx}`,
+          badge: col.isFeatured ? 'FEATURED COLLECTION' : (idx % 2 === 0 ? 'FRESH DROPS' : 'SIGNATURE EDIT'),
+          title: colTitle,
+          subtitle: colDesc || (idx % 2 === 0
+            ? 'Fresh modest styles, handpicked for your celebratory wardrobe.'
+            : 'Curated modest couture designed in Kerala for discerning women worldwide.'),
+          image: rawImg || (idx % 2 === 0 ? '/images/editorial-banners/new-arrivals.jpeg' : '/images/editorial-banners/allura-collection.jpeg'),
+          ctaText: idx % 2 === 0 ? 'SHOP NOW' : 'EXPLORE',
+          targetUrl: col.slug ? `/collections/${col.slug}` : `/shop?category=${encodeURIComponent(col.name)}`,
+        };
+      });
+    }
+
+    return CURATED_COLLECTIONS;
+  }, [storeCollections, CURATED_COLLECTIONS]);
+
+  // Independent navigation handlers for Tile 1 (cycles collections created in admin side)
+  const handlePrevTile1 = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (allCollections.length <= 1) return;
+    setTile1Index(prev => (prev === 0 ? allCollections.length - 1 : prev - 1));
+  };
+
+  const handleNextTile1 = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (allCollections.length <= 1) return;
+    setTile1Index(prev => (prev + 1) % allCollections.length);
+  };
+
+  // Independent navigation handlers for Tile 2 (cycles collections created in admin side)
+  const handlePrevTile2 = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (allCollections.length <= 1) return;
+    setTile2Index(prev => (prev === 0 ? allCollections.length - 1 : prev - 1));
+  };
+
+  const handleNextTile2 = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (allCollections.length <= 1) return;
+    setTile2Index(prev => (prev + 1) % allCollections.length);
+  };
 
   // Dynamic slides populated strictly from active Admin Hero Banners (no dummy mock slides)
   const heroSlides = activeHeroBanners.map((b) => {
@@ -163,8 +338,9 @@ export const HomePage: React.FC = () => {
       <AbandonedCartBanner />
 
       {/* 1. HIGH-CONVERSION HERO SECTION */}
-      {/* 1. HIGH-CONVERSION HERO SECTION */}
-      {heroSlides.length > 0 ? (
+      {isLoadingBanners && heroSlides.length === 0 ? (
+        <HeroBannerSkeleton />
+      ) : heroSlides.length > 0 ? (
         <section 
           className="relative w-full min-h-[520px] h-[78vh] sm:h-auto sm:min-h-[580px] lg:h-[84vh] lg:max-h-[820px] overflow-hidden bg-[#F7E6C8]"
           onTouchStart={handleTouchStart}
@@ -302,119 +478,324 @@ export const HomePage: React.FC = () => {
 
   
 
-      {/* 2. SHOP BY CATEGORY (Live from Store Catalog) */}
-      {categories.length > 0 && (
+      {/* 2. SHOP BY CATEGORY (Smooth Couture Carousel with Arched Portals) */}
+      {isLoadingProducts && categories.length === 0 ? (
         <section className="max-w-7xl mx-auto px-6 lg:px-8">
-          <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-8 sm:mb-12 border-b border-[#561C08]/15 pb-4">
-            <div>
-              <span className="text-[11px] font-heading font-bold tracking-[0.25em] uppercase text-[#561C08] block mb-1">
-                BROWSE THE COLLECTION
-              </span>
-              <h2 className="font-heading text-2xl sm:text-4xl text-[#000000] font-bold uppercase tracking-tight">
-                SHOP BY CATEGORY
-              </h2>
-            </div>
-            <Link
-              to="/shop"
-              className="inline-flex items-center gap-1.5 text-xs font-heading font-bold tracking-[0.2em] text-[#561C08] hover:text-[#3D1406] transition-colors mt-3 sm:mt-0 uppercase"
-            >
-              <span>VIEW ALL</span>
-              <ArrowRight size={14} />
-            </Link>
+          <div className="flex items-center justify-between mb-8 sm:mb-10 border-b border-[#561C08]/15 pb-4">
+            <h2 className="font-heading text-xl sm:text-3xl lg:text-4xl text-[#000000] font-bold uppercase tracking-tight">
+              SHOP BY CATEGORY
+            </h2>
+            <div className="h-4 w-28 bg-[#561C08]/10 rounded animate-pulse" />
           </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
-            {categories.map(cat => {
-              const imageUrl = typeof cat.image === 'string' ? cat.image : cat.image?.url;
-              return (
-                <Link
-                  key={cat.id}
-                  to={`/shop?category=${encodeURIComponent(cat.name)}`}
-                  className="group relative aspect-[3/4] rounded-2xl overflow-hidden border border-[#561C08]/15 shadow-xs bg-[#561C08]/5"
-                >
-                  {imageUrl ? (
-                    <img
-                      src={imageUrl}
-                      alt={cat.name}
-                      className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500"
-                    />
-                  ) : (
-                    <div className="w-full h-full bg-gradient-to-t from-[#561C08]/85 via-[#561C08]/40 to-transparent flex items-center justify-center p-4">
-                      <span className="text-white/30 font-heading text-2xl font-bold uppercase">
-                        {cat.name}
-                      </span>
-                    </div>
-                  )}
-                  <div className="absolute inset-0 bg-gradient-to-t from-[#561C08]/85 via-[#561C08]/20 to-transparent flex items-end justify-center p-3 text-center">
-                    <h4 className="font-heading text-xs sm:text-sm font-bold tracking-wider uppercase text-white">
-                      {cat.name}
-                    </h4>
-                  </div>
-                </Link>
-              );
-            })}
+          <div className="flex items-start gap-4 sm:gap-6 overflow-hidden py-2">
+            {[...Array(5)].map((_, idx) => (
+              <div key={idx} className="flex-shrink-0 w-[170px] sm:w-[200px] md:w-[225px] lg:w-[235px]">
+                <CategoryCardSkeleton count={1} />
+              </div>
+            ))}
           </div>
         </section>
-      )}
-
-      {/* 3. EDITORIAL SPLIT BANNERS (Dynamic from Admin) */}
-      {activeEditorialBanners.length > 0 && (
+      ) : categories.length > 0 ? (
         <section className="max-w-7xl mx-auto px-6 lg:px-8">
-          <div className={`grid grid-cols-1 ${activeEditorialBanners.length > 1 ? 'md:grid-cols-2' : ''} gap-6 lg:gap-8`}>
-            {activeEditorialBanners.slice(0, 2).map(banner => {
-              const bgImg = getBannerImage(banner);
-              return (
-                <div
-                  key={banner.id}
-                  className="relative aspect-[16/10] sm:aspect-[16/9] rounded-2xl overflow-hidden group shadow-md border border-[#561C08]/15 bg-[#561C08]"
+          <div className="flex items-center justify-between mb-6 sm:mb-8 border-b border-[#561C08]/15 pb-4">
+            <h2 className="font-heading text-xl sm:text-3xl lg:text-4xl text-[#000000] font-bold uppercase tracking-tight">
+              SHOP BY CATEGORY
+            </h2>
+            <div className="flex items-center gap-3 sm:gap-6">
+              {/* Carousel navigation arrow controls */}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => scrollCategory('left')}
+                  disabled={!canScrollLeftCat}
+                  aria-label="Previous categories"
+                  className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center border transition-all duration-300 ${
+                    canScrollLeftCat
+                      ? 'border-[#561C08]/30 text-[#561C08] hover:bg-[#561C08] hover:text-white shadow-xs cursor-pointer hover:scale-105 active:scale-95'
+                      : 'border-[#561C08]/10 text-[#561C08]/30 cursor-not-allowed opacity-40'
+                  }`}
                 >
-                  {bgImg ? (
-                    <picture className="w-full h-full">
-                      {(banner.mobileImage || banner.images?.mobile?.url) && (
-                        <source media="(max-width: 640px)" srcSet={banner.mobileImage || banner.images?.mobile?.url} />
-                      )}
-                      <img
-                        src={bgImg}
-                        alt={banner.headline || banner.title}
-                        className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-700"
-                      />
-                    </picture>
+                  <ChevronLeft size={16} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => scrollCategory('right')}
+                  disabled={!canScrollRightCat}
+                  aria-label="Next categories"
+                  className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center border transition-all duration-300 ${
+                    canScrollRightCat
+                      ? 'border-[#561C08]/30 text-[#561C08] hover:bg-[#561C08] hover:text-white shadow-xs cursor-pointer hover:scale-105 active:scale-95'
+                      : 'border-[#561C08]/10 text-[#561C08]/30 cursor-not-allowed opacity-40'
+                  }`}
+                >
+                  <ChevronRight size={16} />
+                </button>
+              </div>
+
+              <Link
+                to="/shop"
+                className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-heading font-bold tracking-[0.18em] text-[#561C08] hover:text-[#3D1406] transition-colors uppercase group"
+              >
+                <span>EXPLORE ALL</span>
+                <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
+              </Link>
+            </div>
+          </div>
+
+          <div className="relative group/cattrack">
+            {/* Left Edge Floating Arrow (desktop hover) */}
+            {canScrollLeftCat && (
+              <button
+                type="button"
+                onClick={() => scrollCategory('left')}
+                aria-label="Scroll left"
+                className="hidden md:flex absolute -left-4 top-1/2 -translate-y-1/2 z-20 w-11 h-11 rounded-full bg-white/95 text-[#561C08] border border-[#561C08]/20 shadow-xl backdrop-blur-md items-center justify-center hover:bg-[#561C08] hover:text-white transition-all duration-300 opacity-0 group-hover/cattrack:opacity-100 hover:scale-110 active:scale-95"
+              >
+                <ChevronLeft size={20} />
+              </button>
+            )}
+
+            {/* Right Edge Floating Arrow (desktop hover) */}
+            {canScrollRightCat && (
+              <button
+                type="button"
+                onClick={() => scrollCategory('right')}
+                aria-label="Scroll right"
+                className="hidden md:flex absolute -right-4 top-1/2 -translate-y-1/2 z-20 w-11 h-11 rounded-full bg-white/95 text-[#561C08] border border-[#561C08]/20 shadow-xl backdrop-blur-md items-center justify-center hover:bg-[#561C08] hover:text-white transition-all duration-300 opacity-0 group-hover/cattrack:opacity-100 hover:scale-110 active:scale-95"
+              >
+                <ChevronRight size={20} />
+              </button>
+            )}
+
+            <div
+              ref={categoryScrollRef}
+              className="flex items-start gap-4 sm:gap-6 overflow-x-auto scroll-smooth snap-x snap-mandatory py-2 px-1 no-scrollbar"
+              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+            >
+              {categories.map(cat => {
+                const imageUrl = typeof cat.image === 'string' ? cat.image : cat.image?.url;
+                return (
+                  <Link
+                    key={cat.id}
+                    to={`/shop?category=${encodeURIComponent(cat.name)}`}
+                    className="flex-shrink-0 w-[170px] sm:w-[200px] md:w-[225px] lg:w-[235px] snap-start group flex flex-col items-center text-center focus:outline-none select-none transition-transform duration-300 hover:-translate-y-1"
+                  >
+                    {/* Arched Portal Image Frame */}
+                    <div className="relative w-full aspect-[9/14] sm:aspect-[3/4.8] rounded-t-full rounded-b-2xl sm:rounded-b-3xl overflow-hidden border border-[#561C08]/10 bg-[#561C08]/5 shadow-xs transition-all duration-500 group-hover:shadow-lg group-hover:border-[#561C08]/30">
+                      {imageUrl ? (
+                        <img
+                          src={imageUrl}
+                          alt={cat.name}
+                          className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-700 ease-out"
+                          onError={(e) => {
+                            (e.target as HTMLElement).style.display = 'none';
+                            const fallback = (e.target as HTMLElement).nextElementSibling;
+                            if (fallback) fallback.classList.remove('hidden');
+                          }}
+                        />
+                      ) : null}
+                      <div className={`w-full h-full bg-gradient-to-b from-[#F4EDE4] via-[#EFE6D8] to-[#E5D7C3] flex flex-col items-center justify-center p-4 text-[#561C08] ${imageUrl ? 'hidden' : ''}`}>
+                        <span className="font-serif text-3xl font-light italic mb-1 text-[#561C08]/40">A</span>
+                        <span className="font-heading text-[10px] sm:text-xs font-bold uppercase tracking-widest text-[#561C08]/70 text-center line-clamp-2">
+                          {cat.name}
+                        </span>
+                      </div>
+
+                      {/* Subtle hover overlay */}
+                      <div className="absolute inset-0 bg-stone-900/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+                    </div>
+
+                    {/* Text Below the Arch */}
+                    <div className="mt-3 sm:mt-4 space-y-0.5 sm:space-y-1 w-full px-1">
+                      <h3 className="font-heading text-xs sm:text-sm font-bold tracking-[0.16em] uppercase text-stone-900 group-hover:text-[#561C08] transition-colors truncate">
+                        {cat.name}
+                      </h3>
+                      <p className="text-[11px] sm:text-xs text-stone-500 font-sans tracking-normal font-normal truncate">
+                        {(() => {
+                          const lower = (cat.name || '').toLowerCase().trim();
+                          if (lower.includes('bridal') || lower.includes('wedding')) return 'For your big day';
+                          if (lower.includes('festive') || lower.includes('celebration')) return 'Celebrate in style';
+                          if (lower.includes('party') || lower.includes('glam')) return 'Make a statement';
+                          if (lower.includes('modest') || lower.includes('abaya') || lower.includes('hijab')) return 'Graceful silhouettes';
+                          if (lower.includes('ethnic') || lower.includes('tradition')) return 'Tradition reimagined';
+                          if (lower.includes('saree') || lower.includes('sari')) return 'Timeless elegance';
+                          if (lower.includes('lehenga') || lower.includes('lahanga')) return 'Regal bridal flares';
+                          if (lower.includes('anarkali') || lower.includes('kurta')) return 'Artisanal embroidery';
+                          if (lower.includes('gown') || lower.includes('dress')) return 'Contemporary couture';
+                          if (lower.includes('silk')) return 'Pure handwoven weaves';
+                          return 'Curated atelier wear';
+                        })()}
+                      </p>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {/* 3. SIGNATURE COLLECTIONS / EDITORIAL SHOWCASE (Two dynamic tiles with independent <> navigation) */}
+      <section className="max-w-7xl mx-auto px-6 lg:px-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8">
+          {/* Tile 1 */}
+          {allCollections.length > 0 && (() => {
+            const tile1Item = allCollections[tile1Index % allCollections.length];
+            return (
+              <div className="relative group rounded-2xl sm:rounded-3xl overflow-hidden shadow-md border border-[#561C08]/15 bg-[#561C08] select-none">
+                <Link
+                  to={tile1Item.targetUrl}
+                  className="relative aspect-[16/10] sm:aspect-[16/9] md:aspect-[16/10] block overflow-hidden"
+                >
+                  {tile1Item.image ? (
+                    <img
+                      key={tile1Item.id}
+                      src={tile1Item.image}
+                      alt={tile1Item.title}
+                      className="w-full h-full object-cover object-center sm:object-top group-hover:scale-105 transition-all duration-700 ease-out"
+                    />
                   ) : (
                     <div className="w-full h-full bg-gradient-to-br from-[#561C08] via-[#7A280F] to-[#3D1406]" />
                   )}
-                  <div className="absolute inset-0 bg-gradient-to-t from-[#561C08]/95 via-[#561C08]/45 to-transparent flex flex-col justify-end p-6 sm:p-8 text-white">
-                    {banner.badge && (
-                      <span className="inline-block text-[10px] font-heading font-bold uppercase tracking-[0.2em] text-[#F7E6C8] mb-1">
-                        {banner.badge}
+
+                  {/* Luxury bottom gradient overlay matching the reference screenshot */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#260E06]/95 via-[#260E06]/40 to-transparent flex flex-col justify-end p-6 sm:p-8 md:p-10 px-12 sm:px-16 md:px-16 text-white space-y-1.5 sm:space-y-2 pointer-events-none">
+                    {tile1Item.badge && (
+                      <span className="inline-block text-[10px] sm:text-[11px] font-bold uppercase tracking-[0.25em] text-[#E2C299] mb-0.5 sm:mb-1">
+                        {tile1Item.badge}
                       </span>
                     )}
-                    <h3 className="font-heading text-2xl sm:text-3xl font-bold tracking-wide text-white">
-                      {banner.headline || banner.title}
+                    <h3 className="font-heading text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight uppercase text-white leading-tight">
+                      {tile1Item.title}
                     </h3>
-                    {(banner.subtitle || banner.description) && (
-                      <p className="text-xs sm:text-sm font-body text-[#F7E6C8] mt-1.5 max-w-xs leading-relaxed font-normal">
-                        {banner.subtitle || banner.description}
+                    {tile1Item.subtitle && (
+                      <p className="text-xs sm:text-sm font-sans text-stone-200/95 mt-1 max-w-md leading-relaxed font-normal line-clamp-2">
+                        {tile1Item.subtitle}
                       </p>
                     )}
-                    <div className="pt-4">
-                      <Link
-                        to={banner.targetUrl || '/shop'}
-                        className="inline-flex items-center gap-2 bg-[#561C08] hover:bg-[#3D1406] text-white text-[11px] font-heading font-bold tracking-[0.2em] uppercase py-3 px-6 rounded-xl transition-all duration-300 shadow-md group/btn border border-white/20"
-                      >
-                        <span>{banner.ctaText || 'SHOP NOW'}</span>
-                        <ArrowRight size={13} className="group-hover/btn:translate-x-1 transition-transform" />
-                      </Link>
+                    <div className="pt-3 sm:pt-4 pointer-events-auto">
+                      <span className="inline-flex items-center gap-2 bg-[#2D160C]/90 group-hover:bg-[#1E0C06] text-white text-[11px] sm:text-xs font-heading font-bold tracking-[0.2em] uppercase py-2.5 px-5 sm:py-3 sm:px-6 rounded-lg transition-all duration-300 shadow-md group-hover:shadow-lg border border-white/15">
+                        <span>{tile1Item.ctaText}</span>
+                        <ArrowRight size={13} className="group-hover:translate-x-1 transition-transform" />
+                      </span>
                     </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-      )}
+                </Link>
+
+                {/* Left End '<' Navigation Button for Tile 1 */}
+                <button
+                  type="button"
+                  id="tile1-prev-btn"
+                  onClick={handlePrevTile1}
+                  aria-label="Previous collection in Tile 1"
+                  className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 z-20 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#200E07]/80 hover:bg-[#200E07] text-white backdrop-blur-md border border-white/25 flex items-center justify-center shadow-xl transition-all hover:scale-105 active:scale-95"
+                >
+                  <ChevronLeft size={20} />
+                </button>
+
+                {/* Right End '>' Navigation Button for Tile 1 */}
+                <button
+                  type="button"
+                  id="tile1-next-btn"
+                  onClick={handleNextTile1}
+                  aria-label="Next collection in Tile 1"
+                  className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 z-20 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#200E07]/80 hover:bg-[#200E07] text-white backdrop-blur-md border border-white/25 flex items-center justify-center shadow-xl transition-all hover:scale-105 active:scale-95"
+                >
+                  <ChevronRight size={20} />
+                </button>
+              </div>
+            );
+          })()}
+
+          {/* Tile 2 */}
+          {allCollections.length > 0 && (() => {
+            const tile2Item = allCollections[tile2Index % allCollections.length];
+            return (
+              <div className="relative group rounded-2xl sm:rounded-3xl overflow-hidden shadow-md border border-[#561C08]/15 bg-[#561C08] select-none">
+                <Link
+                  to={tile2Item.targetUrl}
+                  className="relative aspect-[16/10] sm:aspect-[16/9] md:aspect-[16/10] block overflow-hidden"
+                >
+                  {tile2Item.image ? (
+                    <img
+                      key={tile2Item.id}
+                      src={tile2Item.image}
+                      alt={tile2Item.title}
+                      className="w-full h-full object-cover object-center sm:object-top group-hover:scale-105 transition-all duration-700 ease-out"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-br from-[#561C08] via-[#7A280F] to-[#3D1406]" />
+                  )}
+
+                  {/* Luxury bottom gradient overlay matching the reference screenshot */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#260E06]/95 via-[#260E06]/40 to-transparent flex flex-col justify-end p-6 sm:p-8 md:p-10 px-12 sm:px-16 md:px-16 text-white space-y-1.5 sm:space-y-2 pointer-events-none">
+                    {tile2Item.badge && (
+                      <span className="inline-block text-[10px] sm:text-[11px] font-bold uppercase tracking-[0.25em] text-[#E2C299] mb-0.5 sm:mb-1">
+                        {tile2Item.badge}
+                      </span>
+                    )}
+                    <h3 className="font-heading text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight uppercase text-white leading-tight">
+                      {tile2Item.title}
+                    </h3>
+                    {tile2Item.subtitle && (
+                      <p className="text-xs sm:text-sm font-sans text-stone-200/95 mt-1 max-w-md leading-relaxed font-normal line-clamp-2">
+                        {tile2Item.subtitle}
+                      </p>
+                    )}
+                    <div className="pt-3 sm:pt-4 pointer-events-auto">
+                      <span className="inline-flex items-center gap-2 bg-[#2D160C]/90 group-hover:bg-[#1E0C06] text-white text-[11px] sm:text-xs font-heading font-bold tracking-[0.2em] uppercase py-2.5 px-5 sm:py-3 sm:px-6 rounded-lg transition-all duration-300 shadow-md group-hover:shadow-lg border border-white/15">
+                        <span>{tile2Item.ctaText}</span>
+                        <ArrowRight size={13} className="group-hover:translate-x-1 transition-transform" />
+                      </span>
+                    </div>
+                  </div>
+                </Link>
+
+                {/* Left End '<' Navigation Button for Tile 2 */}
+                <button
+                  type="button"
+                  id="tile2-prev-btn"
+                  onClick={handlePrevTile2}
+                  aria-label="Previous collection in Tile 2"
+                  className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 z-20 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#200E07]/80 hover:bg-[#200E07] text-white backdrop-blur-md border border-white/25 flex items-center justify-center shadow-xl transition-all hover:scale-105 active:scale-95"
+                >
+                  <ChevronLeft size={20} />
+                </button>
+
+                {/* Right End '>' Navigation Button for Tile 2 */}
+                <button
+                  type="button"
+                  id="tile2-next-btn"
+                  onClick={handleNextTile2}
+                  aria-label="Next collection in Tile 2"
+                  className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 z-20 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#200E07]/80 hover:bg-[#200E07] text-white backdrop-blur-md border border-white/25 flex items-center justify-center shadow-xl transition-all hover:scale-105 active:scale-95"
+                >
+                  <ChevronRight size={20} />
+                </button>
+              </div>
+            );
+          })()}
+        </div>
+      </section>
 
       {/* 4. BEST SELLERS PRODUCT GRID */}
-      {bestSellers.length > 0 && (
+      {isLoadingProducts && bestSellers.length === 0 ? (
+        <section className="max-w-7xl mx-auto px-6 lg:px-8">
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-8 border-b border-[#561C08]/15 pb-4">
+            <div>
+              <h2 className="font-heading text-2xl sm:text-4xl text-[#000000] font-bold uppercase tracking-tight">
+                BEST SELLERS
+              </h2>
+              <p className="text-xs sm:text-sm text-[#561C08] font-body mt-0.5 font-medium">
+                Loved by our boutique customers
+              </p>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 lg:gap-8">
+            <ProductCardSkeleton count={4} />
+          </div>
+        </section>
+      ) : bestSellers.length > 0 ? (
         <section className="max-w-7xl mx-auto px-6 lg:px-8">
         <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-8 border-b border-[#561C08]/15 pb-4">
           <div>
@@ -440,7 +821,7 @@ export const HomePage: React.FC = () => {
           ))}
         </div>
         </section>
-      )}
+      ) : null}
 
       {/* 5. TRUST STRIP / SERVICE FEATURES */}
       <section className="border-y border-[#561C08]/15 bg-[#F7E6C8] py-10">

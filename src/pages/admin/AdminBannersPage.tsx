@@ -26,7 +26,8 @@ import {
   Wand2,
   Link as LinkIcon,
   Layers,
-  ArrowUpRight
+  ArrowUpRight,
+  Image as ImageIcon
 } from 'lucide-react';
 import { useAdmin } from '../../context/AdminContext';
 import { useShop } from '../../context/ShopContext';
@@ -44,6 +45,7 @@ import {
   type BannerPayload
 } from '../../service/adminBanners';
 import { getBackendErrorMessage, getBackendSuccessMessage } from '../../utils/apiResponse';
+import { AdminErrorBanner } from '../../components/admin/AdminErrorBanner';
 import { resizeImageSource } from '../../utils/image';
 import type { Banner } from '../../types';
 
@@ -175,6 +177,7 @@ export const AdminBannersPage: React.FC = () => {
   const [deleteModalBanner, setDeleteModalBanner] = useState<Banner | null>(null);
   const [scheduleModalBanner, setScheduleModalBanner] = useState<Banner | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [bannerFormError, setBannerFormError] = useState<string | null>(null);
 
   // Modal Interactive Live Preview Toggle
   const [modalPreviewViewport, setModalPreviewViewport] = useState<'desktop' | 'mobile'>('desktop');
@@ -243,6 +246,7 @@ export const AdminBannersPage: React.FC = () => {
 
   // Handle Form Open for Create
   const handleOpenCreate = () => {
+    setBannerFormError(null);
     setEditingBanner(null);
     setTitle('');
     setHeadline('');
@@ -254,8 +258,8 @@ export const AdminBannersPage: React.FC = () => {
     setTargetUrl('/shop');
     setSecondaryCtaText('');
     setSecondaryTargetUrl('');
-    setDesktopImage(IMAGE_PRESETS[0].url);
-    setMobileImage(IMAGE_PRESETS[0].url);
+    setDesktopImage('');
+    setMobileImage('');
     setPlacement('HOME_HERO');
     setStatus('Active');
     setFormStartAt('');
@@ -265,6 +269,7 @@ export const AdminBannersPage: React.FC = () => {
 
   // Handle Form Open for Edit
   const handleOpenEdit = (banner: Banner) => {
+    setBannerFormError(null);
     setEditingBanner(banner);
     setTitle(banner.headline || banner.title || '');
     setHeadline(banner.headline || banner.title || '');
@@ -450,8 +455,9 @@ export const AdminBannersPage: React.FC = () => {
       setIsModalOpen(false);
     } catch (err: any) {
       console.warn('[AdminBannersPage] Backend save banner error:', err);
-      const errorMsg = getBackendErrorMessage(err);
-      showToast(errorMsg || 'Failed to save banner to backend database. Please check image size and connection.', 'error');
+      const errorMsg = getBackendErrorMessage(err, 'Failed to save banner');
+      setBannerFormError(errorMsg);
+      showToast(errorMsg, 'error');
     } finally {
       setIsSaving(false);
     }
@@ -1005,7 +1011,7 @@ export const AdminBannersPage: React.FC = () => {
                         : 'sm:object-[center_top]'
                     }`}
                     onError={(e) => {
-                      (e.target as HTMLElement).setAttribute('src', IMAGE_PRESETS[0].url);
+                      (e.target as HTMLElement).style.display = 'none';
                     }}
                   />
                   
@@ -1217,15 +1223,19 @@ export const AdminBannersPage: React.FC = () => {
 
                       {/* Thumbnail */}
                       <td className="py-3 px-4">
-                        <div className="w-16 h-10 rounded-lg overflow-hidden bg-stone-100 border border-stone-200 flex-shrink-0">
-                          <img
-                            src={banner.desktopImage || IMAGE_PRESETS[0].url}
-                            alt={banner.headline || banner.title}
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                              (e.target as HTMLElement).setAttribute('src', IMAGE_PRESETS[0].url);
-                            }}
-                          />
+                        <div className="w-16 h-10 rounded-lg overflow-hidden bg-stone-100 border border-stone-200 flex-shrink-0 flex items-center justify-center">
+                          {banner.desktopImage ? (
+                            <img
+                              src={banner.desktopImage}
+                              alt={banner.headline || banner.title}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                (e.target as HTMLElement).style.display = 'none';
+                              }}
+                            />
+                          ) : (
+                            <ImageIcon size={14} className="text-stone-400" />
+                          )}
                         </div>
                       </td>
 
@@ -1359,6 +1369,16 @@ export const AdminBannersPage: React.FC = () => {
                 <X size={18} />
               </button>
             </div>
+
+            {bannerFormError && (
+              <div className="p-4 sm:p-5 pb-0">
+                <AdminErrorBanner
+                  title="Banner Save Failed"
+                  error={bannerFormError}
+                  onDismiss={() => setBannerFormError(null)}
+                />
+              </div>
+            )}
 
             {/* Starter Template Bar for New Banners */}
             {!editingBanner && (
@@ -1695,18 +1715,25 @@ export const AdminBannersPage: React.FC = () => {
                       modalPreviewViewport === 'mobile' ? 'max-w-xs h-[360px]' : 'w-full h-56 sm:h-64'
                     }`}
                   >
-                    <img
-                      src={modalPreviewViewport === 'mobile' ? (mobileImage || desktopImage) : desktopImage}
-                      alt="Banner Preview"
-                      className={`w-full h-full object-cover ${
-                        modalPreviewViewport === 'mobile'
-                          ? (mobileImage && mobileImage !== desktopImage ? 'object-[center_top]' : 'object-[82%_20%]')
-                          : 'object-top'
-                      }`}
-                      onError={(e) => {
-                        (e.target as HTMLElement).setAttribute('src', IMAGE_PRESETS[0].url);
-                      }}
-                    />
+                    {(modalPreviewViewport === 'mobile' ? (mobileImage || desktopImage) : desktopImage) ? (
+                      <img
+                        src={modalPreviewViewport === 'mobile' ? (mobileImage || desktopImage) : desktopImage}
+                        alt="Banner Preview"
+                        className={`w-full h-full object-cover ${
+                          modalPreviewViewport === 'mobile'
+                            ? (mobileImage && mobileImage !== desktopImage ? 'object-[center_top]' : 'object-[82%_20%]')
+                            : 'object-top'
+                        }`}
+                        onError={(e) => {
+                          (e.target as HTMLElement).style.display = 'none';
+                        }}
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-stone-900 flex flex-col items-center justify-center text-stone-500 gap-1.5 p-4">
+                        <ImageIcon size={28} className="text-stone-600 stroke-1" />
+                        <span className="text-[11px] font-mono uppercase tracking-wider text-stone-500">No Image Uploaded</span>
+                      </div>
+                    )}
 
                     {/* Overlay */}
                     <div className="absolute inset-0 bg-gradient-to-t from-stone-950/95 via-stone-950/40 to-transparent flex flex-col justify-end p-4 text-white space-y-1.5">

@@ -6,7 +6,9 @@ import {
   Upload, 
   CheckCircle2,
   Smartphone,
-  Monitor
+  Monitor,
+  Image as ImageIcon,
+  Loader2
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAdmin } from '../../context/AdminContext';
@@ -27,6 +29,7 @@ export const ProductFormWizard: React.FC<ProductFormWizardProps> = ({
 
   const [step, setStep] = useState<number>(1);
   const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile'>('desktop');
+  const [isPublishing, setIsPublishing] = useState(false);
 
   // Form State
   const [formData, setFormData] = useState<Partial<Product>>(() => {
@@ -52,12 +55,9 @@ export const ProductFormWizard: React.FC<ProductFormWizardProps> = ({
       ],
       sizes: ['S', 'M', 'L', 'XL'],
       images: {
-        primary: '/images/best-sellers/classic-cream-anarkali.jpeg',
-        secondary: '/images/best-sellers/aura-cream-embroidered.jpeg',
-        gallery: [
-          '/images/best-sellers/classic-cream-anarkali.jpeg',
-          '/images/best-sellers/aura-cream-embroidered.jpeg',
-        ],
+        primary: '',
+        secondary: '',
+        gallery: [],
       },
       seo: {
         metaTitle: '',
@@ -144,44 +144,49 @@ export const ProductFormWizard: React.FC<ProductFormWizardProps> = ({
     }));
   };
 
-  const handlePublish = () => {
-    if (isEditing && initialData) {
-      updateProduct(initialData.id, {
-        ...formData,
-        variants: variantList,
-      });
-      navigate('/admin/products');
-    } else {
-      addProduct({
-        name: formData.name || 'New Handcrafted Ensemble',
-        slug: formData.slug || 'new-handcrafted-ensemble',
-        category: formData.category || 'Ethnic Wear',
-        subcategory: formData.subcategory,
-        occasion: formData.occasion || 'Festive',
-        price: Number(formData.price || 5999),
-        originalPrice: Number(formData.originalPrice || 7499),
-        costPrice: Number(formData.costPrice || 2500),
-        description: formData.description || '',
-        shortDescription: formData.shortDescription,
-        fabricDetails: formData.fabricDetails || '',
-        careInstructions: formData.careInstructions || '',
-        stylingTips: formData.stylingTips || '',
-        sku: formData.sku || `ALR-${Date.now().toString().slice(-4)}`,
-        status: formData.status || 'Active',
-        inStock: (formData.stockCount ?? 1) > 0,
-        stockCount: Number(formData.stockCount || 10),
-        rating: 4.9,
-        reviewsCount: 1,
-        colors: formData.colors || [{ name: 'Cream', hex: '#F5EFE6' }],
-        sizes: formData.sizes || ['S', 'M', 'L'],
-        images: formData.images || {
-          primary: '/images/best-sellers/classic-cream-anarkali.jpeg',
-          secondary: '/images/best-sellers/aura-cream-embroidered.jpeg',
-        },
-        variants: variantList,
-        seo: formData.seo,
-      });
-      navigate('/admin/products');
+  const handlePublish = async () => {
+    setIsPublishing(true);
+    try {
+      if (isEditing && initialData) {
+        await updateProduct(initialData.id, {
+          ...formData,
+          variants: variantList,
+        });
+        navigate('/admin/products');
+      } else {
+        await addProduct({
+          name: formData.name || 'New Handcrafted Ensemble',
+          slug: formData.slug || 'new-handcrafted-ensemble',
+          category: formData.category || 'Ethnic Wear',
+          subcategory: formData.subcategory,
+          occasion: formData.occasion || 'Festive',
+          price: Number(formData.price || 5999),
+          originalPrice: Number(formData.originalPrice || 7499),
+          costPrice: Number(formData.costPrice || 2500),
+          description: formData.description || '',
+          shortDescription: formData.shortDescription,
+          fabricDetails: formData.fabricDetails || '',
+          careInstructions: formData.careInstructions || '',
+          stylingTips: formData.stylingTips || '',
+          sku: formData.sku || `ALR-${Date.now().toString().slice(-4)}`,
+          status: formData.status || 'Active',
+          inStock: (formData.stockCount ?? 1) > 0,
+          stockCount: Number(formData.stockCount || 10),
+          rating: 4.9,
+          reviewsCount: 1,
+          colors: formData.colors || [{ name: 'Cream', hex: '#F5EFE6' }],
+          sizes: formData.sizes || ['S', 'M', 'L'],
+          images: formData.images || {
+            primary: '',
+            secondary: '',
+          },
+          variants: variantList,
+          seo: formData.seo,
+        });
+        navigate('/admin/products');
+      }
+    } finally {
+      setIsPublishing(false);
     }
   };
 
@@ -508,21 +513,36 @@ export const ProductFormWizard: React.FC<ProductFormWizardProps> = ({
             {/* Existing Images Grid */}
             <div className="space-y-2 pt-2">
               <span className="text-[10px] font-bold uppercase tracking-wider text-allura-muted">Uploaded Media</span>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                {[
-                  formData.images?.primary || '/images/best-sellers/classic-cream-anarkali.jpeg',
-                  formData.images?.secondary || '/images/best-sellers/aura-cream-embroidered.jpeg',
-                ].map((img, i) => (
-                  <div key={i} className="relative group rounded-xl overflow-hidden border border-allura-border bg-stone-100">
-                    <img src={img} alt="Product media" className="w-full h-40 object-cover" />
-                    <div className="absolute inset-0 bg-allura-darkBrown/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                      <span className="text-[10px] text-white font-bold bg-allura-gold px-2 py-0.5 rounded">
-                        {i === 0 ? 'Primary' : 'Secondary'}
-                      </span>
+              {(() => {
+                const list = [
+                  formData.images?.primary,
+                  formData.images?.secondary,
+                  ...(formData.images?.gallery || []),
+                ].filter(Boolean) as string[];
+
+                if (list.length === 0) {
+                  return (
+                    <div className="p-6 text-center border border-dashed border-allura-border rounded-xl text-stone-400 text-xs">
+                      No images uploaded yet. Browse or drop files above.
                     </div>
+                  );
+                }
+
+                return (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    {list.map((img, i) => (
+                      <div key={i} className="relative group rounded-xl overflow-hidden border border-allura-border bg-stone-100">
+                        <img src={img} alt="Product media" className="w-full h-40 object-cover" />
+                        <div className="absolute inset-0 bg-allura-darkBrown/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                          <span className="text-[10px] text-white font-bold bg-allura-gold px-2 py-0.5 rounded">
+                            {i === 0 ? 'Primary' : i === 1 ? 'Secondary' : `Gallery ${i - 1}`}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                );
+              })()}
             </div>
           </div>
         )}
@@ -727,11 +747,18 @@ export const ProductFormWizard: React.FC<ProductFormWizardProps> = ({
               }`}
             >
               <div className="flex flex-col sm:flex-row gap-6">
-                <img
-                  src={formData.images?.primary || '/images/best-sellers/classic-cream-anarkali.jpeg'}
-                  alt="Preview"
-                  className="w-full sm:w-48 h-64 object-cover rounded-xl bg-stone-100 flex-shrink-0"
-                />
+                {formData.images?.primary ? (
+                  <img
+                    src={formData.images.primary}
+                    alt="Preview"
+                    className="w-full sm:w-48 h-64 object-cover rounded-xl bg-stone-100 flex-shrink-0"
+                  />
+                ) : (
+                  <div className="w-full sm:w-48 h-64 rounded-xl bg-stone-100 flex-shrink-0 flex flex-col items-center justify-center text-stone-400 border border-allura-border">
+                    <ImageIcon size={32} className="stroke-1 mb-2 text-stone-400" />
+                    <span className="text-[10px] uppercase font-bold tracking-wider">No Image</span>
+                  </div>
+                )}
                 <div className="space-y-2 text-xs font-sans">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-allura-goldDark">
                     {formData.category} • {formData.occasion}
@@ -785,10 +812,11 @@ export const ProductFormWizard: React.FC<ProductFormWizardProps> = ({
             <button
               type="button"
               onClick={handlePublish}
-              className="px-8 py-3 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-sans font-bold uppercase tracking-widest transition-colors flex items-center gap-2 shadow-lg"
+              disabled={isPublishing}
+              className="px-8 py-3 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white rounded-xl text-xs font-sans font-bold uppercase tracking-widest transition-colors flex items-center gap-2 shadow-lg"
             >
-              <CheckCircle2 size={16} />
-              <span>{isEditing ? 'Save & Update Product' : 'Publish Product to Storefront'}</span>
+              {isPublishing ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
+              <span>{isPublishing ? 'Publishing...' : isEditing ? 'Save & Update Product' : 'Publish Product to Storefront'}</span>
             </button>
           )}
         </div>

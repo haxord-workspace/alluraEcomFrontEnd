@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { useShop } from '../context/ShopContext';
 import { AlluraLogo } from '../components/common/AlluraLogo';
+import { CartSkeleton } from '../components/ui/CartSkeleton';
 import {
   previewCheckout,
   createCheckout,
@@ -61,6 +62,7 @@ export const CheckoutPage: React.FC = () => {
   const {
     customer,
     cart,
+    isCartLoading,
     cartId,
     cartSubtotal,
     freeShippingRemaining,
@@ -495,6 +497,10 @@ export const CheckoutPage: React.FC = () => {
         </div>
       </div>
     );
+  }
+
+  if (isCartLoading && cart.length === 0) {
+    return <CartSkeleton />;
   }
 
   if (cart.length === 0) {

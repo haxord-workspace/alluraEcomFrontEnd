@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Plus, Edit3, Trash2, RefreshCw, Power, Printer } from 'lucide-react';
+import { Search, Plus, Edit3, Trash2, RefreshCw, Power, Printer, Loader2 } from 'lucide-react';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { ConfirmModal } from '../../components/common/ConfirmModal';
 import { getAdminProducts } from '../../service/adminProducts';
@@ -15,6 +15,7 @@ import {
 import type { AdminProduct, AdminProductVariant } from '../../types';
 import { useShop } from '../../context/ShopContext';
 import { getBackendErrorMessage } from '../../utils/apiResponse';
+import { AdminErrorBanner } from '../../components/admin/AdminErrorBanner';
 
 const EMPTY_FORM = {
   productId: '',
@@ -40,6 +41,7 @@ export const AdminVariantsPage: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
   const [formData, setFormData] = useState(EMPTY_FORM);
 
   const [deleteModal, setDeleteModal] = useState<{ id: string; sku: string } | null>(null);
@@ -82,12 +84,14 @@ export const AdminVariantsPage: React.FC = () => {
 
   const handleOpenAdd = () => {
     setEditingId(null);
+    setFormError(null);
     setFormData(EMPTY_FORM);
     setIsModalOpen(true);
   };
 
   const handleOpenEdit = (v: AdminProductVariant) => {
     setEditingId(v.id);
+    setFormError(null);
     setFormData({
       productId: v.productId,
       sku: v.sku,
@@ -107,6 +111,7 @@ export const AdminVariantsPage: React.FC = () => {
     e.preventDefault();
     if (!formData.productId || !formData.sku) return;
     setIsSaving(true);
+    setFormError(null);
 
     const payload = {
       productId: formData.productId,
@@ -136,7 +141,9 @@ export const AdminVariantsPage: React.FC = () => {
       setIsModalOpen(false);
     } catch (err: any) {
       console.error('Failed to save variant:', err);
-      showToast(getBackendErrorMessage(err, 'Failed to save variant'), 'error');
+      const errText = getBackendErrorMessage(err, 'Failed to save variant');
+      setFormError(errText);
+      showToast(errText, 'error');
     } finally {
       setIsSaving(false);
     }
@@ -358,6 +365,15 @@ export const AdminVariantsPage: React.FC = () => {
             <h3 className="font-serif text-xl text-stone-900">
               {editingId ? 'Edit Variant' : 'New Variant'}
             </h3>
+
+            {formError && (
+              <AdminErrorBanner
+                title="Variant Save Failed"
+                error={formError}
+                onDismiss={() => setFormError(null)}
+              />
+            )}
+
             <form onSubmit={handleSubmit} className="space-y-3 text-xs font-sans">
               <div>
                 <label className="block text-[10px] uppercase font-bold text-stone-500 mb-1">Product *</label>
@@ -489,9 +505,10 @@ export const AdminVariantsPage: React.FC = () => {
                 <button
                   type="submit"
                   disabled={isSaving}
-                  className="px-5 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-xl font-bold uppercase tracking-wider disabled:opacity-50"
+                  className="px-5 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-xl font-bold uppercase tracking-wider disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm"
                 >
-                  {isSaving ? 'Saving...' : 'Save Variant'}
+                  {isSaving && <Loader2 size={14} className="animate-spin" />}
+                  <span>{isSaving ? 'Saving...' : 'Save Variant'}</span>
                 </button>
               </div>
             </form>

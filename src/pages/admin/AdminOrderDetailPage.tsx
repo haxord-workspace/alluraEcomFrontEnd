@@ -35,6 +35,7 @@ import {
 } from '../../service/orders';
 import type { Order, OrderStatus } from '../../types';
 import { useAdminOrderCatalog } from '../../hooks/useAdminOrderCatalog';
+import { AdminErrorBanner } from '../../components/admin/AdminErrorBanner';
 
 // Backend order statuses: PENDING | CONFIRMED | PROCESSING | SHIPPED | DELIVERED | CANCELLED | RETURNED.
 // Steps can't be skipped (INVALID_ORDER_TRANSITION); cancelling uses its own endpoint.
@@ -114,6 +115,8 @@ export const AdminOrderDetailPage: React.FC = () => {
   const [isCancelOpen, setIsCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState(CANCEL_REASONS[0]);
   const [cancelNote, setCancelNote] = useState('');
+  const [cancelError, setCancelError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const fetchOrder = useCallback(async () => {
     if (!id) return;
@@ -141,6 +144,7 @@ export const AdminOrderDetailPage: React.FC = () => {
   const changeStatus = async (to: OrderStatus, extra: { trackingNumber?: string; shippingCarrier?: string } = {}) => {
     if (!order) return false;
     setIsUpdating(true);
+    setActionError(null);
     try {
       const updated = await updateAdminOrderStatus(order.id, {
         status: toBackendStatus(to),
@@ -152,7 +156,9 @@ export const AdminOrderDetailPage: React.FC = () => {
       showToast(`Order ${order.orderNumber} is now ${to}`, 'success');
       return true;
     } catch (err) {
-      showToast(orderErrorMessage(err, 'Could not update the order status'), 'error');
+      const errText = orderErrorMessage(err, 'Could not update the order status');
+      setActionError(errText);
+      showToast(errText, 'error');
       return false;
     } finally {
       setIsUpdating(false);
@@ -199,6 +205,7 @@ export const AdminOrderDetailPage: React.FC = () => {
     if (!order) return;
     const reason = cancelReason === 'Other' ? cancelNote.trim() || 'Other' : cancelReason;
     setIsUpdating(true);
+    setCancelError(null);
     try {
       const updated = await cancelAdminOrder(order.id, reason, cancelReason === 'Other' ? undefined : cancelNote.trim() || undefined);
       await applyResult(updated);
@@ -206,7 +213,9 @@ export const AdminOrderDetailPage: React.FC = () => {
       setCancelNote('');
       showToast(`Order ${order.orderNumber} cancelled`, 'info');
     } catch (err) {
-      showToast(orderErrorMessage(err, 'This order can no longer be cancelled'), 'error');
+      const errText = orderErrorMessage(err, 'This order can no longer be cancelled');
+      setCancelError(errText);
+      showToast(errText, 'error');
     } finally {
       setIsUpdating(false);
     }
@@ -304,7 +313,10 @@ export const AdminOrderDetailPage: React.FC = () => {
           </button>
           {canCancel && !isClosed && (
             <button
-              onClick={() => setIsCancelOpen(true)}
+              onClick={() => {
+                setCancelError(null);
+                setIsCancelOpen(true);
+              }}
               className="px-3.5 py-2 border border-rose-200 bg-white text-rose-700 hover:bg-rose-50 rounded-xl text-xs font-sans font-semibold flex items-center gap-1.5"
             >
               <XCircle size={14} />
@@ -313,6 +325,14 @@ export const AdminOrderDetailPage: React.FC = () => {
           )}
         </div>
       </div>
+
+      {actionError && (
+        <AdminErrorBanner
+          title="Order Action Failed"
+          error={actionError}
+          onDismiss={() => setActionError(null)}
+        />
+      )}
 
       {/* Progress tracker */}
       <div className="bg-white border border-stone-200 rounded-2xl p-6 shadow-xs">
@@ -674,6 +694,13 @@ export const AdminOrderDetailPage: React.FC = () => {
               placeholder={cancelReason === 'Other' ? 'Reason (required)' : 'Internal note (optional)'}
               className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl resize-none"
             />
+            {cancelError && (
+              <AdminErrorBanner
+                title="Cancellation Failed"
+                error={cancelError}
+                onDismiss={() => setCancelError(null)}
+              />
+            )}
             <div className="flex justify-end gap-2 pt-2">
               <button onClick={() => setIsCancelOpen(false)} className="px-4 py-2 border border-stone-200 rounded-xl text-stone-500">
                 Keep Order
@@ -681,9 +708,10 @@ export const AdminOrderDetailPage: React.FC = () => {
               <button
                 onClick={handleCancel}
                 disabled={isUpdating || (cancelReason === 'Other' && !cancelNote.trim())}
-                className="px-5 py-2 bg-rose-700 hover:bg-rose-800 text-white rounded-xl font-bold uppercase tracking-wider disabled:opacity-50"
+                className="px-5 py-2 bg-rose-700 hover:bg-rose-800 text-white rounded-xl font-bold uppercase tracking-wider disabled:opacity-50 flex items-center justify-center gap-1.5 shadow-sm"
               >
-                {isUpdating ? 'Cancelling…' : 'Confirm Cancellation'}
+                {isUpdating && <Loader2 size={13} className="animate-spin" />}
+                <span>{isUpdating ? 'Cancelling…' : 'Confirm Cancellation'}</span>
               </button>
             </div>
           </div>

@@ -4,6 +4,7 @@ import { SlidersHorizontal, ArrowUpDown, Check, RotateCcw, Sparkles, ArrowRight 
 import { useShop } from '../context/ShopContext';
 import { useAdmin } from '../context/AdminContext';
 import { ProductCard } from '../components/ui/ProductCard';
+import { ProductCardSkeleton } from '../components/ui/ProductCardSkeleton';
 import { BottomSheet } from '../components/modals/BottomSheet';
 
 export const ShopPage: React.FC = () => {
@@ -413,9 +414,8 @@ export const ShopPage: React.FC = () => {
           </div>
 
           {isLoadingProducts ? (
-            <div className="py-20 text-center space-y-3">
-              <div className="w-6 h-6 border-2 border-allura-goldDark border-t-transparent rounded-full animate-spin mx-auto" />
-              <p className="text-xs font-sans text-allura-muted">Loading the atelier catalog...</p>
+            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-3 gap-4 sm:gap-6">
+              <ProductCardSkeleton count={6} />
             </div>
           ) : filteredProducts.length === 0 ? (
             <div className="py-20 text-center space-y-4 bg-allura-card rounded-xl border border-allura-border p-8">

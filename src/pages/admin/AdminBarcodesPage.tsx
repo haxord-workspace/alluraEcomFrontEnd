@@ -16,8 +16,10 @@ import { getAdminVariants, getVariantBarcodePrintImage } from '../../service/adm
 import { generateBarcode, validateBarcode } from '../../service/barcode';
 import type { AdminProduct, AdminProductVariant } from '../../types';
 import { getBackendErrorMessage } from '../../utils/apiResponse';
+import { useShop } from '../../context/ShopContext';
 
 export const AdminBarcodesPage: React.FC = () => {
+  const { showToast } = useShop();
   const [products, setProducts] = useState<AdminProduct[]>([]);
   const [variants, setVariants] = useState<AdminProductVariant[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -102,8 +104,9 @@ export const AdminBarcodesPage: React.FC = () => {
         // Fallback if popup blocker prevented the window
         window.open(url, '_blank');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to load barcode image:', err);
+      showToast(getBackendErrorMessage(err, 'Failed to load barcode print image'), 'error');
     } finally {
       setBusyId(null);
     }

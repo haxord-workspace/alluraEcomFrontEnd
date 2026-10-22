@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Plus,
@@ -11,11 +11,14 @@ import {
   RefreshCw,
   ChevronDown,
   Loader2,
+  X,
+  ArrowUpDown,
 } from 'lucide-react';
 import { useAdmin } from '../../context/AdminContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { ConfirmModal } from '../../components/common/ConfirmModal';
 import { CategorySelect } from '../../components/admin/CategorySelect';
+import { AdminPagination } from '../../components/admin/AdminPagination';
 import {
   getAdminProducts,
   createAdminProduct,
@@ -38,6 +41,7 @@ import { useShop } from '../../context/ShopContext';
 import { getDashboardProducts, type ProductAnalyticsResponse } from '../../service/adminDashboard';
 import type { AdminProduct, AdminProductVariant } from '../../types';
 import { getBackendErrorMessage } from '../../utils/apiResponse';
+import { AdminErrorBanner } from '../../components/admin/AdminErrorBanner';
 
 // Default form state
 const EMPTY_FORM = {
@@ -141,9 +145,12 @@ export const AdminProductsPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // ── Filters ────────────────────────────────────────────────────────────────
+  // ── Filters, Sort & Pagination ─────────────────────────────────────────────
+  const PAGE_SIZE = 15;
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('All');
+  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'name-asc' | 'name-desc' | 'price-desc' | 'price-asc'>('newest');
+  const [currentPage, setCurrentPage] = useState(1);
 
   // ── Bulk selection ─────────────────────────────────────────────────────────
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -156,6 +163,7 @@ export const AdminProductsPage: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
   const [formData, setFormData] = useState(EMPTY_FORM);
   // Snapshot of the variants as loaded, to work out what to create / update / delete on save
   const [originalVariants, setOriginalVariants] = useState<Record<string, string>>({});
@@ -184,7 +192,7 @@ export const AdminProductsPage: React.FC = () => {
       });
       setVariantPrices(byProduct);
     } catch (err: any) {
-      setError(err?.response?.data?.message || 'Failed to load products');
+      setError(getBackendErrorMessage(err, 'Failed to load products'));
     } finally {
       setIsLoading(false);
     }
@@ -192,18 +200,54 @@ export const AdminProductsPage: React.FC = () => {
 
   useEffect(() => { fetchProducts(); }, []);
 
-  // ── Filtered view ──────────────────────────────────────────────────────────
-  const filtered = products.filter(p => {
-    const matchesStatus = selectedStatus === 'All' || p.status === selectedStatus;
-    const q = searchQuery.toLowerCase();
-    const matchesQuery =
-      p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q);
-    return matchesStatus && matchesQuery;
-  });
+  // ── Filtered and Sorted view ──────────────────────────────────────────────
+  const filteredAndSorted = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
+    let list = products.filter(p => {
+      const matchesStatus = selectedStatus === 'All' || p.status === selectedStatus;
+      const matchesQuery =
+        !q ||
+        (p.name || '').toLowerCase().includes(q) ||
+        (p.sku || '').toLowerCase().includes(q) ||
+        (p.category?.name || '').toLowerCase().includes(q);
+      return matchesStatus && matchesQuery;
+    });
+
+    list.sort((a, b) => {
+      if (sortBy === 'name-asc') return (a.name || '').localeCompare(b.name || '');
+      if (sortBy === 'name-desc') return (b.name || '').localeCompare(a.name || '');
+      if (sortBy === 'price-desc') {
+        const pa = a.pricing?.sellingPrice ?? a.pricing?.mrp ?? 0;
+        const pb = b.pricing?.sellingPrice ?? b.pricing?.mrp ?? 0;
+        return pb - pa;
+      }
+      if (sortBy === 'price-asc') {
+        const pa = a.pricing?.sellingPrice ?? a.pricing?.mrp ?? 0;
+        const pb = b.pricing?.sellingPrice ?? b.pricing?.mrp ?? 0;
+        return pa - pb;
+      }
+      if (sortBy === 'oldest') {
+        return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
+      }
+      // default: newest
+      return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+    });
+
+    return list;
+  }, [products, selectedStatus, searchQuery, sortBy]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedStatus, sortBy]);
+
+  const paginatedProducts = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return filteredAndSorted.slice(start, start + PAGE_SIZE);
+  }, [filteredAndSorted, currentPage]);
 
   // ── Selection helpers ──────────────────────────────────────────────────────
   const handleSelectAll = () => {
-    setSelectedIds(selectedIds.length === filtered.length ? [] : filtered.map(p => p.id));
+    setSelectedIds(selectedIds.length === filteredAndSorted.length ? [] : filteredAndSorted.map(p => p.id));
   };
   const handleToggleSelect = (id: string) => {
     setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
@@ -274,6 +318,7 @@ export const AdminProductsPage: React.FC = () => {
   // ── Open add / edit ────────────────────────────────────────────────────────
   const handleOpenAdd = () => {
     setEditingId(null);
+    setFormError(null);
     setFormData(EMPTY_FORM);
     setOriginalVariants({});
     setIsModalOpen(true);
@@ -281,6 +326,7 @@ export const AdminProductsPage: React.FC = () => {
 
   const handleOpenEdit = (product: AdminProduct) => {
     setEditingId(product.id);
+    setFormError(null);
     setFormData({
       name: product.name,
       sku: product.sku,
@@ -373,6 +419,7 @@ export const AdminProductsPage: React.FC = () => {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
+    setFormError(null);
     try {
       const { variants, ...productPayload } = formData;
 
@@ -399,6 +446,8 @@ export const AdminProductsPage: React.FC = () => {
       setFormData(prev => ({ ...prev, variants: result.rows }));
       if (result.errors.length > 0) {
         if (!editingId) setEditingId(saved.id);
+        const variantErrMsg = `Product saved, but ${result.errors.length} variant(s) failed: ${result.errors.join(' • ')}`;
+        setFormError(variantErrMsg);
         showToast(
           `Product saved, but ${result.errors.length} variant(s) failed. Click Save again to retry. ${result.errors[0]}`,
           'error'
@@ -410,7 +459,9 @@ export const AdminProductsPage: React.FC = () => {
       setIsModalOpen(false);
     } catch (err: any) {
       console.error('Failed to save product:', err);
-      showToast(getBackendErrorMessage(err, 'Failed to save product'), 'error');
+      const errText = getBackendErrorMessage(err, 'Failed to save product');
+      setFormError(errText);
+      showToast(errText, 'error');
     } finally {
       setIsSaving(false);
       setSaveProgress('');
@@ -507,24 +558,48 @@ export const AdminProductsPage: React.FC = () => {
             <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" />
             <input
               type="text"
-              placeholder="Search by product name or SKU..."
+              placeholder="Search by product name, SKU or category..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-sans text-stone-900 focus:outline-none focus:border-stone-800"
+              className="w-full pl-9 pr-8 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-sans text-stone-900 placeholder:text-stone-400 focus:outline-none focus:border-stone-800"
             />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 p-0.5"
+              >
+                <X size={12} />
+              </button>
+            )}
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
             <select
               value={selectedStatus}
               onChange={e => setSelectedStatus(e.target.value)}
-              className="px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-sans text-stone-700 focus:outline-none"
+              className="px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-sans text-stone-700 focus:outline-none cursor-pointer"
             >
               <option value="All">Status: All</option>
               <option value="ACTIVE">Active</option>
               <option value="DRAFT">Draft</option>
               <option value="ARCHIVED">Archived</option>
             </select>
+
+            <div className="flex items-center gap-1.5 border border-stone-200 rounded-xl px-2.5 py-1.5 bg-stone-50 text-xs text-stone-700">
+              <ArrowUpDown size={13} className="text-stone-400" />
+              <select
+                value={sortBy}
+                onChange={e => setSortBy(e.target.value as any)}
+                className="bg-transparent text-xs font-medium focus:outline-none cursor-pointer"
+              >
+                <option value="newest">Newest First</option>
+                <option value="oldest">Oldest First</option>
+                <option value="name-asc">Name (A-Z)</option>
+                <option value="name-desc">Name (Z-A)</option>
+                <option value="price-desc">Price: High to Low</option>
+                <option value="price-asc">Price: Low to High</option>
+              </select>
+            </div>
           </div>
         </div>
 
@@ -582,7 +657,7 @@ export const AdminProductsPage: React.FC = () => {
                 <tr className="bg-stone-50 border-b border-stone-200 text-stone-500 uppercase tracking-wider text-[10px]">
                   <th className="p-4 w-10">
                     <button onClick={handleSelectAll} className="p-0.5">
-                      {selectedIds.length > 0 && selectedIds.length === filtered.length ? (
+                      {selectedIds.length > 0 && selectedIds.length === filteredAndSorted.length ? (
                         <CheckSquare size={16} className="text-stone-900" />
                       ) : (
                         <Square size={16} className="text-stone-400" />
@@ -597,7 +672,7 @@ export const AdminProductsPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100">
-                {filtered.map(product => {
+                {paginatedProducts.map(product => {
                   const isChecked = selectedIds.includes(product.id);
                   const primaryImage = product.images?.find(img => img.isPrimary)?.url
                     || product.images?.[0]?.url;
@@ -733,10 +808,18 @@ export const AdminProductsPage: React.FC = () => {
                     </tr>
                   );
                 })}
-                {!isLoading && filtered.length === 0 && (
+                {!isLoading && filteredAndSorted.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="p-12 text-center text-stone-500">
-                      No products found. {searchQuery && 'Try clearing your search.'}
+                    <td colSpan={6} className="p-12 text-center text-stone-500 space-y-2">
+                      <p>No products found matching your search and filter criteria.</p>
+                      {(searchQuery || selectedStatus !== 'All') && (
+                        <button
+                          onClick={() => { setSearchQuery(''); setSelectedStatus('All'); }}
+                          className="text-xs font-semibold text-stone-800 underline inline-block"
+                        >
+                          Clear search and filters
+                        </button>
+                      )}
                     </td>
                   </tr>
                 )}
@@ -744,6 +827,16 @@ export const AdminProductsPage: React.FC = () => {
             </table>
           )}
         </div>
+
+        {/* Pagination Bar (Limit 15) */}
+        {!isLoading && !error && (
+          <AdminPagination
+            currentPage={currentPage}
+            totalItems={filteredAndSorted.length}
+            pageSize={PAGE_SIZE}
+            onPageChange={setCurrentPage}
+          />
+        )}
       </div>
 
       {/* Create / Edit Modal */}
@@ -753,6 +846,15 @@ export const AdminProductsPage: React.FC = () => {
             <h3 className="font-serif text-xl text-stone-900">
               {editingId ? 'Edit Product' : 'Add New Product'}
             </h3>
+
+            {formError && (
+              <AdminErrorBanner
+                title="Product Save Failed"
+                error={formError}
+                onDismiss={() => setFormError(null)}
+              />
+            )}
+
             <form onSubmit={handleSave} className="space-y-4 text-xs font-sans">
 
               <div className="grid grid-cols-2 gap-3">
@@ -896,9 +998,10 @@ export const AdminProductsPage: React.FC = () => {
                 <button
                   type="submit"
                   disabled={isSaving}
-                  className="px-5 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-xl text-xs font-bold uppercase tracking-wider disabled:opacity-50"
+                  className="px-5 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-xl text-xs font-bold uppercase tracking-wider disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm"
                 >
-                  {isSaving ? saveProgress || 'Saving...' : 'Save Product'}
+                  {isSaving && <Loader2 size={13} className="animate-spin" />}
+                  <span>{isSaving ? saveProgress || 'Saving...' : 'Save Product'}</span>
                 </button>
               </div>
             </form>

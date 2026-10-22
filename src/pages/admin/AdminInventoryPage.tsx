@@ -6,12 +6,15 @@ import {
   Plus,
   Minus,
   SlidersHorizontal,
-  PackagePlus
+  PackagePlus,
+  X,
+  ArrowUpDown
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAdmin } from '../../context/AdminContext';
 import { StockAdjustModal } from '../../components/admin/StockAdjustModal';
 import type { StockOperation } from '../../components/admin/StockAdjustModal';
+import { AdminPagination } from '../../components/admin/AdminPagination';
 import { getInventory, getLowStockInventory } from '../../service/adminInventory';
 import type { InventoryRecord } from '../../service/adminInventory';
 import { getAdminVariants } from '../../service/adminVariants';
@@ -21,8 +24,10 @@ import type { AdminProduct, AdminProductVariant } from '../../types';
 import { getBackendErrorMessage } from '../../utils/apiResponse';
 
 const DEFAULT_LOW_STOCK_THRESHOLD = 6;
+const PAGE_SIZE = 15;
 
 type StockFilter = 'All' | 'Low' | 'Out' | 'Untracked';
+type StockSort = 'name-asc' | 'name-desc' | 'onhand-desc' | 'onhand-asc' | 'available-desc';
 
 export const AdminInventoryPage: React.FC = () => {
   const { hasPermission } = useAdmin();
@@ -38,6 +43,8 @@ export const AdminInventoryPage: React.FC = () => {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [stockFilter, setStockFilter] = useState<StockFilter>('All');
+  const [sortBy, setSortBy] = useState<StockSort>('name-asc');
+  const [currentPage, setCurrentPage] = useState(1);
   const [modal, setModal] = useState<{ record: InventoryRecord | null; operation: StockOperation } | null>(null);
 
   const fetchAll = useCallback(async () => {
@@ -45,8 +52,8 @@ export const AdminInventoryPage: React.FC = () => {
     setError(null);
     try {
       const [inventoryData, lowStockData, variantData, productData, analyticsData] = await Promise.all([
-        getInventory(),
-        getLowStockInventory().catch(() => []),
+        getInventory({ limit: 100 }),
+        getLowStockInventory({ limit: 100 }).catch(() => []),
         // Variants give us every sellable SKU (including ones never stocked) plus names / images
         getAdminVariants().catch(() => []),
         getAdminProducts().catch(() => []),
@@ -88,24 +95,44 @@ export const AdminInventoryPage: React.FC = () => {
     return {
       ...record,
       productId,
-      productName: record.productName || product?.name,
-      sku: record.sku || variant?.sku,
+      productName: record.productName || product?.name || 'Unnamed Product',
+      sku: record.sku || variant?.sku || '—',
+      barcode: record.barcode || variant?.barcode?.value,
       attributes: record.attributes || variant?.attributes,
       image: record.image || product?.images?.find(i => i.isPrimary)?.url || product?.images?.[0]?.url,
     };
   }, [variantMap, productMap]);
 
-  // Every variant gets a row; ones without an inventory record show as "Not stocked"
+  // Merge inventory records with all known product variants
   const rows = useMemo(() => {
-    const byVariant = new Map<string, InventoryRecord>();
-    inventory.forEach(r => byVariant.set(r.variantId, enrich(r)));
+    const rowMap = new Map<string, InventoryRecord>();
+    const bySku = new Map<string, InventoryRecord>();
+
+    // 1. Add all active inventory records from backend
+    inventory.forEach(r => {
+      const enriched = enrich(r);
+      const key = r.variantId || r.id;
+      if (key) rowMap.set(key, enriched);
+      if (r.sku) bySku.set(r.sku.toLowerCase().trim(), enriched);
+    });
+
+    // 2. Add variants, matching by id or SKU
     variants.forEach(v => {
-      if (byVariant.has(v.id)) return;
-      byVariant.set(v.id, enrich({
+      const matched = rowMap.get(v.id) || (v.sku ? bySku.get(v.sku.toLowerCase().trim()) : undefined);
+      if (matched) {
+        if (!rowMap.has(v.id)) {
+          rowMap.set(v.id, { ...matched, variantId: v.id });
+        }
+        return;
+      }
+
+      // Variant has never been stocked
+      rowMap.set(v.id, enrich({
         id: '',
         variantId: v.id,
         productId: v.productId,
         sku: v.sku,
+        barcode: v.barcode?.value,
         attributes: v.attributes,
         quantityOnHand: 0,
         quantityReserved: 0,
@@ -113,7 +140,8 @@ export const AdminInventoryPage: React.FC = () => {
         isTracked: false,
       }));
     });
-    return Array.from(byVariant.values());
+
+    return Array.from(rowMap.values());
   }, [inventory, variants, enrich]);
 
   const lowStockIds = useMemo(() => new Set(lowStock.map(r => r.variantId)), [lowStock]);
@@ -133,20 +161,42 @@ export const AdminInventoryPage: React.FC = () => {
   const untrackedCount = rows.filter(isUntracked).length;
   const healthyCount = rows.length - lowStockCount - outOfStockCount - untrackedCount;
 
-  const filtered = rows.filter(r => {
-    const matchesFilter =
-      stockFilter === 'All' ||
-      (stockFilter === 'Low' && isLow(r)) ||
-      (stockFilter === 'Out' && isOut(r)) ||
-      (stockFilter === 'Untracked' && isUntracked(r));
-    const q = searchQuery.toLowerCase();
-    const matchesSearch =
-      !q ||
-      (r.productName || '').toLowerCase().includes(q) ||
-      (r.sku || '').toLowerCase().includes(q) ||
-      [r.attributes?.color, r.attributes?.size].filter(Boolean).join(' ').toLowerCase().includes(q);
-    return matchesFilter && matchesSearch;
-  });
+  const filteredAndSorted = useMemo(() => {
+    const list = rows.filter(r => {
+      const matchesFilter =
+        stockFilter === 'All' ||
+        (stockFilter === 'Low' && isLow(r)) ||
+        (stockFilter === 'Out' && isOut(r)) ||
+        (stockFilter === 'Untracked' && isUntracked(r));
+      const q = searchQuery.toLowerCase().trim();
+      const matchesSearch =
+        !q ||
+        (r.productName || '').toLowerCase().includes(q) ||
+        (r.sku || '').toLowerCase().includes(q) ||
+        [r.attributes?.color, r.attributes?.size].filter(Boolean).join(' ').toLowerCase().includes(q);
+      return matchesFilter && matchesSearch;
+    });
+
+    list.sort((a, b) => {
+      if (sortBy === 'name-asc') return (a.productName || '').localeCompare(b.productName || '');
+      if (sortBy === 'name-desc') return (b.productName || '').localeCompare(a.productName || '');
+      if (sortBy === 'onhand-desc') return b.quantityOnHand - a.quantityOnHand;
+      if (sortBy === 'onhand-asc') return a.quantityOnHand - b.quantityOnHand;
+      if (sortBy === 'available-desc') return b.quantityAvailable - a.quantityAvailable;
+      return 0;
+    });
+
+    return list;
+  }, [rows, stockFilter, searchQuery, sortBy, isLow, isOut, isUntracked]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, stockFilter, sortBy]);
+
+  const paginatedRows = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return filteredAndSorted.slice(start, start + PAGE_SIZE);
+  }, [filteredAndSorted, currentPage]);
 
   const openModal = (record: InventoryRecord | null, operation: StockOperation = 'Add') =>
     setModal({ record, operation });
@@ -268,37 +318,63 @@ export const AdminInventoryPage: React.FC = () => {
 
       {/* Table & Filter Toolbar */}
       <div className="bg-white border border-stone-200 rounded-2xl overflow-hidden shadow-xs">
-        <div className="p-4 border-b border-stone-200 flex flex-col sm:flex-row justify-between items-center gap-3">
-          <div className="relative w-full sm:w-80">
+        <div className="p-4 border-b border-stone-200 flex flex-col md:flex-row justify-between items-center gap-3">
+          <div className="relative w-full md:w-80">
             <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" />
             <input
               type="text"
               placeholder="Search product, SKU, colour or size..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-sans text-stone-900 focus:outline-none focus:border-stone-800"
+              className="w-full pl-9 pr-8 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-sans text-stone-900 placeholder:text-stone-400 focus:outline-none focus:border-stone-800"
             />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 p-0.5"
+              >
+                <X size={12} />
+              </button>
+            )}
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            {([
-              ['All', 'All'],
-              ['Low', 'Low Stock'],
-              ['Out', 'Out of Stock'],
-              ['Untracked', 'Not Stocked'],
-            ] as const).map(([f, label]) => (
-              <button
-                key={f}
-                onClick={() => setStockFilter(f)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-sans font-semibold transition-colors ${
-                  stockFilter === f
-                    ? 'bg-stone-900 text-white'
-                    : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-                }`}
+          <div className="flex flex-wrap items-center gap-2 w-full md:w-auto justify-between md:justify-end">
+            <div className="flex flex-wrap gap-1.5 bg-stone-100 p-1 rounded-xl">
+              {([
+                ['All', 'All'],
+                ['Low', 'Low Stock'],
+                ['Out', 'Out of Stock'],
+                ['Untracked', 'Not Stocked'],
+              ] as const).map(([f, label]) => (
+                <button
+                  key={f}
+                  onClick={() => setStockFilter(f)}
+                  className={`px-3 py-1 rounded-lg text-xs font-sans font-medium transition-colors ${
+                    stockFilter === f
+                      ? 'bg-white text-stone-900 shadow-xs font-bold'
+                      : 'text-stone-600 hover:text-stone-900'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {/* Sort Dropdown */}
+            <div className="flex items-center gap-1.5 border border-stone-200 rounded-xl px-2.5 py-1.5 bg-white text-xs text-stone-700">
+              <ArrowUpDown size={13} className="text-stone-400" />
+              <select
+                value={sortBy}
+                onChange={e => setSortBy(e.target.value as any)}
+                className="bg-transparent text-xs font-medium focus:outline-none cursor-pointer"
               >
-                {label}
-              </button>
-            ))}
+                <option value="name-asc">Product (A-Z)</option>
+                <option value="name-desc">Product (Z-A)</option>
+                <option value="onhand-desc">Stock: High to Low</option>
+                <option value="onhand-asc">Stock: Low to High</option>
+                <option value="available-desc">Available to Sell</option>
+              </select>
+            </div>
           </div>
         </div>
 
@@ -320,17 +396,24 @@ export const AdminInventoryPage: React.FC = () => {
                 <tr>
                   <td colSpan={7} className="p-10 text-center text-stone-400">Loading inventory…</td>
                 </tr>
-              ) : filtered.length === 0 ? (
+              ) : filteredAndSorted.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="p-10 text-center text-stone-400 space-y-2">
-                    <p>{rows.length === 0 ? 'No variants yet. Create a product variant first, then add stock here.' : 'No variants match this filter.'}</p>
-                    {rows.length === 0 && (
+                    <p>{rows.length === 0 ? 'No variants yet. Create a product variant first, then add stock here.' : 'No variants match this filter/search.'}</p>
+                    {rows.length === 0 ? (
                       <Link to="/admin/variants" className="inline-block font-semibold text-stone-800 underline">Go to Variants</Link>
+                    ) : (
+                      <button
+                        onClick={() => { setSearchQuery(''); setStockFilter('All'); }}
+                        className="text-xs font-semibold text-stone-800 underline inline-block"
+                      >
+                        Clear search and filters
+                      </button>
                     )}
                   </td>
                 </tr>
               ) : (
-                filtered.map(record => {
+                paginatedRows.map(record => {
                   const untracked = isUntracked(record);
                   const low = isLow(record);
                   const out = isOut(record);
@@ -426,6 +509,16 @@ export const AdminInventoryPage: React.FC = () => {
             </tbody>
           </table>
         </div>
+
+        {/* Pagination Bar (Limit 15) */}
+        {!isLoading && (
+          <AdminPagination
+            currentPage={currentPage}
+            totalItems={filteredAndSorted.length}
+            pageSize={PAGE_SIZE}
+            onPageChange={setCurrentPage}
+          />
+        )}
       </div>
 
       {/* Stock Update Modal */}

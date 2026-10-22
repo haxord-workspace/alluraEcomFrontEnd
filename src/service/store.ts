@@ -1,4 +1,6 @@
 import api from './api';
+import adminApi from './adminApi';
+import { getAdminAccessToken } from '../store/slices/adminAuthSlice';
 import { colorHex } from '../data/colorPalette';
 import { toNumber } from '../utils/number';
 import type { Product, ProductColor, ProductVariant, Category } from '../types';
@@ -177,3 +179,120 @@ export const getStoreCategories = async (): Promise<Category[]> => {
   const data = response.data?.data || [];
   return Array.isArray(data) ? data.map(mapStoreCategory) : [];
 };
+
+export interface StoreCollection {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string;
+  image?: {
+    url?: string;
+    thumbnailUrl?: string;
+    alt?: string;
+  } | string;
+  isFeatured?: boolean;
+  status?: string;
+  sortOrder?: number;
+}
+
+/**
+ * GET /store/collections — public collections listing.
+ */
+export const getStoreCollections = async (): Promise<StoreCollection[]> => {
+  try {
+    let data: any[] = [];
+    const token = getAdminAccessToken();
+    if (token) {
+      try {
+        const adminRes = await adminApi.get('/collections');
+        data = adminRes.data?.data || adminRes.data || [];
+      } catch (e) {
+        console.warn('Failed to load collections from admin endpoint, falling back to store endpoint', e);
+      }
+    }
+    if (!data || data.length === 0) {
+      const response = await api.get('/store/collections');
+      data = response.data?.data || response.data || [];
+    }
+
+    return Array.isArray(data)
+      ? data.map((c: any) => ({
+          id: c._id || c.id,
+          name: c.name,
+          slug: c.slug,
+          description: c.description || '',
+          image: c.image,
+          isFeatured: !!c.isFeatured,
+          status: c.status,
+          sortOrder: c.sortOrder ?? 0,
+        }))
+      : [];
+  } catch (error) {
+    console.warn('Failed to load store collections from API, falling back to local collections:', error);
+    return [];
+  }
+};
+
+// -----------------------------------------------------------------------------
+// GET /products/search — Search and filter products (Customer/Admin)
+// -----------------------------------------------------------------------------
+
+export interface ProductSearchParams {
+  q?: string;
+  categoryId?: string;
+  subcategoryId?: string;
+  collectionId?: string;
+  brand?: string;
+  minPrice?: number;
+  maxPrice?: number;
+  hasDiscount?: boolean;
+  availability?: string;
+  featured?: boolean;
+  newArrival?: boolean;
+  bestSeller?: boolean;
+  sort?: string; // 'featured' | 'newest' | 'price_asc' | 'price_desc'
+  page?: number;
+  limit?: number;
+}
+
+export interface ProductSearchPagination {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  hasNextPage?: boolean;
+  hasPreviousPage?: boolean;
+}
+
+export interface ProductSearchResult {
+  products: Product[];
+  pagination: ProductSearchPagination;
+}
+
+/**
+ * GET /products/search — Search and filter products (Customer/Admin)
+ * Supports query, collectionId, categoryId, subcategoryId, price, discount, sort, and pagination.
+ */
+export const searchProducts = async (
+  params?: ProductSearchParams,
+  categoryMap?: Record<string, string>
+): Promise<ProductSearchResult> => {
+  const response = await api.get('/products/search', { params });
+  const data = response.data?.data || {};
+  const rawProducts = data.products || [];
+  const pagination: ProductSearchPagination = data.pagination || {
+    page: params?.page || 1,
+    limit: params?.limit || rawProducts.length || 20,
+    total: rawProducts.length,
+    totalPages: 1,
+    hasNextPage: false,
+    hasPreviousPage: false,
+  };
+
+  return {
+    products: Array.isArray(rawProducts) ? rawProducts.map((p: any) => mapStoreProduct(p, categoryMap)) : [],
+    pagination,
+  };
+};
+
+

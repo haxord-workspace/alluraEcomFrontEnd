@@ -3,18 +3,14 @@ import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, MapPin, CheckCircle, Truck, ShieldCheck, MessageCircle } from 'lucide-react';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { useCustomerOrder } from '../../hooks/useCustomerOrder';
+import { OrderTrackingSkeleton } from '../../components/ui/OrderTrackingSkeleton';
 
 export const OrderTrackingPage: React.FC = () => {
   const { orderId } = useParams<{ orderId: string }>();
   const { order, isLoading: isLoadingOrder } = useCustomerOrder(orderId);
 
   if (isLoadingOrder) {
-    return (
-      <div className="max-w-3xl mx-auto px-4 py-20 flex flex-col items-center gap-3 text-allura-muted">
-        <div className="w-7 h-7 border-2 border-allura-goldDark border-t-transparent rounded-full animate-spin" />
-        <p className="text-xs font-sans uppercase tracking-widest">Loading order…</p>
-      </div>
-    );
+    return <OrderTrackingSkeleton />;
   }
 
   if (!order) {

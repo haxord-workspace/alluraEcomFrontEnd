@@ -16,6 +16,7 @@ import {
 import { useShop } from '../../context/ShopContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { InvoiceModal } from '../../components/common/InvoiceModal';
+import { OrderDetailSkeleton } from '../../components/ui/OrderDetailSkeleton';
 import { useCustomerOrder } from '../../hooks/useCustomerOrder';
 import { useOrderPayment } from '../../hooks/useOrderPayment';
 
@@ -82,12 +83,7 @@ export const OrderDetailPage: React.FC = () => {
   };
 
   if (isLoadingOrder) {
-    return (
-      <div className="max-w-4xl mx-auto px-4 py-20 flex flex-col items-center gap-3 text-allura-muted">
-        <div className="w-7 h-7 border-2 border-allura-goldDark border-t-transparent rounded-full animate-spin" />
-        <p className="text-xs font-sans uppercase tracking-widest">Loading order…</p>
-      </div>
-    );
+    return <OrderDetailSkeleton />;
   }
 
   if (!order) {

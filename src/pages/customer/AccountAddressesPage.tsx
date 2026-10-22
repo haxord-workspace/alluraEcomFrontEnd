@@ -2,11 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Plus, MapPin, Edit3, Trash2 } from 'lucide-react';
 import { useShop } from '../../context/ShopContext';
+import { AddressCardSkeleton } from '../../components/ui/AddressCardSkeleton';
 import type { SavedAddress } from '../../types';
 import { normalizeMobile, normalizePincode, mobileError, pincodeError } from '../../utils/addressValidation';
 
 export const AccountAddressesPage: React.FC = () => {
-  const { customer, fetchCustomerAddresses, addCustomerAddress, updateCustomerAddress, deleteCustomerAddress } = useShop();
+  const { customer, fetchCustomerAddresses, isLoadingAddresses, addCustomerAddress, updateCustomerAddress, deleteCustomerAddress } = useShop();
 
   useEffect(() => {
     fetchCustomerAddresses();
@@ -122,8 +123,11 @@ export const AccountAddressesPage: React.FC = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {customer?.addresses.map((addr) => (
+      {isLoadingAddresses && (!customer?.addresses || customer.addresses.length === 0) ? (
+        <AddressCardSkeleton count={2} />
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {customer?.addresses.map((addr) => (
           <div key={addr.id} className="bg-allura-card border border-allura-border rounded-2xl p-6 shadow-subtle space-y-4">
             <div className="flex justify-between items-center">
               <span className="text-[10px] font-sans font-bold uppercase tracking-wider bg-allura-bgSecondary px-2 py-0.5 rounded text-allura-darkBrown">
@@ -165,7 +169,7 @@ export const AccountAddressesPage: React.FC = () => {
             </div>
           </div>
         ))}
-        {customer?.addresses.length === 0 && (
+        {customer?.addresses?.length === 0 && (
           <div className="col-span-full py-10 text-center border-2 border-dashed border-allura-border rounded-2xl">
             <MapPin size={32} className="mx-auto text-allura-muted mb-3" />
             <p className="text-sm font-sans font-semibold text-allura-text">No Saved Addresses</p>
@@ -173,6 +177,7 @@ export const AccountAddressesPage: React.FC = () => {
           </div>
         )}
       </div>
+    )}
 
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-allura-darkBrown/60 backdrop-blur-sm">

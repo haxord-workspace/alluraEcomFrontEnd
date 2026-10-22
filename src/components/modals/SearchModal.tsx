@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, X, Sparkles, ArrowRight, TrendingUp } from 'lucide-react';
+import { Search, X, Sparkles, ArrowRight, TrendingUp, Loader2 } from 'lucide-react';
 import { useShop } from '../../context/ShopContext';
+import { searchProducts } from '../../service/store';
 import type { Product } from '../../types';
 
 export const SearchModal: React.FC = () => {
   const { products, isSearchOpen, setIsSearchOpen, formatPrice } = useShop();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Product[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
 
@@ -33,19 +35,43 @@ export const SearchModal: React.FC = () => {
   useEffect(() => {
     if (query.trim().length === 0) {
       setResults([]);
+      setIsSearching(false);
       return;
     }
 
-    const q = query.toLowerCase();
-    const filtered = products.filter(
-      p =>
-        p.name.toLowerCase().includes(q) ||
-        p.category.toLowerCase().includes(q) ||
-        p.occasion.toLowerCase().includes(q) ||
-        p.description.toLowerCase().includes(q) ||
-        p.colors.some(c => c.name.toLowerCase().includes(q))
-    );
-    setResults(filtered);
+    let active = true;
+    setIsSearching(true);
+    const timer = setTimeout(async () => {
+      try {
+        const res = await searchProducts({ q: query.trim(), limit: 10 });
+        if (active && res.products && res.products.length > 0) {
+          setResults(res.products);
+          setIsSearching(false);
+          return;
+        }
+      } catch (err) {
+        console.warn('API search failed, falling back to local products:', err);
+      }
+
+      if (active) {
+        const q = query.toLowerCase();
+        const filtered = products.filter(
+          p =>
+            p.name.toLowerCase().includes(q) ||
+            p.category.toLowerCase().includes(q) ||
+            p.occasion.toLowerCase().includes(q) ||
+            p.description.toLowerCase().includes(q) ||
+            p.colors.some(c => c.name.toLowerCase().includes(q))
+        );
+        setResults(filtered);
+        setIsSearching(false);
+      }
+    }, 250);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
   }, [query, products]);
 
   if (!isSearchOpen) return null;
@@ -73,7 +99,9 @@ export const SearchModal: React.FC = () => {
             placeholder="Search dresses, sets, ethnic wear, occasions..."
             className="w-full bg-transparent text-allura-text placeholder:text-allura-muted text-sm sm:text-base focus:outline-none font-sans"
           />
-          {query && (
+          {isSearching ? (
+            <Loader2 size={16} className="animate-spin text-allura-gold flex-shrink-0" />
+          ) : query ? (
             <button
               onClick={() => setQuery('')}
               className="p-1 text-allura-muted hover:text-allura-text"
@@ -81,7 +109,7 @@ export const SearchModal: React.FC = () => {
             >
               <X size={16} />
             </button>
-          )}
+          ) : null}
         </div>
 
         <button

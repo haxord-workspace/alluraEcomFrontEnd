@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Edit3, Trash2, RefreshCw, AlertTriangle, Star, ChevronDown, ChevronUp, ImageOff } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Plus, Edit3, Trash2, RefreshCw, AlertTriangle, Star, ChevronDown, ChevronUp, ImageOff, Loader2, Search, X, ArrowUpDown } from 'lucide-react';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { ImageUploadDropzone } from '../../components/admin/ImageUploadDropzone';
+import { AdminPagination } from '../../components/admin/AdminPagination';
 import { useShop } from '../../context/ShopContext';
 import {
   getAdminCollections,
@@ -12,6 +13,7 @@ import {
 import type { CollectionPayload } from '../../service/collection';
 import { resizeImageSource, slugify } from '../../utils/image';
 import { getBackendErrorMessage, getBackendSuccessMessage } from '../../utils/apiResponse';
+import { AdminErrorBanner } from '../../components/admin/AdminErrorBanner';
 import type { AdminCollection } from '../../types';
 
 const EMPTY_FORM = {
@@ -32,6 +34,7 @@ type CollectionForm = typeof EMPTY_FORM;
 
 const MAIN_IMAGE_MAX = 1600;
 const THUMBNAIL_MAX = 400;
+const PAGE_SIZE = 15;
 
 const imageOf = (col: AdminCollection): { url?: string; thumbnailUrl?: string; alt?: string } =>
   typeof col.image === 'string' ? { url: col.image } : col.image || {};
@@ -42,9 +45,16 @@ export const AdminCollectionsPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Search, Filter, Sort & Pagination State
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE' | 'FEATURED'>('ALL');
+  const [sortBy, setSortBy] = useState<'order' | 'name-asc' | 'name-desc' | 'newest'>('order');
+  const [currentPage, setCurrentPage] = useState(1);
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
   const [formData, setFormData] = useState<CollectionForm>(EMPTY_FORM);
   // Slug follows the name until the admin edits it by hand
   const [slugTouched, setSlugTouched] = useState(false);
@@ -73,6 +83,7 @@ export const AdminCollectionsPage: React.FC = () => {
 
   const handleOpenAdd = () => {
     setEditingId(null);
+    setFormError(null);
     setFormData({ ...EMPTY_FORM, sortOrder: collections.length });
     setSlugTouched(false);
     setShowSeo(false);
@@ -83,6 +94,7 @@ export const AdminCollectionsPage: React.FC = () => {
   const handleOpenEdit = (col: AdminCollection) => {
     const image = imageOf(col);
     setEditingId(col.id);
+    setFormError(null);
     setFormData({
       name: col.name || '',
       slug: col.slug || '',
@@ -183,13 +195,56 @@ export const AdminCollectionsPage: React.FC = () => {
       setIsModalOpen(false);
     } catch (error: any) {
       console.error('Failed to save collection:', error);
-      showToast(getBackendErrorMessage(error, 'Failed to save collection'), 'error');
+      const errText = getBackendErrorMessage(error, 'Failed to save collection');
+      setFormError(errText);
+      showToast(errText, 'error');
     } finally {
       setIsSaving(false);
     }
   };
 
-  const sorted = [...collections].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+  const filteredAndSorted = useMemo(() => {
+    let list = [...collections];
+
+    // Search
+    const q = searchQuery.trim().toLowerCase();
+    if (q) {
+      list = list.filter(c =>
+        (c.name || '').toLowerCase().includes(q) ||
+        (c.slug || '').toLowerCase().includes(q) ||
+        (c.description || '').toLowerCase().includes(q)
+      );
+    }
+
+    // Filter
+    if (statusFilter === 'ACTIVE') {
+      list = list.filter(c => c.status === 'ACTIVE');
+    } else if (statusFilter === 'INACTIVE') {
+      list = list.filter(c => c.status === 'INACTIVE' || c.status === 'ARCHIVED');
+    } else if (statusFilter === 'FEATURED') {
+      list = list.filter(c => !!c.isFeatured);
+    }
+
+    // Sort
+    list.sort((a, b) => {
+      if (sortBy === 'order') return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
+      if (sortBy === 'name-asc') return (a.name || '').localeCompare(b.name || '');
+      if (sortBy === 'name-desc') return (b.name || '').localeCompare(a.name || '');
+      if (sortBy === 'newest') return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+      return 0;
+    });
+
+    return list;
+  }, [collections, searchQuery, statusFilter, sortBy]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, statusFilter, sortBy]);
+
+  const paginatedCollections = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return filteredAndSorted.slice(start, start + PAGE_SIZE);
+  }, [filteredAndSorted, currentPage]);
 
   return (
     <div className="space-y-6 pb-12">
@@ -226,6 +281,62 @@ export const AdminCollectionsPage: React.FC = () => {
         </div>
       </div>
 
+      {/* Toolbar: Search, Status Filter & Sort */}
+      <div className="bg-white border border-stone-200 rounded-2xl p-4 shadow-xs flex flex-col md:flex-row items-center justify-between gap-3">
+        <div className="relative w-full md:w-80">
+          <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" />
+          <input
+            type="text"
+            placeholder="Search collections..."
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            className="w-full pl-9 pr-8 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-sans text-stone-900 placeholder:text-stone-400 focus:outline-none focus:border-stone-800"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 p-0.5"
+            >
+              <X size={12} />
+            </button>
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto justify-between md:justify-end">
+          {/* Status Filter Buttons */}
+          <div className="flex items-center gap-1.5 bg-stone-100 p-1 rounded-xl">
+            {(['ALL', 'ACTIVE', 'INACTIVE', 'FEATURED'] as const).map(tab => (
+              <button
+                key={tab}
+                onClick={() => setStatusFilter(tab)}
+                className={`px-3 py-1 rounded-lg text-xs font-sans font-medium transition-colors ${
+                  statusFilter === tab
+                    ? 'bg-white text-stone-900 shadow-xs font-bold'
+                    : 'text-stone-600 hover:text-stone-900'
+                }`}
+              >
+                {tab === 'ALL' ? 'All' : tab === 'ACTIVE' ? 'Active' : tab === 'INACTIVE' ? 'Inactive' : 'Featured'}
+              </button>
+            ))}
+          </div>
+
+          {/* Sort Dropdown */}
+          <div className="flex items-center gap-1.5 border border-stone-200 rounded-xl px-2.5 py-1.5 bg-white text-xs text-stone-700">
+            <ArrowUpDown size={13} className="text-stone-400" />
+            <select
+              value={sortBy}
+              onChange={e => setSortBy(e.target.value as any)}
+              className="bg-transparent text-xs font-medium focus:outline-none cursor-pointer"
+            >
+              <option value="order">Sort by Order</option>
+              <option value="name-asc">Name (A-Z)</option>
+              <option value="name-desc">Name (Z-A)</option>
+              <option value="newest">Newest First</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
       {/* Collections Table */}
       <div className="bg-white border border-stone-200 rounded-2xl overflow-hidden shadow-xs">
         <div className="overflow-x-auto">
@@ -256,7 +367,7 @@ export const AdminCollectionsPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100">
-                {sorted.map(col => {
+                {paginatedCollections.map(col => {
                   const image = imageOf(col);
                   const thumb = image.thumbnailUrl || image.url;
                   return (
@@ -311,10 +422,18 @@ export const AdminCollectionsPage: React.FC = () => {
                     </tr>
                   );
                 })}
-                {collections.length === 0 && (
+                {filteredAndSorted.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="p-8 text-center text-stone-500">
-                      No collections found. Click 'New Collection' to create one.
+                    <td colSpan={5} className="p-8 text-center text-stone-500 space-y-2">
+                      <p>No collections match your search/filter.</p>
+                      {(searchQuery || statusFilter !== 'ALL') && (
+                        <button
+                          onClick={() => { setSearchQuery(''); setStatusFilter('ALL'); }}
+                          className="text-xs font-semibold text-stone-800 underline inline-block"
+                        >
+                          Clear all filters
+                        </button>
+                      )}
                     </td>
                   </tr>
                 )}
@@ -322,6 +441,16 @@ export const AdminCollectionsPage: React.FC = () => {
             </table>
           )}
         </div>
+
+        {/* Pagination Bar (Limit 15) */}
+        {!isLoading && !error && (
+          <AdminPagination
+            currentPage={currentPage}
+            totalItems={filteredAndSorted.length}
+            pageSize={PAGE_SIZE}
+            onPageChange={setCurrentPage}
+          />
+        )}
       </div>
 
       {/* Create/Edit Collection Modal */}
@@ -331,6 +460,15 @@ export const AdminCollectionsPage: React.FC = () => {
             <h3 className="font-serif text-xl text-stone-900">
               {editingId ? 'Edit Collection' : 'New Collection'}
             </h3>
+
+            {formError && (
+              <AdminErrorBanner
+                title="Collection Save Failed"
+                error={formError}
+                onDismiss={() => setFormError(null)}
+              />
+            )}
+
             <form onSubmit={handleSubmit} className="space-y-4 text-xs font-sans">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
@@ -499,9 +637,10 @@ export const AdminCollectionsPage: React.FC = () => {
                 <button
                   type="submit"
                   disabled={isSaving}
-                  className="px-5 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-xl font-bold uppercase tracking-wider disabled:opacity-50"
+                  className="px-5 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-xl font-bold uppercase tracking-wider disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm"
                 >
-                  {isSaving ? 'Saving...' : 'Save Collection'}
+                  {isSaving && <Loader2 size={14} className="animate-spin" />}
+                  <span>{isSaving ? 'Saving...' : 'Save Collection'}</span>
                 </button>
               </div>
             </form>
@@ -541,9 +680,10 @@ export const AdminCollectionsPage: React.FC = () => {
                 type="button"
                 onClick={handleDeleteConfirm}
                 disabled={isDeleting}
-                className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-sans font-bold uppercase tracking-wider transition-colors disabled:opacity-50"
+                className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-sans font-bold uppercase tracking-wider transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5 shadow-sm"
               >
-                {isDeleting ? 'Deleting...' : 'Delete'}
+                {isDeleting && <Loader2 size={13} className="animate-spin" />}
+                <span>{isDeleting ? 'Deleting...' : 'Delete'}</span>
               </button>
             </div>
           </div>

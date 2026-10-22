@@ -2,17 +2,22 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Lock, Unlock, Mail, ShieldCheck, ArrowRight } from 'lucide-react';
 import { useAdmin } from '../../context/AdminContext';
+import { useSelector } from 'react-redux';
+import type { RootState } from '../../store';
 import { AlluraLogo } from '../../components/common/AlluraLogo';
+import { AdminErrorBanner } from '../../components/admin/AdminErrorBanner';
 
 export const AdminLoginPage: React.FC = () => {
   const { adminLogin, isAdminAuthenticated } = useAdmin();
   const navigate = useNavigate();
+  const authError = useSelector((state: RootState) => state.adminAuth.error);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
 
   // If already authenticated, go to dashboard
   useEffect(() => {
@@ -23,6 +28,7 @@ export const AdminLoginPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLocalError(null);
     setIsLoading(true);
     const success = await adminLogin(email, password);
     setIsLoading(false);
@@ -30,6 +36,8 @@ export const AdminLoginPage: React.FC = () => {
       navigate('/admin/dashboard');
     }
   };
+
+  const activeError = localError || authError;
 
   return (
     <div className="min-h-screen bg-stone-100 flex items-center justify-center p-4">
@@ -47,7 +55,15 @@ export const AdminLoginPage: React.FC = () => {
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4 text-xs font-sans pt-2">
+        {activeError && (
+          <AdminErrorBanner
+            title="Authentication Failed"
+            error={activeError}
+            onDismiss={() => setLocalError(null)}
+          />
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4 text-xs font-sans pt-1">
           <div>
             <label className="block text-[10px] font-bold uppercase tracking-wider text-stone-500 mb-1">
               Admin Email ID

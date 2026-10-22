@@ -17,6 +17,7 @@ import { useShop } from '../context/ShopContext';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { RecentlyViewed } from '../components/customer/RecentlyViewed';
 import { InvoiceModal } from '../components/common/InvoiceModal';
+import { OrderCardSkeleton } from '../components/ui/OrderCardSkeleton';
 
 export const AccountPage: React.FC = () => {
   const {
@@ -31,6 +32,7 @@ export const AccountPage: React.FC = () => {
     addCustomerAddress,
     deleteCustomerAddress,
     refreshOrders,
+    isLoadingOrders,
   } = useShop();
 
   useEffect(() => {
@@ -274,8 +276,11 @@ export const AccountPage: React.FC = () => {
             </Link>
           </div>
 
-          <div className="space-y-4">
-            {orders.map(order => (
+          {isLoadingOrders && orders.length === 0 ? (
+            <OrderCardSkeleton count={2} />
+          ) : (
+            <div className="space-y-4">
+              {orders.map(order => (
               <div
                 key={order.id}
                 className="bg-allura-card border border-allura-border rounded-2xl p-5 sm:p-6 shadow-subtle space-y-4"
@@ -323,7 +328,8 @@ export const AccountPage: React.FC = () => {
                 </div>
               </div>
             ))}
-          </div>
+            </div>
+          )}
         </div>
       )}
 

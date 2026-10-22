@@ -102,6 +102,7 @@ interface AdminContextType {
   promotions: Promotion[];
   addPromotion: (promo: Omit<Promotion, 'id'>) => Promotion;
   banners: Banner[];
+  isLoadingBanners: boolean;
   setBannersList: (banners: Banner[]) => void;
   addBanner: (banner: Omit<Banner, 'id'>) => Banner;
   updateBanner: (id: string, updates: Partial<Banner>) => void;
@@ -265,6 +266,7 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       return [];
     }
   });
+  const [isLoadingBanners, setIsLoadingBanners] = useState<boolean>(() => banners.length === 0);
   const [abandonedCarts, setAbandonedCarts] = useState<AbandonedCart[]>(mockAbandonedCartsData);
 
   // Customers
@@ -421,6 +423,8 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         }
       } catch (err) {
         console.warn('[AdminContext] Could not load public banners:', err);
+      } finally {
+        if (isMounted) setIsLoadingBanners(false);
       }
     };
 
@@ -913,6 +917,7 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         promotions,
         addPromotion,
         banners,
+        isLoadingBanners,
         setBannersList,
         addBanner,
         updateBanner,

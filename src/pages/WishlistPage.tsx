@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Heart, ArrowRight, Loader2, Trash2 } from 'lucide-react';
+import { Heart, ArrowRight, Trash2 } from 'lucide-react';
 import { useShop } from '../context/ShopContext';
 import { useConfirm } from '../context/ConfirmContext';
 import { useAddToBag } from '../hooks/useAddToBag';
@@ -21,6 +21,7 @@ const MoveToBagButton: React.FC<{ product: Product }> = ({ product }) => {
   );
 };
 import { ProductCard } from '../components/ui/ProductCard';
+import { ProductCardSkeleton } from '../components/ui/ProductCardSkeleton';
 import type { Product } from '../types';
 
 export const WishlistPage: React.FC = () => {
@@ -63,8 +64,8 @@ export const WishlistPage: React.FC = () => {
       </div>
 
       {isWishlistLoading && wishlistProducts.length === 0 ? (
-        <div className="py-20 flex justify-center text-allura-goldDark">
-          <Loader2 size={28} className="animate-spin" />
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6">
+          <ProductCardSkeleton count={4} />
         </div>
       ) : wishlistProducts.length === 0 ? (
         <div className="py-20 text-center space-y-4 max-w-md mx-auto bg-allura-card rounded-2xl border border-allura-border p-8">

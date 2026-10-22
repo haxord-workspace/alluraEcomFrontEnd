@@ -15,12 +15,14 @@ import {
 import { useShop } from '../context/ShopContext';
 import { useCartLineActions } from '../hooks/useCartLineActions';
 import { ProductCard } from '../components/ui/ProductCard';
+import { CartSkeleton } from '../components/ui/CartSkeleton';
 import type { CartItem, Product } from '../types';
 
 export const CartPage: React.FC = () => {
   const {
     products,
     cart,
+    isCartLoading,
     cartSubtotal,
     freeShippingRemaining,
     freeShippingProgress,
@@ -48,6 +50,10 @@ export const CartPage: React.FC = () => {
   const recommendedItems = products.filter(
     (p: Product) => !cart.some((c: CartItem) => c.product.id === p.id)
   ).slice(0, 4);
+
+  if (isCartLoading && cart.length === 0) {
+    return <CartSkeleton />;
+  }
 
   if (cart.length === 0) {
     return (

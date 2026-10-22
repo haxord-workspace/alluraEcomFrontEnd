@@ -4,6 +4,7 @@ import { useShop } from '../../context/ShopContext';
 import { getInventoryByVariant, stockIn, stockOut, adjustStock } from '../../service/adminInventory';
 import type { InventoryRecord } from '../../service/adminInventory';
 import { getBackendErrorMessage, getBackendSuccessMessage } from '../../utils/apiResponse';
+import { AdminErrorBanner } from './AdminErrorBanner';
 
 export type StockOperation = 'Add' | 'Remove' | 'Set';
 
@@ -47,6 +48,7 @@ export const StockAdjustModal: React.FC<StockAdjustModalProps> = ({
   const [liveRecord, setLiveRecord] = useState<InventoryRecord | null>(record);
   const [pickerQuery, setPickerQuery] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [modalError, setModalError] = useState<string | null>(null);
 
   const [operation, setOperation] = useState<StockOperation>(initialOperation);
   const [quantity, setQuantity] = useState<number>(1);
@@ -62,6 +64,7 @@ export const StockAdjustModal: React.FC<StockAdjustModalProps> = ({
     setQuantity(initialOperation === 'Set' ? record?.quantityOnHand ?? 0 : 1);
     setReason(REASONS[initialOperation][0]);
     setCustomReason('');
+    setModalError(null);
   }, [isOpen, record, initialOperation]);
 
   // Pull the latest figures for the chosen variant
@@ -121,6 +124,7 @@ export const StockAdjustModal: React.FC<StockAdjustModalProps> = ({
     const finalReason = reason === OTHER_REASON ? customReason.trim() || 'Manual adjustment' : reason;
 
     setIsSubmitting(true);
+    setModalError(null);
     try {
       const updated =
         operation === 'Add'
@@ -155,7 +159,9 @@ export const StockAdjustModal: React.FC<StockAdjustModalProps> = ({
       showToast(getBackendSuccessMessage(updated, `${liveRecord.sku || liveRecord.productName || 'Variant'}: ${currentStock} → ${newStock} units`), 'success');
       onClose();
     } catch (error: any) {
-      showToast(getBackendErrorMessage(error, 'Failed to update stock'), 'error');
+      const errText = getBackendErrorMessage(error, 'Failed to update stock');
+      setModalError(errText);
+      showToast(errText, 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -192,6 +198,16 @@ export const StockAdjustModal: React.FC<StockAdjustModalProps> = ({
             <X size={18} />
           </button>
         </div>
+
+        {modalError && (
+          <div className="p-4 pb-0">
+            <AdminErrorBanner
+              title="Inventory Update Failed"
+              error={modalError}
+              onDismiss={() => setModalError(null)}
+            />
+          </div>
+        )}
 
         {/* Step 1: pick a variant */}
         {!selected && (

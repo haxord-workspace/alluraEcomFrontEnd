@@ -4,6 +4,7 @@ import { useAdmin } from '../../context/AdminContext';
 import { useShop } from '../../context/ShopContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { ConfirmModal } from '../../components/common/ConfirmModal';
+import { AdminErrorBanner } from '../../components/admin/AdminErrorBanner';
 import {
   getAdminCoupons,
   createAdminCoupon,
@@ -53,6 +54,7 @@ export const AdminCouponsPage: React.FC = () => {
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
   const [form, setForm] = useState(EMPTY_FORM);
 
   const fetchCoupons = useCallback(async () => {
@@ -73,12 +75,14 @@ export const AdminCouponsPage: React.FC = () => {
 
   const openCreate = () => {
     setEditingId(null);
+    setFormError(null);
     setForm({ ...EMPTY_FORM, startsAt: today(), expiresAt: inDays(30) });
     setIsCreateOpen(true);
   };
 
   const openEdit = (coupon: Coupon) => {
     setEditingId(coupon.id);
+    setFormError(null);
     setForm({
       code: coupon.code,
       description: coupon.description || '',
@@ -185,7 +189,9 @@ export const AdminCouponsPage: React.FC = () => {
       setIsCreateOpen(false);
       setEditingId(null);
     } catch (err: any) {
-      showToast(couponErrorMessage(err, editingId ? 'Failed to update coupon' : 'Failed to create coupon'), 'error');
+      const errText = couponErrorMessage(err, editingId ? 'Failed to update coupon' : 'Failed to create coupon');
+      setFormError(errText);
+      showToast(errText, 'error');
     } finally {
       setIsSaving(false);
     }
@@ -364,6 +370,14 @@ export const AdminCouponsPage: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-sm animate-fade-in">
           <div className="bg-white border border-stone-200 rounded-2xl w-full max-w-xl p-6 sm:p-8 space-y-6 shadow-2xl animate-slide-up text-xs font-sans max-h-[92vh] overflow-y-auto">
             <h3 className="font-serif text-2xl text-stone-900 font-normal">{editingId ? 'Edit Coupon' : 'Create Coupon'}</h3>
+
+            {formError && (
+              <AdminErrorBanner
+                title="Coupon Save Failed"
+                error={formError}
+                onDismiss={() => setFormError(null)}
+              />
+            )}
 
             <form onSubmit={handleCreateCoupon} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
