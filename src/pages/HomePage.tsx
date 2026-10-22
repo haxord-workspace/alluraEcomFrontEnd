@@ -4,6 +4,7 @@ import {
   ArrowRight, 
   ChevronLeft, 
   ChevronRight, 
+  ChevronDown,
   Truck, 
   ShieldCheck, 
   RefreshCw, 
@@ -23,12 +24,14 @@ import { useAdmin } from '../context/AdminContext';
 import { useShop } from '../context/ShopContext';
 import { SEOHead } from '../components/common/SEOHead';
 import { getStoreCollections, type StoreCollection } from '../service/store';
+import { mockFaqsData } from '../data/mockFaqs';
 
 export const HomePage: React.FC = () => {
   const navigate = useNavigate();
-  const { banners, isLoadingBanners } = useAdmin();
+  const { banners, isLoadingBanners, faqs } = useAdmin();
   const { products, categories, isLoadingProducts } = useShop();
   const [currentSlide, setCurrentSlide] = useState(0);
+  const [openFaqId, setOpenFaqId] = useState<string | null>(null);
   const touchStartX = useRef<number | null>(null);
   const touchEndX = useRef<number | null>(null);
 
@@ -209,31 +212,39 @@ export const HomePage: React.FC = () => {
   }, [storeCollections, CURATED_COLLECTIONS]);
 
   // Independent navigation handlers for Tile 1 (cycles collections created in admin side)
-  const handlePrevTile1 = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const handlePrevTile1 = (e?: React.MouseEvent | React.TouchEvent) => {
+    if (e) {
+      e.preventDefault?.();
+      e.stopPropagation?.();
+    }
     if (allCollections.length <= 1) return;
     setTile1Index(prev => (prev === 0 ? allCollections.length - 1 : prev - 1));
   };
 
-  const handleNextTile1 = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const handleNextTile1 = (e?: React.MouseEvent | React.TouchEvent) => {
+    if (e) {
+      e.preventDefault?.();
+      e.stopPropagation?.();
+    }
     if (allCollections.length <= 1) return;
     setTile1Index(prev => (prev + 1) % allCollections.length);
   };
 
   // Independent navigation handlers for Tile 2 (cycles collections created in admin side)
-  const handlePrevTile2 = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const handlePrevTile2 = (e?: React.MouseEvent | React.TouchEvent) => {
+    if (e) {
+      e.preventDefault?.();
+      e.stopPropagation?.();
+    }
     if (allCollections.length <= 1) return;
     setTile2Index(prev => (prev === 0 ? allCollections.length - 1 : prev - 1));
   };
 
-  const handleNextTile2 = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const handleNextTile2 = (e?: React.MouseEvent | React.TouchEvent) => {
+    if (e) {
+      e.preventDefault?.();
+      e.stopPropagation?.();
+    }
     if (allCollections.length <= 1) return;
     setTile2Index(prev => (prev + 1) % allCollections.length);
   };
@@ -659,7 +670,7 @@ export const HomePage: React.FC = () => {
                   )}
 
                   {/* Luxury bottom gradient overlay matching the reference screenshot */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-[#260E06]/95 via-[#260E06]/40 to-transparent flex flex-col justify-end p-6 sm:p-8 md:p-10 px-12 sm:px-16 md:px-16 text-white space-y-1.5 sm:space-y-2 pointer-events-none">
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#260E06]/95 via-[#260E06]/40 to-transparent flex flex-col justify-end p-5 sm:p-8 md:p-10 px-5 sm:px-16 md:px-16 text-white space-y-1.5 sm:space-y-2 pointer-events-none">
                     {tile1Item.badge && (
                       <span className="inline-block text-[10px] sm:text-[11px] font-bold uppercase tracking-[0.25em] text-[#E2C299] mb-0.5 sm:mb-1">
                         {tile1Item.badge}
@@ -682,27 +693,33 @@ export const HomePage: React.FC = () => {
                   </div>
                 </Link>
 
-                {/* Left End '<' Navigation Button for Tile 1 */}
-                <button
-                  type="button"
-                  id="tile1-prev-btn"
-                  onClick={handlePrevTile1}
-                  aria-label="Previous collection in Tile 1"
-                  className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 z-20 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#200E07]/80 hover:bg-[#200E07] text-white backdrop-blur-md border border-white/25 hidden sm:flex items-center justify-center shadow-xl transition-all hover:scale-105 active:scale-95"
-                >
-                  <ChevronLeft size={20} />
-                </button>
-
-                {/* Right End '>' Navigation Button for Tile 1 */}
-                <button
-                  type="button"
-                  id="tile1-next-btn"
-                  onClick={handleNextTile1}
-                  aria-label="Next collection in Tile 1"
-                  className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 z-20 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#200E07]/80 hover:bg-[#200E07] text-white backdrop-blur-md border border-white/25 hidden sm:flex items-center justify-center shadow-xl transition-all hover:scale-105 active:scale-95"
-                >
-                  <ChevronRight size={20} />
-                </button>
+                {/* Bottom-Right '<' and '>' Navigation Buttons for Tile 1 (Mobile & Laptop) */}
+                <div className="absolute right-4 sm:right-6 bottom-4 sm:bottom-6 z-30 flex items-center gap-2 pointer-events-auto">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handlePrevTile1(e);
+                    }}
+                    aria-label="Previous collection in Tile 1"
+                    className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#200E07]/85 hover:bg-[#200E07] text-white backdrop-blur-md border border-white/25 flex items-center justify-center shadow-xl transition-all hover:scale-105 active:scale-95 cursor-pointer"
+                  >
+                    <ChevronLeft size={18} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleNextTile1(e);
+                    }}
+                    aria-label="Next collection in Tile 1"
+                    className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#200E07]/85 hover:bg-[#200E07] text-white backdrop-blur-md border border-white/25 flex items-center justify-center shadow-xl transition-all hover:scale-105 active:scale-95 cursor-pointer"
+                  >
+                    <ChevronRight size={18} />
+                  </button>
+                </div>
               </div>
             );
           })()}
@@ -728,7 +745,7 @@ export const HomePage: React.FC = () => {
                   )}
 
                   {/* Luxury bottom gradient overlay matching the reference screenshot */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-[#260E06]/95 via-[#260E06]/40 to-transparent flex flex-col justify-end p-6 sm:p-8 md:p-10 px-12 sm:px-16 md:px-16 text-white space-y-1.5 sm:space-y-2 pointer-events-none">
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#260E06]/95 via-[#260E06]/40 to-transparent flex flex-col justify-end p-5 sm:p-8 md:p-10 px-5 sm:px-16 md:px-16 text-white space-y-1.5 sm:space-y-2 pointer-events-none">
                     {tile2Item.badge && (
                       <span className="inline-block text-[10px] sm:text-[11px] font-bold uppercase tracking-[0.25em] text-[#E2C299] mb-0.5 sm:mb-1">
                         {tile2Item.badge}
@@ -751,27 +768,33 @@ export const HomePage: React.FC = () => {
                   </div>
                 </Link>
 
-                {/* Left End '<' Navigation Button for Tile 2 */}
-                <button
-                  type="button"
-                  id="tile2-prev-btn"
-                  onClick={handlePrevTile2}
-                  aria-label="Previous collection in Tile 2"
-                  className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 z-20 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#200E07]/80 hover:bg-[#200E07] text-white backdrop-blur-md border border-white/25 hidden sm:flex items-center justify-center shadow-xl transition-all hover:scale-105 active:scale-95"
-                >
-                  <ChevronLeft size={20} />
-                </button>
-
-                {/* Right End '>' Navigation Button for Tile 2 */}
-                <button
-                  type="button"
-                  id="tile2-next-btn"
-                  onClick={handleNextTile2}
-                  aria-label="Next collection in Tile 2"
-                  className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 z-20 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#200E07]/80 hover:bg-[#200E07] text-white backdrop-blur-md border border-white/25 hidden sm:flex items-center justify-center shadow-xl transition-all hover:scale-105 active:scale-95"
-                >
-                  <ChevronRight size={20} />
-                </button>
+                {/* Bottom-Right '<' and '>' Navigation Buttons for Tile 2 (Mobile & Laptop) */}
+                <div className="absolute right-4 sm:right-6 bottom-4 sm:bottom-6 z-30 flex items-center gap-2 pointer-events-auto">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handlePrevTile2(e);
+                    }}
+                    aria-label="Previous collection in Tile 2"
+                    className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#200E07]/85 hover:bg-[#200E07] text-white backdrop-blur-md border border-white/25 flex items-center justify-center shadow-xl transition-all hover:scale-105 active:scale-95 cursor-pointer"
+                  >
+                    <ChevronLeft size={18} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleNextTile2(e);
+                    }}
+                    aria-label="Next collection in Tile 2"
+                    className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#200E07]/85 hover:bg-[#200E07] text-white backdrop-blur-md border border-white/25 flex items-center justify-center shadow-xl transition-all hover:scale-105 active:scale-95 cursor-pointer"
+                  >
+                    <ChevronRight size={18} />
+                  </button>
+                </div>
               </div>
             );
           })()}
@@ -955,6 +978,81 @@ export const HomePage: React.FC = () => {
               </div>
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* 6.5. FREQUENTLY ASKED QUESTIONS (FAQ DROPDOWN ACCORDION) */}
+      <section className="max-w-4xl mx-auto px-5 sm:px-6 lg:px-8 space-y-8 pt-4 sm:pt-8">
+        <div className="text-center space-y-3">
+          <span className="text-[11px] font-heading font-bold tracking-[0.28em] uppercase text-[#561C08] bg-[#F7E6C8]/60 px-3.5 py-1.5 rounded-full inline-block border border-[#561C08]/15">
+            FREQUENTLY ASKED QUESTIONS
+          </span>
+          <h2 className="font-heading text-2xl sm:text-4xl text-[#000000] font-bold uppercase tracking-tight">
+            QUESTIONS & ANSWERS
+          </h2>
+          <p className="text-xs sm:text-sm text-[#561C08] font-body max-w-lg mx-auto leading-relaxed">
+            Everything you need to know about our handcrafted modest designs, custom sizing, express shipping across Kerala, and easy returns.
+          </p>
+        </div>
+
+        <div className="space-y-3 sm:space-y-3.5">
+          {(faqs && faqs.length > 0 ? faqs : mockFaqsData).slice(0, 6).map((faq) => {
+            const isOpen = openFaqId === faq.id;
+            return (
+              <div
+                key={faq.id}
+                className={`bg-white/95 rounded-2xl border transition-all duration-300 overflow-hidden ${
+                  isOpen
+                    ? 'border-[#561C08]/40 shadow-md ring-1 ring-[#561C08]/20'
+                    : 'border-[#561C08]/15 shadow-xs hover:border-[#561C08]/30'
+                }`}
+              >
+                <button
+                  type="button"
+                  onClick={() => setOpenFaqId(prev => (prev === faq.id ? null : faq.id))}
+                  className="w-full p-4 sm:p-5 sm:px-6 text-left flex items-center justify-between gap-3 sm:gap-4 cursor-pointer focus:outline-none"
+                  aria-expanded={isOpen}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="text-[10px] font-heading font-bold uppercase tracking-wider text-[#561C08] bg-[#F7E6C8]/70 px-2.5 py-1 rounded-md border border-[#561C08]/10 hidden sm:inline-block">
+                      {faq.category}
+                    </span>
+                    <h3 className="font-heading text-sm sm:text-base text-[#000000] font-bold">
+                      {faq.question}
+                    </h3>
+                  </div>
+                  <div
+                    className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center flex-shrink-0 transition-colors ${
+                      isOpen ? 'bg-[#561C08] text-white' : 'bg-[#F7E6C8]/60 text-[#561C08]'
+                    }`}
+                  >
+                    <ChevronDown
+                      size={16}
+                      className={`transition-transform duration-300 ${
+                        isOpen ? 'rotate-180' : ''
+                      }`}
+                    />
+                  </div>
+                </button>
+
+                {isOpen && (
+                  <div className="px-4 sm:px-6 pb-5 sm:pb-6 pt-0 text-xs sm:text-sm font-body text-[#561C08]/90 leading-relaxed border-t border-[#561C08]/10 animate-fade-in mt-1">
+                    <p className="pt-3 sm:pt-4">{faq.answer}</p>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="text-center pt-2">
+          <Link
+            to="/faq"
+            className="inline-flex items-center gap-2 text-xs font-heading font-bold tracking-[0.2em] text-[#561C08] hover:text-[#3D1406] transition-colors uppercase group bg-white/70 hover:bg-white border border-[#561C08]/15 py-2.5 px-5 rounded-xl shadow-xs"
+          >
+            <span>EXPLORE ALL FAQS</span>
+            <ArrowRight size={13} className="group-hover:translate-x-1 transition-transform" />
+          </Link>
         </div>
       </section>
 

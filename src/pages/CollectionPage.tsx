@@ -249,24 +249,24 @@ export const CollectionPage: React.FC = () => {
       {/* Main Collection Content: Filter, Search, Sort & Products */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
         {/* Interactive Filter, Search & Sort Control Bar */}
-        <div className="bg-white/80 dark:bg-stone-900/80 backdrop-blur-md rounded-2xl p-4 sm:p-5 border border-allura-border/60 shadow-xs space-y-4">
+        <div className="bg-white/95 rounded-2xl p-4 sm:p-5 border border-[#561C08]/15 shadow-sm space-y-4">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4">
             {/* Search Input Bar (GET /products/search?q=...) */}
             <div className="relative flex-1 max-w-md">
-              <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" />
+              <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#561C08]/50" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 placeholder="Search pieces in this collection..."
-                className="w-full pl-10 pr-9 py-2.5 bg-stone-100/80 dark:bg-stone-800/80 border border-stone-200 dark:border-stone-700 rounded-xl text-xs sm:text-sm font-sans focus:outline-none focus:ring-2 focus:ring-allura-gold/50"
+                className="w-full pl-10 pr-9 py-2.5 bg-[#FAF7F2] border border-[#561C08]/15 rounded-xl text-xs sm:text-sm font-sans text-[#561C08] placeholder-[#561C08]/45 focus:outline-none focus:ring-2 focus:ring-[#561C08]/30 focus:border-[#561C08] transition-all"
               />
               {searchQuery && (
                 <button
                   type="button"
                   onClick={() => setSearchQuery('')}
                   aria-label="Clear search"
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#561C08]/50 hover:text-[#561C08]"
                 >
                   <X size={15} />
                 </button>
@@ -276,13 +276,13 @@ export const CollectionPage: React.FC = () => {
             {/* Sort & Quick Controls */}
             <div className="flex flex-wrap items-center gap-2.5">
               {/* Sort Dropdown */}
-              <div className="flex items-center gap-2 bg-stone-100/80 dark:bg-stone-800/80 border border-stone-200 dark:border-stone-700 rounded-xl px-3 py-2 text-xs">
-                <ArrowUpDown size={14} className="text-allura-goldDark" />
-                <span className="text-stone-500 font-sans hidden sm:inline">Sort:</span>
+              <div className="flex items-center gap-2 bg-[#FAF7F2] border border-[#561C08]/15 rounded-xl px-3 py-2 text-xs">
+                <ArrowUpDown size={14} className="text-[#561C08]" />
+                <span className="text-[#561C08]/60 font-sans hidden sm:inline">Sort:</span>
                 <select
                   value={sortBy}
                   onChange={e => setSortBy(e.target.value as any)}
-                  className="bg-transparent font-medium font-sans text-stone-800 dark:text-stone-200 focus:outline-none cursor-pointer"
+                  className="bg-transparent font-medium font-sans text-[#561C08] focus:outline-none cursor-pointer"
                 >
                   <option value="newest">Newest Arrivals</option>
                   <option value="price_asc">Price: Low to High</option>
@@ -296,7 +296,7 @@ export const CollectionPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleResetFilters}
-                  className="inline-flex items-center gap-1.5 text-xs text-red-600 hover:text-red-700 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 rounded-xl px-3 py-2 transition-colors font-medium font-sans"
+                  className="inline-flex items-center gap-1.5 text-xs text-rose-700 hover:text-rose-800 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2 transition-colors font-medium font-sans"
                 >
                   <RotateCcw size={13} />
                   <span>Reset</span>
@@ -306,9 +306,9 @@ export const CollectionPage: React.FC = () => {
           </div>
 
           {/* Price Quick Filter Chips */}
-          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-stone-100 dark:border-stone-800 text-xs">
-            <span className="text-stone-400 font-sans flex items-center gap-1.5 mr-1">
-              <SlidersHorizontal size={12} />
+          <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-[#561C08]/10 text-xs">
+            <span className="text-[#561C08]/60 font-sans flex items-center gap-1.5 mr-1 font-medium">
+              <SlidersHorizontal size={12} className="text-[#561C08]" />
               <span>Price:</span>
             </span>
             {[
@@ -321,17 +321,17 @@ export const CollectionPage: React.FC = () => {
                 key={chip.id}
                 type="button"
                 onClick={() => setPriceFilter(chip.id as any)}
-                className={`px-3 py-1.5 rounded-full text-xs font-sans transition-all ${
+                className={`px-3 py-1.5 rounded-full text-xs font-sans transition-all duration-200 ${
                   priceFilter === chip.id
                     ? 'bg-[#561C08] text-white shadow-xs font-semibold'
-                    : 'bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 hover:bg-stone-200'
+                    : 'bg-[#FAF7F2] text-[#561C08] border border-[#561C08]/15 hover:bg-[#F3EDE2] hover:border-[#561C08]/30'
                 }`}
               >
                 {chip.label}
               </button>
             ))}
 
-            <div className="ml-auto text-[11px] text-stone-400 font-sans tracking-wider uppercase hidden md:block">
+            <div className="ml-auto text-[11px] text-[#561C08]/60 font-sans tracking-wider uppercase hidden md:block">
               {pagination.total} {pagination.total === 1 ? 'Piece' : 'Pieces'} Available
             </div>
           </div>
@@ -390,7 +390,7 @@ export const CollectionPage: React.FC = () => {
                 setCurrentPage(prev => Math.max(1, prev - 1));
                 window.scrollTo({ top: 350, behavior: 'smooth' });
               }}
-              className="inline-flex items-center gap-1 px-3.5 py-2 rounded-xl text-xs font-sans font-medium border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-800 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-stone-100 transition-colors"
+              className="inline-flex items-center gap-1 px-3.5 py-2 rounded-xl text-xs font-sans font-medium border border-[#561C08]/15 bg-white text-[#561C08] disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[#FAF7F2] transition-colors"
             >
               <ChevronLeft size={16} />
               <span>Previous</span>
@@ -407,7 +407,7 @@ export const CollectionPage: React.FC = () => {
                 className={`w-9 h-9 rounded-xl text-xs font-sans font-medium transition-all ${
                   currentPage === pageNum
                     ? 'bg-[#561C08] text-white shadow-xs font-bold'
-                    : 'bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 hover:bg-stone-100 text-stone-700 dark:text-stone-300'
+                    : 'bg-white border border-[#561C08]/15 hover:bg-[#FAF7F2] text-[#561C08]'
                 }`}
               >
                 {pageNum}
@@ -421,7 +421,7 @@ export const CollectionPage: React.FC = () => {
                 setCurrentPage(prev => Math.min(pagination.totalPages, prev + 1));
                 window.scrollTo({ top: 350, behavior: 'smooth' });
               }}
-              className="inline-flex items-center gap-1 px-3.5 py-2 rounded-xl text-xs font-sans font-medium border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-800 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-stone-100 transition-colors"
+              className="inline-flex items-center gap-1 px-3.5 py-2 rounded-xl text-xs font-sans font-medium border border-[#561C08]/15 bg-white text-[#561C08] disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[#FAF7F2] transition-colors"
             >
               <span>Next</span>
               <ChevronRight size={16} />
