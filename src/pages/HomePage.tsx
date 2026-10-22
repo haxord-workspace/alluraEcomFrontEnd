@@ -420,7 +420,7 @@ export const HomePage: React.FC = () => {
                 onClick={() =>
                   setCurrentSlide(prev => (prev === 0 ? heroSlides.length - 1 : prev - 1))
                 }
-                className="absolute left-3 sm:left-6 top-1/2 -translate-y-1/2 z-20 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white/80 hover:bg-white text-[#561C08] border border-white/60 backdrop-blur-md flex items-center justify-center transition-all shadow-lg hover:scale-110 active:scale-95"
+                className="absolute left-3 sm:left-6 top-1/2 -translate-y-1/2 z-20 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white/80 hover:bg-white text-[#561C08] border border-white/60 backdrop-blur-md hidden sm:flex items-center justify-center transition-all shadow-lg hover:scale-110 active:scale-95"
                 aria-label="Previous Slide"
               >
                 <ChevronLeft size={20} />
@@ -429,7 +429,7 @@ export const HomePage: React.FC = () => {
               {/* Next Slide Button */}
               <button
                 onClick={() => setCurrentSlide(prev => (prev + 1) % heroSlides.length)}
-                className="absolute right-3 sm:right-6 top-1/2 -translate-y-1/2 z-20 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white/80 hover:bg-white text-[#561C08] border border-white/60 backdrop-blur-md flex items-center justify-center transition-all shadow-lg hover:scale-110 active:scale-95"
+                className="absolute right-3 sm:right-6 top-1/2 -translate-y-1/2 z-20 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white/80 hover:bg-white text-[#561C08] border border-white/60 backdrop-blur-md hidden sm:flex items-center justify-center transition-all shadow-lg hover:scale-110 active:scale-95"
                 aria-label="Next Slide"
               >
                 <ChevronRight size={20} />
@@ -688,7 +688,7 @@ export const HomePage: React.FC = () => {
                   id="tile1-prev-btn"
                   onClick={handlePrevTile1}
                   aria-label="Previous collection in Tile 1"
-                  className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 z-20 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#200E07]/80 hover:bg-[#200E07] text-white backdrop-blur-md border border-white/25 flex items-center justify-center shadow-xl transition-all hover:scale-105 active:scale-95"
+                  className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 z-20 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#200E07]/80 hover:bg-[#200E07] text-white backdrop-blur-md border border-white/25 hidden sm:flex items-center justify-center shadow-xl transition-all hover:scale-105 active:scale-95"
                 >
                   <ChevronLeft size={20} />
                 </button>
@@ -699,7 +699,7 @@ export const HomePage: React.FC = () => {
                   id="tile1-next-btn"
                   onClick={handleNextTile1}
                   aria-label="Next collection in Tile 1"
-                  className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 z-20 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#200E07]/80 hover:bg-[#200E07] text-white backdrop-blur-md border border-white/25 flex items-center justify-center shadow-xl transition-all hover:scale-105 active:scale-95"
+                  className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 z-20 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#200E07]/80 hover:bg-[#200E07] text-white backdrop-blur-md border border-white/25 hidden sm:flex items-center justify-center shadow-xl transition-all hover:scale-105 active:scale-95"
                 >
                   <ChevronRight size={20} />
                 </button>
@@ -757,7 +757,7 @@ export const HomePage: React.FC = () => {
                   id="tile2-prev-btn"
                   onClick={handlePrevTile2}
                   aria-label="Previous collection in Tile 2"
-                  className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 z-20 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#200E07]/80 hover:bg-[#200E07] text-white backdrop-blur-md border border-white/25 flex items-center justify-center shadow-xl transition-all hover:scale-105 active:scale-95"
+                  className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 z-20 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#200E07]/80 hover:bg-[#200E07] text-white backdrop-blur-md border border-white/25 hidden sm:flex items-center justify-center shadow-xl transition-all hover:scale-105 active:scale-95"
                 >
                   <ChevronLeft size={20} />
                 </button>
@@ -768,7 +768,7 @@ export const HomePage: React.FC = () => {
                   id="tile2-next-btn"
                   onClick={handleNextTile2}
                   aria-label="Next collection in Tile 2"
-                  className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 z-20 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#200E07]/80 hover:bg-[#200E07] text-white backdrop-blur-md border border-white/25 flex items-center justify-center shadow-xl transition-all hover:scale-105 active:scale-95"
+                  className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 z-20 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#200E07]/80 hover:bg-[#200E07] text-white backdrop-blur-md border border-white/25 hidden sm:flex items-center justify-center shadow-xl transition-all hover:scale-105 active:scale-95"
                 >
                   <ChevronRight size={20} />
                 </button>

@@ -59,11 +59,11 @@ export const HeroBannerSkeleton: React.FC = () => {
       </div>
 
       {/* Carousel Navigation: Left & Right circular controls matching real banner */}
-      <div className="absolute left-3 sm:left-6 top-1/2 -translate-y-1/2 z-20 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white/80 border border-white/60 backdrop-blur-md flex items-center justify-center shadow-lg text-[#561C08]/40">
+      <div className="absolute left-3 sm:left-6 top-1/2 -translate-y-1/2 z-20 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white/80 border border-white/60 backdrop-blur-md hidden sm:flex items-center justify-center shadow-lg text-[#561C08]/40">
         <ChevronLeft size={20} />
       </div>
 
-      <div className="absolute right-3 sm:right-6 top-1/2 -translate-y-1/2 z-20 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white/80 border border-white/60 backdrop-blur-md flex items-center justify-center shadow-lg text-[#561C08]/40">
+      <div className="absolute right-3 sm:right-6 top-1/2 -translate-y-1/2 z-20 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white/80 border border-white/60 backdrop-blur-md hidden sm:flex items-center justify-center shadow-lg text-[#561C08]/40">
         <ChevronRight size={20} />
       </div>
 
