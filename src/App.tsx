@@ -222,7 +222,7 @@ export const AppContent: React.FC = () => {
       {/* Floating AI Stylist & WhatsApp Concierge */}
       {!isCheckout && (
         <>
-          <AlluraAIAssistant />
+          {/* <AlluraAIAssistant /> */}
           <WhatsAppButton />
           {!isProductPage && <MobileBottomNav />}
           <Footer />

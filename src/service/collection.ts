@@ -48,6 +48,7 @@ export interface CollectionPayload {
   sortOrder?: number;
   isFeatured?: boolean;
   status: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED' | string;
+  products?: string[];
 }
 
 /**

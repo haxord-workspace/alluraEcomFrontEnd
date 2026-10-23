@@ -14,7 +14,8 @@ interface ImageUploadDropzoneProps {
   presets?: PresetOption[];
   required?: boolean;
   helperText?: string;
-  className?: string;
+  showUrlTab?: boolean;
+  showPresetsTab?: boolean;
 }
 
 export const ImageUploadDropzone: React.FC<ImageUploadDropzoneProps> = ({
@@ -26,6 +27,8 @@ export const ImageUploadDropzone: React.FC<ImageUploadDropzoneProps> = ({
   required = false,
   helperText,
   className = '',
+  showUrlTab = true,
+  showPresetsTab = true,
 }) => {
   const [activeTab, setActiveTab] = useState<'upload' | 'url' | 'presets'>('upload');
   const [isDragging, setIsDragging] = useState(false);
@@ -204,20 +207,22 @@ export const ImageUploadDropzone: React.FC<ImageUploadDropzoneProps> = ({
           <span>Upload File</span>
         </button>
 
-        <button
-          type="button"
-          onClick={() => setActiveTab('url')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition-all ${
-            activeTab === 'url'
-              ? 'bg-white text-[#561C08] shadow-xs font-bold'
-              : 'text-stone-600 hover:text-stone-900'
-          }`}
-        >
-          <LinkIcon size={12} />
-          <span>Image URL</span>
-        </button>
+        {showUrlTab && (
+          <button
+            type="button"
+            onClick={() => setActiveTab('url')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition-all ${
+              activeTab === 'url'
+                ? 'bg-white text-[#561C08] shadow-xs font-bold'
+                : 'text-stone-600 hover:text-stone-900'
+            }`}
+          >
+            <LinkIcon size={12} />
+            <span>Image URL</span>
+          </button>
+        )}
 
-        {presets.length > 0 && (
+        {showPresetsTab && presets.length > 0 && (
           <button
             type="button"
             onClick={() => setActiveTab('presets')}

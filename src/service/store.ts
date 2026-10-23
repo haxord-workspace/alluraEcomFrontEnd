@@ -120,6 +120,10 @@ export interface StoreProductsParams {
   categoryId?: string;
   page?: number;
   limit?: number;
+  sort?: string;
+  minPrice?: number;
+  maxPrice?: number;
+  [key: string]: any;
 }
 
 export interface StoreProductsMeta {
@@ -142,12 +146,14 @@ export const getStoreProducts = async (
   categoryMap?: Record<string, string>
 ): Promise<StoreProductsResult> => {
   const response = await api.get('/store/products', { params });
-  const data = response.data?.data || [];
-  const meta: StoreProductsMeta = response.data?.meta || {
-    total: data.length,
-    page: 1,
-    limit: data.length,
-    totalPages: 1,
+  const rawData = response.data?.data;
+  const data = Array.isArray(rawData) ? rawData : (rawData?.products || response.data?.products || []);
+  const rawMeta = response.data?.meta || response.data?.pagination || rawData?.pagination;
+  const meta: StoreProductsMeta = {
+    total: rawMeta?.total ?? data.length,
+    page: rawMeta?.page ?? (params?.page || 1),
+    limit: rawMeta?.limit ?? (params?.limit || data.length),
+    totalPages: rawMeta?.totalPages ?? Math.max(1, Math.ceil((rawMeta?.total ?? data.length) / (params?.limit || 8))),
   };
   return {
     products: Array.isArray(data) ? data.map((p: any) => mapStoreProduct(p, categoryMap)) : [],
@@ -195,23 +201,84 @@ export interface StoreCollection {
   sortOrder?: number;
 }
 
+export interface StoreCollectionParams {
+  page?: number;
+  limit?: number;
+  [key: string]: any;
+}
+
+export interface StoreCollectionsMeta {
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface StoreCollectionsResult {
+  collections: StoreCollection[];
+  meta: StoreCollectionsMeta;
+}
+
+/**
+ * GET /store/collections — fetch a single page of collections (e.g. limit=1 for 1 at a time).
+ */
+export const getStoreCollectionPage = async (
+  page: number = 1,
+  limit: number = 1
+): Promise<StoreCollectionsResult> => {
+  try {
+    const response = await api.get('/store/collections', {
+      params: { page, limit },
+    });
+    const rawData = response.data?.data || response.data || [];
+    const rawMeta = response.data?.meta || {};
+    const collections: StoreCollection[] = Array.isArray(rawData)
+      ? rawData.map((c: any) => ({
+          id: c._id || c.id,
+          name: c.name,
+          slug: c.slug,
+          description: c.description || '',
+          image: c.image,
+          isFeatured: !!c.isFeatured,
+          status: c.status,
+          sortOrder: c.sortOrder ?? 0,
+        }))
+      : [];
+
+    const meta: StoreCollectionsMeta = {
+      total: rawMeta.total ?? collections.length,
+      page: rawMeta.page ?? page,
+      limit: rawMeta.limit ?? limit,
+      totalPages: rawMeta.totalPages ?? Math.max(1, Math.ceil((rawMeta.total ?? collections.length) / limit)),
+    };
+
+    return { collections, meta };
+  } catch (error) {
+    console.warn('Failed to load store collection page from API:', error);
+    return {
+      collections: [],
+      meta: { total: 0, page, limit, totalPages: 1 },
+    };
+  }
+};
+
 /**
  * GET /store/collections — public collections listing.
  */
-export const getStoreCollections = async (): Promise<StoreCollection[]> => {
+export const getStoreCollections = async (params?: StoreCollectionParams): Promise<StoreCollection[]> => {
   try {
     let data: any[] = [];
     const token = getAdminAccessToken();
     if (token) {
       try {
-        const adminRes = await adminApi.get('/collections');
+        const adminRes = await adminApi.get('/collections', { params });
         data = adminRes.data?.data || adminRes.data || [];
       } catch (e) {
         console.warn('Failed to load collections from admin endpoint, falling back to store endpoint', e);
       }
     }
     if (!data || data.length === 0) {
-      const response = await api.get('/store/collections');
+      const response = await api.get('/store/collections', { params });
       data = response.data?.data || response.data || [];
     }
 

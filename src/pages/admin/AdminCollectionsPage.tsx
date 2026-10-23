@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Plus, Edit3, Trash2, RefreshCw, AlertTriangle, Star, ChevronDown, ChevronUp, ImageOff, Loader2, Search, X, ArrowUpDown } from 'lucide-react';
+import { Plus, Edit3, Trash2, RefreshCw, AlertTriangle, Star, ChevronDown, ChevronUp, ImageOff, Loader2, Search, X, ArrowUpDown, Check, Package } from 'lucide-react';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { ImageUploadDropzone } from '../../components/admin/ImageUploadDropzone';
 import { AdminPagination } from '../../components/admin/AdminPagination';
@@ -10,11 +10,12 @@ import {
   updateAdminCollection,
   deleteAdminCollection,
 } from '../../service/collection';
+import { getAdminProducts } from '../../service/adminProducts';
 import type { CollectionPayload } from '../../service/collection';
 import { resizeImageSource, slugify } from '../../utils/image';
 import { getBackendErrorMessage, getBackendSuccessMessage } from '../../utils/apiResponse';
 import { AdminErrorBanner } from '../../components/admin/AdminErrorBanner';
-import type { AdminCollection } from '../../types';
+import type { AdminCollection, AdminProduct } from '../../types';
 
 const EMPTY_FORM = {
   name: '',
@@ -22,6 +23,7 @@ const EMPTY_FORM = {
   description: '',
   imageUrl: '',
   imageAlt: '',
+  productIds: [] as string[],
   seoTitle: '',
   seoDescription: '',
   seoKeywords: '',
@@ -42,6 +44,8 @@ const imageOf = (col: AdminCollection): { url?: string; thumbnailUrl?: string; a
 export const AdminCollectionsPage: React.FC = () => {
   const { showToast } = useShop();
   const [collections, setCollections] = useState<AdminCollection[]>([]);
+  const [allProducts, setAllProducts] = useState<AdminProduct[]>([]);
+  const [productSearch, setProductSearch] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -70,8 +74,12 @@ export const AdminCollectionsPage: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const data = await getAdminCollections();
+      const [data, prods] = await Promise.all([
+        getAdminCollections(),
+        getAdminProducts().catch(() => []),
+      ]);
       setCollections(data);
+      setAllProducts(prods);
     } catch (err: any) {
       setError(err?.response?.data?.message || 'Failed to load collections');
     } finally {
@@ -84,7 +92,8 @@ export const AdminCollectionsPage: React.FC = () => {
   const handleOpenAdd = () => {
     setEditingId(null);
     setFormError(null);
-    setFormData({ ...EMPTY_FORM, sortOrder: collections.length });
+    setProductSearch('');
+    setFormData({ ...EMPTY_FORM, sortOrder: collections.length, productIds: [] });
     setSlugTouched(false);
     setShowSeo(false);
     setOriginalImage({});
@@ -93,14 +102,19 @@ export const AdminCollectionsPage: React.FC = () => {
 
   const handleOpenEdit = (col: AdminCollection) => {
     const image = imageOf(col);
+    const currentProductIds = Array.isArray(col.products)
+      ? col.products.map((p: any) => (typeof p === 'string' ? p : (p._id || p.id))).filter(Boolean)
+      : [];
     setEditingId(col.id);
     setFormError(null);
+    setProductSearch('');
     setFormData({
       name: col.name || '',
       slug: col.slug || '',
       description: col.description || '',
       imageUrl: image.url || '',
       imageAlt: image.alt || '',
+      productIds: currentProductIds,
       seoTitle: col.seo?.title || '',
       seoDescription: col.seo?.description || '',
       seoKeywords: Array.isArray(col.seo?.keywords) ? col.seo.keywords.join(', ') : '',
@@ -169,6 +183,7 @@ export const AdminCollectionsPage: React.FC = () => {
         slug: formData.slug.trim() || slugify(formData.name),
         ...(formData.description.trim() ? { description: formData.description.trim() } : {}),
         ...(formData.imageUrl.trim() ? { image: await buildImage() } : {}),
+        products: formData.productIds,
         ...(hasSeo
           ? {
               seo: {
@@ -202,6 +217,32 @@ export const AdminCollectionsPage: React.FC = () => {
       setIsSaving(false);
     }
   };
+
+  const toggleProductSelection = (productId: string) => {
+    setFormData(prev => {
+      const exists = prev.productIds.includes(productId);
+      const nextIds = exists
+        ? prev.productIds.filter(id => id !== productId)
+        : [...prev.productIds, productId];
+      return { ...prev, productIds: nextIds };
+    });
+  };
+
+  const filteredProducts = useMemo(() => {
+    const q = productSearch.trim().toLowerCase();
+    if (!q) return allProducts;
+    return allProducts.filter(p =>
+      (p.name || '').toLowerCase().includes(q) ||
+      (p.sku || '').toLowerCase().includes(q) ||
+      (p.brand || '').toLowerCase().includes(q) ||
+      (typeof p.category === 'string' ? p.category : p.category?.name || '').toLowerCase().includes(q)
+    );
+  }, [allProducts, productSearch]);
+
+  const selectedProducts = useMemo(() => {
+    const idSet = new Set(formData.productIds);
+    return allProducts.filter(p => idSet.has(p.id));
+  }, [allProducts, formData.productIds]);
 
   const filteredAndSorted = useMemo(() => {
     let list = [...collections];
@@ -361,6 +402,7 @@ export const AdminCollectionsPage: React.FC = () => {
                 <tr className="bg-stone-50 border-b border-stone-200 text-stone-500 uppercase tracking-wider text-[10px]">
                   <th className="p-4">Collection</th>
                   <th className="p-4">Slug</th>
+                  <th className="p-4 text-center">Products</th>
                   <th className="p-4 text-center">Order</th>
                   <th className="p-4">Status</th>
                   <th className="p-4 text-right">Actions</th>
@@ -370,6 +412,7 @@ export const AdminCollectionsPage: React.FC = () => {
                 {paginatedCollections.map(col => {
                   const image = imageOf(col);
                   const thumb = image.thumbnailUrl || image.url;
+                  const productCount = Array.isArray(col.products) ? col.products.length : 0;
                   return (
                     <tr key={col.id} className="hover:bg-stone-50/70 transition-colors">
                       <td className="p-4">
@@ -397,6 +440,11 @@ export const AdminCollectionsPage: React.FC = () => {
                         </div>
                       </td>
                       <td className="p-4 font-mono text-stone-500">{col.slug || '—'}</td>
+                      <td className="p-4 text-center font-mono text-stone-700">
+                        <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs bg-stone-100 text-stone-700 font-medium">
+                          {productCount}
+                        </span>
+                      </td>
                       <td className="p-4 text-center font-mono text-stone-700">{col.sortOrder ?? 0}</td>
                       <td className="p-4">
                         <StatusBadge status={col.status} size="sm" />
@@ -424,7 +472,7 @@ export const AdminCollectionsPage: React.FC = () => {
                 })}
                 {filteredAndSorted.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="p-8 text-center text-stone-500 space-y-2">
+                    <td colSpan={6} className="p-8 text-center text-stone-500 space-y-2">
                       <p>No collections match your search/filter.</p>
                       {(searchQuery || statusFilter !== 'ALL') && (
                         <button
@@ -517,12 +565,10 @@ export const AdminCollectionsPage: React.FC = () => {
                 label="Collection Image"
                 value={formData.imageUrl}
                 onChange={url => setFormData({ ...formData, imageUrl: url })}
-                aspectRatioLabel="Recommended: 1200×1500px (portrait) or 1920×800px (banner)"
+                aspectRatioLabel="Recommended: 1200×1500px (portrait) or 1920×800px (bannermad Ajv)"
                 helperText="A thumbnail is created automatically for uploaded images."
-                presets={[
-                  { label: 'Ethnic Anarkali', url: '/images/best-sellers/classic-cream-anarkali.jpeg' },
-                  { label: 'Modest Embroidered', url: '/images/best-sellers/aura-cream-embroidered.jpeg' },
-                ]}
+                showUrlTab={false}
+                showPresetsTab={false}
               />
               {formData.imageUrl && (
                 <div>
@@ -536,6 +582,132 @@ export const AdminCollectionsPage: React.FC = () => {
                   />
                 </div>
               )}
+
+              {/* Product Selection */}
+              <div className="space-y-2 border border-stone-200 rounded-xl p-3.5 bg-stone-50/40">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <label className="text-[10px] uppercase font-bold text-stone-600 tracking-wider">
+                      Select Products
+                    </label>
+                    <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-stone-200 text-stone-800">
+                      {formData.productIds.length} selected
+                    </span>
+                  </div>
+                  {formData.productIds.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setFormData(prev => ({ ...prev, productIds: [] }))}
+                      className="text-[11px] font-medium text-stone-500 hover:text-rose-600 transition-colors"
+                    >
+                      Clear all
+                    </button>
+                  )}
+                </div>
+
+                {/* Selected Products Chips */}
+                {selectedProducts.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto p-1.5 bg-white border border-stone-200 rounded-lg">
+                    {selectedProducts.map(p => {
+                      const img = p.images?.find(i => i.isPrimary)?.url || p.images?.[0]?.url;
+                      return (
+                        <span
+                          key={p.id}
+                          className="inline-flex items-center gap-1.5 px-2 py-1 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-md text-xs transition-colors"
+                        >
+                          {img ? (
+                            <img src={img} alt="" className="w-4 h-4 rounded object-cover" />
+                          ) : (
+                            <Package size={12} className="text-stone-400" />
+                          )}
+                          <span className="max-w-[130px] truncate font-medium">{p.name}</span>
+                          <button
+                            type="button"
+                            onClick={() => toggleProductSelection(p.id)}
+                            className="text-stone-400 hover:text-stone-700"
+                            title="Remove"
+                          >
+                            <X size={12} />
+                          </button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Search Input for Products */}
+                <div className="relative">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+                  <input
+                    type="text"
+                    value={productSearch}
+                    onChange={e => setProductSearch(e.target.value)}
+                    placeholder="Search products by name, SKU..."
+                    className="w-full pl-8 pr-8 py-2 bg-white border border-stone-200 rounded-xl text-xs focus:outline-none focus:border-stone-800"
+                  />
+                  {productSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setProductSearch('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600"
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
+
+                {/* Product List */}
+                <div className="max-h-52 overflow-y-auto border border-stone-200 rounded-xl bg-white divide-y divide-stone-100">
+                  {filteredProducts.length === 0 ? (
+                    <div className="p-4 text-center text-xs text-stone-400">
+                      {allProducts.length === 0 ? 'No products available.' : 'No products match search.'}
+                    </div>
+                  ) : (
+                    filteredProducts.map(p => {
+                      const isSelected = formData.productIds.includes(p.id);
+                      const img = p.images?.find(i => i.isPrimary)?.url || p.images?.[0]?.url;
+                      return (
+                        <div
+                          key={p.id}
+                          onClick={() => toggleProductSelection(p.id)}
+                          className={`flex items-center gap-3 p-2.5 cursor-pointer transition-colors text-xs ${
+                            isSelected ? 'bg-stone-50' : 'hover:bg-stone-50/60'
+                          }`}
+                        >
+                          <div
+                            className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+                              isSelected ? 'bg-stone-900 border-stone-900 text-white' : 'border-stone-300 bg-white'
+                            }`}
+                          >
+                            {isSelected && <Check size={11} strokeWidth={3} />}
+                          </div>
+
+                          {img ? (
+                            <img src={img} alt="" className="w-8 h-8 rounded-lg object-cover bg-stone-100 shrink-0" />
+                          ) : (
+                            <div className="w-8 h-8 rounded-lg bg-stone-100 flex items-center justify-center text-stone-400 shrink-0">
+                              <Package size={14} />
+                            </div>
+                          )}
+
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-stone-900 truncate">{p.name}</p>
+                            <p className="text-[11px] text-stone-400 truncate">
+                              SKU: {p.sku || '—'} {p.brand ? `• ${p.brand}` : ''}
+                            </p>
+                          </div>
+
+                          {p.pricing?.sellingPrice !== undefined && (
+                            <span className="font-mono text-[11px] text-stone-700 font-medium shrink-0">
+                              ${Number(p.pricing.sellingPrice).toFixed(2)}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
