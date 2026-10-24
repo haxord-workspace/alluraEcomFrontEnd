@@ -23,7 +23,7 @@ import { AbandonedCartBanner } from '../components/customer/AbandonedCartBanner'
 import { useAdmin } from '../context/AdminContext';
 import { useShop } from '../context/ShopContext';
 import { SEOHead } from '../components/common/SEOHead';
-import { getStoreCollections, getStoreCollectionPage, type StoreCollection } from '../service/store';
+import { getStoreCollectionPage, type StoreCollection } from '../service/store';
 import { mockFaqsData } from '../data/mockFaqs';
 import { useCategoryCarousel } from '../hooks/useCategoryCarousel';
 

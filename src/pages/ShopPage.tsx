@@ -365,7 +365,6 @@ export const ShopPage: React.FC = () => {
   }, [catParam, colParam, occParam, filterParam]);
 
   const categoryOptions = ['All', ...categories.map(c => c.name)];
-  const occasions = ['All', 'Bridal', 'Festive', 'Party Wear', 'Modest Wear', 'Ethnic'];
   const sizes = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
   const colors = [
     { name: 'Ivory', hex: '#EBE3D5' },
