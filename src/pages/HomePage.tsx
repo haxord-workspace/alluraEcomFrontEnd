@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { 
   ArrowRight, 
@@ -23,7 +23,7 @@ import { AbandonedCartBanner } from '../components/customer/AbandonedCartBanner'
 import { useAdmin } from '../context/AdminContext';
 import { useShop } from '../context/ShopContext';
 import { SEOHead } from '../components/common/SEOHead';
-import { getStoreCollections, type StoreCollection } from '../service/store';
+import { getStoreCollections, getStoreCollectionPage, type StoreCollection } from '../service/store';
 import { mockFaqsData } from '../data/mockFaqs';
 import { useCategoryCarousel } from '../hooks/useCategoryCarousel';
 
@@ -36,32 +36,48 @@ export const HomePage: React.FC = () => {
   const touchStartX = useRef<number | null>(null);
   const touchEndX = useRef<number | null>(null);
 
-  // Dynamic store collections fetched via API (/store/collections or Admin /collections)
-  const [storeCollections, setStoreCollections] = useState<StoreCollection[]>([]);
-  const [tile1Index, setTile1Index] = useState(0);
-  const [tile2Index, setTile2Index] = useState(1);
+  // Dynamic paginated collections for Tile 1 and Tile 2 (limit=1 per call)
+  const [tile1Collection, setTile1Collection] = useState<StoreCollection | null>(null);
+  const [tile2Collection, setTile2Collection] = useState<StoreCollection | null>(null);
+  const [tile1Page, setTile1Page] = useState<number>(1);
+  const [tile2Page, setTile2Page] = useState<number>(2);
+  const [totalCollectionPages, setTotalCollectionPages] = useState<number>(1);
 
   // Category carousel — infinite auto-scroll powered by hook
   const { trackRef: categoryTrackRef, scrollByCards: scrollCategory, pauseAutoScroll: pauseCatAuto, scheduleResume: scheduleCatResume } = useCategoryCarousel(categories.length);
 
-  useEffect(() => {
-    let isMounted = true;
-    const fetchCollections = async () => {
-      try {
-        const data = await getStoreCollections();
-        if (isMounted && Array.isArray(data) && data.length > 0) {
-          setStoreCollections(data);
-          if (data.length > 1) {
-            setTile2Index(1);
-          }
+  const fetchTile1Collection = useCallback(async (pageNum: number) => {
+    try {
+      const res = await getStoreCollectionPage(pageNum, 1);
+      if (res.collections && res.collections.length > 0) {
+        setTile1Collection(res.collections[0]);
+        if (res.meta?.totalPages) {
+          setTotalCollectionPages(res.meta.totalPages);
         }
-      } catch (err) {
-        console.warn('Failed to load store collections from API:', err);
       }
-    };
-    fetchCollections();
-    return () => { isMounted = false; };
+    } catch (err) {
+      console.warn('Failed to load tile 1 collection page:', err);
+    }
   }, []);
+
+  const fetchTile2Collection = useCallback(async (pageNum: number) => {
+    try {
+      const res = await getStoreCollectionPage(pageNum, 1);
+      if (res.collections && res.collections.length > 0) {
+        setTile2Collection(res.collections[0]);
+        if (res.meta?.totalPages) {
+          setTotalCollectionPages(res.meta.totalPages);
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to load tile 2 collection page:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchTile1Collection(1);
+    fetchTile2Collection(2);
+  }, [fetchTile1Collection, fetchTile2Collection]);
 
   // Helper to extract banner image from any field
   const getBannerImage = (b: any): string => {
@@ -151,42 +167,44 @@ export const HomePage: React.FC = () => {
     },
   ], []);
 
-  // Collections list strictly from API (/store/collections), with local fallback only if API has 0 items
-  const allCollections = useMemo(() => {
-    if (storeCollections && storeCollections.length > 0) {
-      return storeCollections.map((col, idx) => {
-        const rawImg = typeof col.image === 'string'
-          ? col.image
-          : (col.image?.url || col.image?.thumbnailUrl);
-
-        const colTitle = col.name?.toUpperCase() || 'COLLECTION';
-        const colDesc = col.description?.trim();
-
-        return {
-          id: col.id || `api-col-${idx}`,
-          badge: col.isFeatured ? 'FEATURED COLLECTION' : (idx % 2 === 0 ? 'FRESH DROPS' : 'SIGNATURE EDIT'),
-          title: colTitle,
-          subtitle: colDesc || (idx % 2 === 0
-            ? 'Fresh modest styles, handpicked for your celebratory wardrobe.'
-            : 'Curated modest couture designed in Kerala for discerning women worldwide.'),
-          image: rawImg || (idx % 2 === 0 ? '/images/editorial-banners/new-arrivals.jpeg' : '/images/editorial-banners/allura-collection.jpeg'),
-          ctaText: idx % 2 === 0 ? 'SHOP NOW' : 'EXPLORE',
-          targetUrl: col.slug ? `/collections/${col.slug}` : `/shop?category=${encodeURIComponent(col.name)}`,
-        };
-      });
+  // Helper to format a collection item for editorial display
+  const formatTileItem = useCallback((col: StoreCollection | null, fallbackIdx: number) => {
+    if (!col) {
+      return CURATED_COLLECTIONS[fallbackIdx % CURATED_COLLECTIONS.length];
     }
+    const rawImg = typeof col.image === 'string'
+      ? col.image
+      : (col.image?.url || col.image?.thumbnailUrl);
 
-    return CURATED_COLLECTIONS;
-  }, [storeCollections, CURATED_COLLECTIONS]);
+    const colTitle = col.name?.toUpperCase() || 'COLLECTION';
+    const colDesc = col.description?.trim();
 
-  // Independent navigation handlers for Tile 1 (cycles collections created in admin side)
+    return {
+      id: col.id || `api-col-${fallbackIdx}`,
+      badge: col.isFeatured ? 'FEATURED COLLECTION' : (fallbackIdx % 2 === 0 ? 'FRESH DROPS' : 'SIGNATURE EDIT'),
+      title: colTitle,
+      subtitle: colDesc || (fallbackIdx % 2 === 0
+        ? 'Fresh modest styles, handpicked for your celebratory wardrobe.'
+        : 'Curated modest couture designed in Kerala for discerning women worldwide.'),
+      image: rawImg || (fallbackIdx % 2 === 0 ? '/images/editorial-banners/new-arrivals.jpeg' : '/images/editorial-banners/allura-collection.jpeg'),
+      ctaText: fallbackIdx % 2 === 0 ? 'SHOP NOW' : 'EXPLORE',
+      targetUrl: col.slug ? `/collections/${col.slug}` : `/shop?category=${encodeURIComponent(col.name)}`,
+    };
+  }, [CURATED_COLLECTIONS]);
+
+  const tile1Item = useMemo(() => formatTileItem(tile1Collection, tile1Page - 1), [formatTileItem, tile1Collection, tile1Page]);
+  const tile2Item = useMemo(() => formatTileItem(tile2Collection, tile2Page - 1), [formatTileItem, tile2Collection, tile2Page]);
+
+  // Independent navigation handlers for Tile 1 (fetches next/prev page with limit=1)
   const handlePrevTile1 = (e?: React.MouseEvent | React.TouchEvent) => {
     if (e) {
       e.preventDefault?.();
       e.stopPropagation?.();
     }
-    if (allCollections.length <= 1) return;
-    setTile1Index(prev => (prev === 0 ? allCollections.length - 1 : prev - 1));
+    const maxPages = totalCollectionPages > 1 ? totalCollectionPages : CURATED_COLLECTIONS.length;
+    const prev = tile1Page <= 1 ? maxPages : tile1Page - 1;
+    setTile1Page(prev);
+    fetchTile1Collection(prev);
   };
 
   const handleNextTile1 = (e?: React.MouseEvent | React.TouchEvent) => {
@@ -194,18 +212,22 @@ export const HomePage: React.FC = () => {
       e.preventDefault?.();
       e.stopPropagation?.();
     }
-    if (allCollections.length <= 1) return;
-    setTile1Index(prev => (prev + 1) % allCollections.length);
+    const maxPages = totalCollectionPages > 1 ? totalCollectionPages : CURATED_COLLECTIONS.length;
+    const next = tile1Page >= maxPages ? 1 : tile1Page + 1;
+    setTile1Page(next);
+    fetchTile1Collection(next);
   };
 
-  // Independent navigation handlers for Tile 2 (cycles collections created in admin side)
+  // Independent navigation handlers for Tile 2 (fetches next/prev page with limit=1)
   const handlePrevTile2 = (e?: React.MouseEvent | React.TouchEvent) => {
     if (e) {
       e.preventDefault?.();
       e.stopPropagation?.();
     }
-    if (allCollections.length <= 1) return;
-    setTile2Index(prev => (prev === 0 ? allCollections.length - 1 : prev - 1));
+    const maxPages = totalCollectionPages > 1 ? totalCollectionPages : CURATED_COLLECTIONS.length;
+    const prev = tile2Page <= 1 ? maxPages : tile2Page - 1;
+    setTile2Page(prev);
+    fetchTile2Collection(prev);
   };
 
   const handleNextTile2 = (e?: React.MouseEvent | React.TouchEvent) => {
@@ -213,8 +235,10 @@ export const HomePage: React.FC = () => {
       e.preventDefault?.();
       e.stopPropagation?.();
     }
-    if (allCollections.length <= 1) return;
-    setTile2Index(prev => (prev + 1) % allCollections.length);
+    const maxPages = totalCollectionPages > 1 ? totalCollectionPages : CURATED_COLLECTIONS.length;
+    const next = tile2Page >= maxPages ? 1 : tile2Page + 1;
+    setTile2Page(next);
+    fetchTile2Collection(next);
   };
 
   // Dynamic slides populated strictly from active Admin Hero Banners (no dummy mock slides)
@@ -608,8 +632,7 @@ export const HomePage: React.FC = () => {
       <section className="max-w-7xl mx-auto px-6 lg:px-8">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8">
           {/* Tile 1 */}
-          {allCollections.length > 0 && (() => {
-            const tile1Item = allCollections[tile1Index % allCollections.length];
+          {tile1Item && (() => {
             return (
               <div className="relative group rounded-2xl sm:rounded-3xl overflow-hidden shadow-md border border-[#561C08]/15 bg-[#561C08] select-none">
                 <Link
@@ -683,8 +706,7 @@ export const HomePage: React.FC = () => {
           })()}
 
           {/* Tile 2 */}
-          {allCollections.length > 0 && (() => {
-            const tile2Item = allCollections[tile2Index % allCollections.length];
+          {tile2Item && (() => {
             return (
               <div className="relative group rounded-2xl sm:rounded-3xl overflow-hidden shadow-md border border-[#561C08]/15 bg-[#561C08] select-none">
                 <Link

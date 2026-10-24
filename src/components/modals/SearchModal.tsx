@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, X, Sparkles, ArrowRight, TrendingUp, Loader2 } from 'lucide-react';
+import { Search, X, ArrowRight, TrendingUp, Loader2, Layers } from 'lucide-react';
 import { useShop } from '../../context/ShopContext';
-import { searchProducts } from '../../service/store';
+import { searchProducts, getStoreCollections, type StoreCollection } from '../../service/store';
+import { collectionsData } from '../../data/collections';
 import type { Product } from '../../types';
 
 export const SearchModal: React.FC = () => {
@@ -10,8 +11,38 @@ export const SearchModal: React.FC = () => {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Product[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [storeCollections, setStoreCollections] = useState<StoreCollection[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    let active = true;
+    getStoreCollections()
+      .then(cols => {
+        if (active && Array.isArray(cols) && cols.length > 0) {
+          setStoreCollections(cols);
+        }
+      })
+      .catch(err => {
+        console.warn('Failed to load collections in SearchModal:', err);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const collectionList = useMemo(() => {
+    if (storeCollections && storeCollections.length > 0) {
+      return storeCollections.map(c => ({
+        name: c.name || (c as any).title || 'Collection',
+        to: c.slug ? `/collections/${c.slug}` : `/shop?collection=${encodeURIComponent(c.name)}`,
+      }));
+    }
+    return collectionsData.map(c => ({
+      name: c.title,
+      to: `/collections/${c.slug}`,
+    }));
+  }, [storeCollections]);
 
   const popularTags = [
     'Anarkali Sets',
@@ -145,16 +176,11 @@ export const SearchModal: React.FC = () => {
 
             <div>
               <div className="flex items-center gap-2 text-allura-goldDark text-xs font-sans font-bold tracking-[0.2em] uppercase mb-4">
-                <Sparkles size={15} />
-                <span>EXPLORE BY OCCASION</span>
+                <Layers size={15} />
+                <span>EXPLORE BY COLLECTION</span>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {[
-                  { name: 'Bridal Edit', to: '/collections/bridal-edit' },
-                  { name: 'Festive Wear', to: '/collections/festive-edit' },
-                  { name: 'Party Silhouettes', to: '/collections/party-wear' },
-                  { name: 'Modest Elegance', to: '/collections/modest-wear' },
-                ].map(item => (
+                {collectionList.map(item => (
                   <button
                     key={item.name}
                     onClick={() => {

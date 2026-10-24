@@ -8,9 +8,12 @@ import { ProductCardSkeleton } from '../components/ui/ProductCardSkeleton';
 import { BottomSheet } from '../components/modals/BottomSheet';
 import {
   searchProducts,
+  getStoreCollections,
   type ProductSearchParams,
   type ProductSearchPagination,
+  type StoreCollection,
 } from '../service/store';
+import { collectionsData } from '../data/collections';
 import type { Product } from '../types';
 
 type SortOptionValue = 'featured' | 'newest' | 'price_asc' | 'price_desc' | 'rating' | 'price-asc' | 'price-desc';
@@ -38,9 +41,11 @@ export const ShopPage: React.FC = () => {
   const filterParam = searchParams.get('filter');
   const catParam = searchParams.get('category');
   const occParam = searchParams.get('occasion');
+  const colParam = searchParams.get('collection');
   const qParam = searchParams.get('q') || searchParams.get('search');
 
   const [selectedCategory, setSelectedCategory] = useState<string>(catParam || 'All');
+  const [selectedCollection, setSelectedCollection] = useState<string>(colParam || 'All');
   const [selectedOccasion, setSelectedOccasion] = useState<string>(occParam || 'All');
   const [selectedSizes, setSelectedSizes] = useState<string[]>([]);
   const [selectedColors, setSelectedColors] = useState<string[]>([]);
@@ -51,6 +56,57 @@ export const ShopPage: React.FC = () => {
   );
   const [isSortDropdownOpen, setIsSortDropdownOpen] = useState(false);
   const sortDropdownRef = useRef<HTMLDivElement>(null);
+  const [storeCollections, setStoreCollections] = useState<StoreCollection[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    getStoreCollections()
+      .then(cols => {
+        if (active && Array.isArray(cols) && cols.length > 0) {
+          setStoreCollections(cols);
+        }
+      })
+      .catch(err => {
+        console.warn('Failed to load store collections for filter:', err);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const collectionOptions = useMemo(() => {
+    if (storeCollections && storeCollections.length > 0) {
+      return [
+        { id: 'all', name: 'All', slug: 'all' },
+        ...storeCollections.map(c => ({
+          id: c.id,
+          name: c.name || (c as any).title || 'Collection',
+          slug: c.slug || c.id,
+        })),
+      ];
+    }
+    return [
+      { id: 'all', name: 'All', slug: 'all' },
+      ...collectionsData.map(c => ({
+        id: c.id,
+        name: c.title,
+        slug: c.slug,
+      })),
+    ];
+  }, [storeCollections]);
+
+  const selectedCollectionId = useMemo(() => {
+    if (!selectedCollection || selectedCollection === 'All' || selectedCollection === 'all') {
+      return undefined;
+    }
+    const found = collectionOptions.find(
+      c =>
+        c.name.toLowerCase() === selectedCollection.toLowerCase() ||
+        c.id.toLowerCase() === selectedCollection.toLowerCase() ||
+        c.slug.toLowerCase() === selectedCollection.toLowerCase()
+    );
+    return found && found.id !== 'all' ? found.id : undefined;
+  }, [selectedCollection, collectionOptions]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -114,6 +170,10 @@ export const ShopPage: React.FC = () => {
       params.categoryId = selectedCategoryId;
     }
 
+    if (selectedCollectionId) {
+      params.collectionId = selectedCollectionId;
+    }
+
     if (qParam) {
       params.q = qParam;
     }
@@ -133,7 +193,7 @@ export const ShopPage: React.FC = () => {
     }
 
     return params;
-  }, [sortBy, selectedCategoryId, qParam, maxPrice, inStockOnly, filterParam]);
+  }, [sortBy, selectedCategoryId, selectedCollectionId, qParam, maxPrice, inStockOnly, filterParam]);
 
   // Initial batch load: page 1, limit 8 using backend search & sort
   const fetchInitialProducts = useCallback(async () => {
@@ -218,11 +278,13 @@ export const ShopPage: React.FC = () => {
     }
   }, [hasMore, isLoading, isLoadingMore, page, buildSearchParams, categoryMap]);
 
-  // Reset and fetch initial batch whenever category, search, or filters change
+  // Reset and fetch initial batch whenever category, collection, search, or filters change
   useEffect(() => {
     fetchInitialProducts();
   }, [
     fetchInitialProducts,
+    selectedCategory,
+    selectedCollection,
     selectedOccasion,
     selectedSizes,
     selectedColors,
@@ -297,9 +359,10 @@ export const ShopPage: React.FC = () => {
 
   useEffect(() => {
     if (catParam) setSelectedCategory(catParam);
+    if (colParam) setSelectedCollection(colParam);
     if (occParam) setSelectedOccasion(occParam);
     if (filterParam === 'new') setSortBy('newest');
-  }, [catParam, occParam, filterParam]);
+  }, [catParam, colParam, occParam, filterParam]);
 
   const categoryOptions = ['All', ...categories.map(c => c.name)];
   const occasions = ['All', 'Bridal', 'Festive', 'Party Wear', 'Modest Wear', 'Ethnic'];
@@ -328,6 +391,7 @@ export const ShopPage: React.FC = () => {
 
   const resetFilters = () => {
     setSelectedCategory('All');
+    setSelectedCollection('All');
     setSelectedOccasion('All');
     setSelectedSizes([]);
     setSelectedColors([]);
@@ -339,6 +403,7 @@ export const ShopPage: React.FC = () => {
 
   const hasActiveFilters =
     selectedCategory !== 'All' ||
+    (selectedCollection !== 'All' && selectedCollection !== 'all') ||
     selectedOccasion !== 'All' ||
     selectedSizes.length > 0 ||
     selectedColors.length > 0 ||
@@ -359,6 +424,15 @@ export const ShopPage: React.FC = () => {
         p => (p.category && p.category.toLowerCase() === selectedCategory.toLowerCase()) ||
              p.categoryId === selectedCategoryId
       );
+    }
+
+    if (selectedCollection !== 'All' && selectedCollection !== 'all' && selectedCollectionId) {
+      result = result.filter(p => {
+        if ((p as any).collectionId) {
+          return (p as any).collectionId === selectedCollectionId;
+        }
+        return true;
+      });
     }
 
     if (selectedOccasion !== 'All') {
@@ -388,6 +462,8 @@ export const ShopPage: React.FC = () => {
     productsList,
     selectedCategory,
     selectedCategoryId,
+    selectedCollection,
+    selectedCollectionId,
     selectedOccasion,
     selectedSizes,
     selectedColors,
@@ -514,26 +590,33 @@ export const ShopPage: React.FC = () => {
             )}
           </div>
 
-          {/* Occasion Filter */}
+          {/* Collection Filter */}
           <div className="space-y-3">
             <h4 className="text-xs font-sans font-bold tracking-[0.2em] text-allura-darkBrown uppercase">
-              OCCASION
+              COLLECTION
             </h4>
             <div className="space-y-1.5">
-              {occasions.map(occ => (
-                <button
-                  key={occ}
-                  onClick={() => setSelectedOccasion(occ)}
-                  className={`w-full text-left text-xs font-sans py-1 flex items-center justify-between transition-colors ${
-                    selectedOccasion === occ
-                      ? 'text-allura-goldDark font-semibold'
-                      : 'text-allura-muted hover:text-allura-text'
-                  }`}
-                >
-                  <span>{occ}</span>
-                  {selectedOccasion === occ && <Check size={12} className="text-allura-goldDark" />}
-                </button>
-              ))}
+              {collectionOptions.map(col => {
+                const isSelected =
+                  selectedCollection.toLowerCase() === col.name.toLowerCase() ||
+                  selectedCollection.toLowerCase() === col.id.toLowerCase() ||
+                  selectedCollection.toLowerCase() === col.slug.toLowerCase() ||
+                  (col.id === 'all' && (selectedCollection === 'All' || selectedCollection === 'all'));
+                return (
+                  <button
+                    key={col.id}
+                    onClick={() => setSelectedCollection(col.name)}
+                    className={`w-full text-left text-xs font-sans py-1 flex items-center justify-between transition-colors ${
+                      isSelected
+                        ? 'text-allura-goldDark font-semibold'
+                        : 'text-allura-muted hover:text-allura-text'
+                    }`}
+                  >
+                    <span>{col.name}</span>
+                    {isSelected && <Check size={12} className="text-allura-goldDark" />}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -824,22 +907,29 @@ export const ShopPage: React.FC = () => {
 
           <div>
             <h4 className="text-xs font-sans font-bold tracking-widest text-allura-darkBrown uppercase mb-3">
-              Occasion
+              Collection
             </h4>
             <div className="grid grid-cols-2 gap-2">
-              {occasions.map(occ => (
-                <button
-                  key={occ}
-                  onClick={() => setSelectedOccasion(occ)}
-                  className={`p-2 rounded text-xs font-sans text-left border ${
-                    selectedOccasion === occ
-                      ? 'bg-allura-darkBrown text-allura-card border-allura-darkBrown'
-                      : 'border-allura-border bg-allura-bg text-allura-text'
-                  }`}
-                >
-                  {occ}
-                </button>
-              ))}
+              {collectionOptions.map(col => {
+                const isSelected =
+                  selectedCollection.toLowerCase() === col.name.toLowerCase() ||
+                  selectedCollection.toLowerCase() === col.id.toLowerCase() ||
+                  selectedCollection.toLowerCase() === col.slug.toLowerCase() ||
+                  (col.id === 'all' && (selectedCollection === 'All' || selectedCollection === 'all'));
+                return (
+                  <button
+                    key={col.id}
+                    onClick={() => setSelectedCollection(col.name)}
+                    className={`p-2 rounded text-xs font-sans text-left border ${
+                      isSelected
+                        ? 'bg-allura-darkBrown text-allura-card border-allura-darkBrown'
+                        : 'border-allura-border bg-allura-bg text-allura-text'
+                    }`}
+                  >
+                    {col.name}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
