@@ -11,7 +11,7 @@ interface ProductCardProps {
   showCategory?: boolean;
 }
 
-export const ProductCard: React.FC<ProductCardProps> = ({ product, showCategory = false }) => {
+export const ProductCard: React.FC<ProductCardProps> = ({ product, showCategory = true }) => {
   const { toggleWishlist, isInWishlist, setQuickViewProduct, formatPrice } = useShop();
   const bag = useAddToBag();
   const [selectedColorIdx, setSelectedColorIdx] = useState(0);
@@ -40,12 +40,12 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, showCategory 
 
   return (
     <div
-      className="group relative flex flex-col select-none bg-[#FAF5ED] p-2.5 sm:p-3 rounded-2xl border border-[#561C08]/12 shadow-xs hover:border-[#561C08]/30 transition-all duration-300"
+      className="group relative flex flex-col select-none bg-white rounded-2xl overflow-hidden shadow-xs hover:shadow-md transition-all duration-300"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      {/* Image Container with Subtle Radius */}
-      <div className="relative aspect-[4/5] w-full overflow-hidden rounded-xl bg-[#F5F5F5]">
+      {/* Product Image: Full Width, Borderless, Restored 4:5 Aspect Ratio */}
+      <div className="relative aspect-[4/5] w-full overflow-hidden bg-stone-100">
         <Link to={`/product/${product.slug}`} className="block w-full h-full">
           {/* Primary Image */}
           <img
@@ -70,44 +70,44 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, showCategory 
           )}
         </Link>
 
-        {/* Badges */}
-        <div className="absolute top-2.5 left-2.5 flex flex-col gap-1 z-10 pointer-events-none">
+        {/* Badges (New / Bestseller) */}
+        <div className="absolute top-3 left-3 flex flex-col gap-1 z-10 pointer-events-none">
           {product.isNewArrival && (
-            <span className="bg-[#561C08] text-white text-[9px] font-heading font-bold tracking-[0.2em] uppercase px-2.5 py-0.5 rounded-full shadow-xs">
+            <span className="bg-[#561C08] text-white text-[9px] font-sans font-bold tracking-[0.2em] uppercase px-2.5 py-0.5 rounded-full shadow-xs">
               NEW
             </span>
           )}
           {product.isBestSeller && !product.isNewArrival && (
-            <span className="bg-[#000000] text-white text-[9px] font-heading font-bold tracking-[0.2em] uppercase px-2.5 py-0.5 rounded-full shadow-xs">
+            <span className="bg-stone-900 text-white text-[9px] font-sans font-bold tracking-[0.2em] uppercase px-2.5 py-0.5 rounded-full shadow-xs">
               BESTSELLER
             </span>
           )}
         </div>
 
-        {/* Wishlist Button */}
+        {/* Wishlist Button: Clean White Circular Disc */}
         <button
+          type="button"
           onClick={handleWishlist}
-          className={`absolute top-2.5 right-2.5 z-10 p-2 rounded-full transition-all duration-200 ${
-            inWishlist
-              ? 'bg-white text-[#561C08] shadow-sm'
-              : 'bg-white/90 hover:bg-white text-[#000000] hover:text-[#561C08] shadow-xs backdrop-blur-sm'
-          }`}
+          className="absolute top-3 right-3 z-10 w-8 h-8 rounded-full bg-white flex items-center justify-center shadow-sm hover:scale-105 active:scale-95 transition-all duration-200"
           aria-label={inWishlist ? 'Remove from wishlist' : 'Add to wishlist'}
         >
           <Heart
             size={16}
             strokeWidth={1.8}
-            className={`transition-transform duration-200 ${
-              inWishlist ? 'fill-[#561C08] text-[#561C08] scale-110' : 'hover:scale-110'
+            className={`transition-all duration-200 ${
+              inWishlist
+                ? 'fill-[#561C08] text-[#561C08] scale-110'
+                : 'text-stone-800 hover:text-[#561C08]'
             }`}
           />
         </button>
 
-        {/* Quick view (desktop hover) */}
-        <div className="hidden lg:flex absolute right-2.5 bottom-2.5 z-10 opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300">
+        {/* Quick View (Desktop Hover) */}
+        <div className="hidden lg:flex absolute right-3 bottom-3 z-10 opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300">
           <button
+            type="button"
             onClick={handleQuickView}
-            className="bg-white hover:bg-[#F7E6C8] text-[#561C08] p-2.5 rounded-full shadow-sm border border-[#561C08]/15 transition-all"
+            className="bg-white/95 hover:bg-white text-[#561C08] p-2 rounded-full shadow-md border border-[#561C08]/10 hover:scale-105 transition-all"
             title="Quick view details"
             aria-label="Quick view"
           >
@@ -116,59 +116,69 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, showCategory 
         </div>
       </div>
 
-      {/* Product Information */}
-      <div className="pt-3 pb-1 flex flex-col">
-        {showCategory && (
-          <span className="text-[10px] font-heading font-bold text-[#561C08] uppercase tracking-widest mb-0.5">
-            {product.category}
-          </span>
-        )}
+      {/* Product Information Section: Clean White, Compact Hierarchy */}
+      <div className="px-3.5 pt-2.5 pb-3 bg-white flex flex-col justify-between flex-1">
+        <div>
+          {/* Category / Collection Label */}
+          {(showCategory || product.category) && product.category && (
+            <span className="text-[10px] sm:text-[11px] font-sans font-bold uppercase tracking-[0.14em] text-[#8C3A27] block mb-0.5">
+              {product.category}
+            </span>
+          )}
 
-        <Link
-          to={`/product/${product.slug}`}
-          className="font-heading text-sm sm:text-base font-semibold text-[#000000] hover:text-[#561C08] transition-colors line-clamp-1"
-        >
-          {product.name}
-        </Link>
+          {/* Product Name */}
+          <Link
+            to={`/product/${product.slug}`}
+            className="font-serif text-sm sm:text-[15px] font-normal sm:font-medium text-stone-900 leading-snug line-clamp-1 hover:text-[#561C08] transition-colors block mb-1"
+          >
+            {product.name}
+          </Link>
+        </div>
 
-        {/* Price + Add to Bag (always visible, phone and desktop) */}
-        <div className="flex items-center justify-between gap-2 mt-1">
-          <div className="flex items-baseline gap-2 min-w-0 flex-wrap">
-            <span className="font-heading text-sm sm:text-base font-bold text-[#561C08]">
+        {/* Price & Cart Action Row */}
+        <div className="flex items-center justify-between gap-2 mt-auto pt-0.5">
+          <div className="flex items-baseline gap-1.5 flex-wrap min-w-0">
+            {/* Current Selling Price */}
+            <span className="font-serif text-sm sm:text-base font-bold text-stone-900">
               {formatPrice(product.price)}
             </span>
-            {product.originalPrice && (
-              <span className="font-body text-xs text-[#000000]/40 line-through">
+
+            {/* Original Price (Strikethrough) */}
+            {product.originalPrice && product.originalPrice > product.price && (
+              <span className="font-serif text-xs text-stone-400 line-through">
                 {formatPrice(product.originalPrice)}
               </span>
             )}
           </div>
+
+          {/* Shopping-Bag / Quick Add Button */}
           <button
             type="button"
             onClick={handleQuickAdd}
             disabled={bag.isAdding}
-            className={`flex-shrink-0 w-9 h-9 rounded-full text-white shadow-sm flex items-center justify-center ${addToBagButtonState(bag.state)} ${
+            className={`flex-shrink-0 w-8 h-8 sm:w-9 sm:h-9 rounded-full text-white shadow-xs flex items-center justify-center transition-colors focus:outline-none focus:ring-2 focus:ring-[#561C08]/40 focus:ring-offset-1 ${addToBagButtonState(bag.state)} ${
               bag.justAdded ? 'bg-emerald-700' : 'bg-[#561C08] hover:bg-[#3D1406]'
             }`}
             title="Add to Bag"
             aria-label={bag.isAdding ? 'Adding to Bag' : bag.justAdded ? 'Added to Bag' : `Add ${product.name} to Bag`}
           >
             {bag.isAdding ? (
-              <Loader2 size={16} className="animate-spin" />
+              <Loader2 size={15} className="animate-spin" />
             ) : bag.justAdded ? (
-              <Check size={16} className="animate-[pop_0.3s_ease-out]" />
+              <Check size={15} className="animate-[pop_0.3s_ease-out]" />
             ) : (
-              <ShoppingBag size={16} strokeWidth={1.9} />
+              <ShoppingBag size={15} strokeWidth={1.9} />
             )}
           </button>
         </div>
 
-        {/* Color Swatches */}
-        {product.colors && product.colors.length > 0 && (
-          <div className="flex items-center gap-1.5 mt-2">
+        {/* Color Swatches (if multiple colors are available) */}
+        {product.colors && product.colors.length > 1 && (
+          <div className="flex items-center gap-1.5 mt-2.5 pt-1.5 border-t border-stone-100">
             {product.colors.map((color, idx) => (
               <button
                 key={color.name}
+                type="button"
                 onClick={e => {
                   e.preventDefault();
                   setSelectedColorIdx(idx);
@@ -176,7 +186,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, showCategory 
                 className={`w-3 h-3 rounded-full border transition-all ${
                   selectedColorIdx === idx
                     ? 'border-[#561C08] scale-125 ring-1 ring-[#561C08]'
-                    : 'border-[#561C08]/20 hover:scale-110'
+                    : 'border-stone-300 hover:scale-110'
                 }`}
                 style={{ backgroundColor: color.hex }}
                 title={color.name}

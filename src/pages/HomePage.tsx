@@ -415,43 +415,20 @@ export const HomePage: React.FC = () => {
             );
           })}
 
-          {/* Carousel Controls: Elegant side arrows and bottom-center slide dots (preventing overlap with floating buttons) */}
+          {/* Carousel Controls: Bottom-center slide dots */}
           {heroSlides.length > 1 && (
-            <>
-              {/* Previous Slide Button */}
-              <button
-                onClick={() =>
-                  setCurrentSlide(prev => (prev === 0 ? heroSlides.length - 1 : prev - 1))
-                }
-                className="absolute left-3 sm:left-6 top-1/2 -translate-y-1/2 z-20 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white/80 hover:bg-white text-[#561C08] border border-white/60 backdrop-blur-md hidden sm:flex items-center justify-center transition-all shadow-lg hover:scale-110 active:scale-95"
-                aria-label="Previous Slide"
-              >
-                <ChevronLeft size={20} />
-              </button>
-
-              {/* Next Slide Button */}
-              <button
-                onClick={() => setCurrentSlide(prev => (prev + 1) % heroSlides.length)}
-                className="absolute right-3 sm:right-6 top-1/2 -translate-y-1/2 z-20 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white/80 hover:bg-white text-[#561C08] border border-white/60 backdrop-blur-md hidden sm:flex items-center justify-center transition-all shadow-lg hover:scale-110 active:scale-95"
-                aria-label="Next Slide"
-              >
-                <ChevronRight size={20} />
-              </button>
-
-              {/* Center Pagination Dots */}
-              <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 bg-stone-900/40 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/20">
-                {heroSlides.map((_, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => setCurrentSlide(idx)}
-                    className={`h-2 rounded-full transition-all duration-300 ${
-                      currentSlide === idx ? 'w-6 bg-[#F7E6C8]' : 'w-2 bg-white/50 hover:bg-white'
-                    }`}
-                    aria-label={`Go to slide ${idx + 1}`}
-                  />
-                ))}
-              </div>
-            </>
+            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 bg-stone-900/40 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/20">
+              {heroSlides.map((_, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => setCurrentSlide(idx)}
+                  className={`h-2 rounded-full transition-all duration-300 ${
+                    currentSlide === idx ? 'w-6 bg-[#F7E6C8]' : 'w-2 bg-white/50 hover:bg-white'
+                  }`}
+                  aria-label={`Go to slide ${idx + 1}`}
+                />
+              ))}
+            </div>
           )}
         </section>
       ) : (
