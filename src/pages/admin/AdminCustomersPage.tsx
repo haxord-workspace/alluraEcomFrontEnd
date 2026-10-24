@@ -59,7 +59,7 @@ export const AdminCustomersPage: React.FC = () => {
             <span className="text-[10px] font-bold uppercase">Total Patrons</span>
             <Users size={14} />
           </div>
-          <p className="font-serif text-2xl font-bold text-stone-900">{totalPatrons}</p>
+          <p className="font-serif text-2xl font-bold text-[#561C08]">{totalPatrons}</p>
           <p className="text-[11px] text-stone-500 font-sans">Active in boutique CRM</p>
         </div>
         <div className="bg-white border border-stone-200 rounded-2xl p-4 shadow-xs space-y-1">
@@ -87,7 +87,7 @@ export const AdminCustomersPage: React.FC = () => {
             <span className="text-[10px] font-bold uppercase">First-Time Buyers</span>
             <ShoppingBag size={14} />
           </div>
-          <p className="font-serif text-2xl font-bold text-stone-900">
+          <p className="font-serif text-2xl font-bold text-[#561C08]">
             {analytics?.customerOrderFrequency.singleOrderCount ?? 0}
           </p>
           <p className="text-[11px] text-stone-500 font-sans">1 Atelier purchase</p>
@@ -127,7 +127,7 @@ export const AdminCustomersPage: React.FC = () => {
                     <p className="font-medium text-stone-800">{cust.phone}</p>
                     <p className="text-[10px] text-stone-400">{cust.email}</p>
                   </td>
-                  <td className="p-4 font-mono font-bold text-stone-900">{cust.ordersCount || 1} orders</td>
+                  <td className="p-4 font-mono font-bold text-[#561C08]">{cust.ordersCount || 1} orders</td>
                   <td className="p-4 font-serif text-sm font-bold text-allura-darkBrown">
                     ₹ {(cust.totalSpent || 8999).toLocaleString('en-IN')}
                   </td>
@@ -155,7 +155,7 @@ export const AdminCustomersPage: React.FC = () => {
                       </a>
                       <Link
                         to={`/admin/customers/${cust.id}`}
-                        className="px-3 py-1.5 bg-stone-900 hover:bg-stone-800 text-white rounded-lg text-xs font-bold uppercase tracking-wider inline-flex items-center gap-1"
+                        className="px-3 py-1.5 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-lg text-xs font-bold uppercase tracking-wider inline-flex items-center gap-1"
                       >
                         <Eye size={12} />
                         <span>Profile</span>

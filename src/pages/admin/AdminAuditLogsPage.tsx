@@ -164,7 +164,7 @@ export const AdminAuditLogsPage: React.FC = () => {
           </div>
           <div>
             <p className="text-xs text-primary-600 font-medium uppercase tracking-wider">Total Recorded Events</p>
-            <p className="font-serif text-2xl text-primary-950 font-bold">
+            <p className="font-serif text-2xl text-[#561C08] font-bold">
               {serverActivity?.pagination.total ?? combinedLogs.length}
             </p>
           </div>

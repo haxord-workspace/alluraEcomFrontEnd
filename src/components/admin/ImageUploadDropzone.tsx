@@ -16,6 +16,7 @@ interface ImageUploadDropzoneProps {
   helperText?: string;
   showUrlTab?: boolean;
   showPresetsTab?: boolean;
+  className?: string;
 }
 
 export const ImageUploadDropzone: React.FC<ImageUploadDropzoneProps> = ({

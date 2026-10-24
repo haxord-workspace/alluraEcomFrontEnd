@@ -55,7 +55,7 @@ export const AdminReservationsPage: React.FC = () => {
                     <p className="font-semibold text-stone-800">{res.orderNumber}</p>
                     <p className="text-[10px] text-stone-400">{res.customerName}</p>
                   </td>
-                  <td className="p-4 font-mono font-bold text-stone-900">{res.quantity} unit</td>
+                  <td className="p-4 font-mono font-bold text-[#561C08]">{res.quantity} unit</td>
                   <td className="p-4 text-stone-500">{res.created}</td>
                   <td className="p-4 text-stone-500">{res.expires}</td>
                   <td className="p-4 text-right">

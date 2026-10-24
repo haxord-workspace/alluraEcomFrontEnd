@@ -515,7 +515,7 @@ export const AdminOrderDetailPage: React.FC = () => {
                   </div>
                   <div className="text-right text-xs font-sans">
                     <p className="text-stone-500">{inr(item.unitPrice)} × {item.quantity}</p>
-                    <p className="font-bold text-stone-900 text-sm">{inr(item.unitPrice * item.quantity)}</p>
+                    <p className="font-bold text-[#561C08] text-sm">{inr(item.unitPrice * item.quantity)}</p>
                   </div>
                 </div>
               ))}
@@ -530,7 +530,7 @@ export const AdminOrderDetailPage: React.FC = () => {
                 {[...history].reverse().map((act, i) => (
                   <li key={i} className="ml-5">
                     <span
-                      className={`absolute -left-[7px] w-3 h-3 rounded-full border-2 border-white ${i === 0 ? 'bg-stone-900' : 'bg-stone-300'}`}
+                      className={`absolute -left-[7px] w-3 h-3 rounded-full border-2 border-white ${i === 0 ? 'bg-[#561C08]' : 'bg-stone-300'}`}
                       aria-hidden="true"
                     />
                     <div className="flex flex-wrap items-baseline justify-between gap-x-3">

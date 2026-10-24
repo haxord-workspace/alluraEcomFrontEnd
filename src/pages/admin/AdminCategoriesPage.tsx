@@ -156,7 +156,7 @@ export const AdminCategoriesPage: React.FC = () => {
 
         <button
           onClick={handleOpenAdd}
-          className="px-4 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-xl text-xs font-sans font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 shadow-sm"
+          className="px-4 py-2 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-xl text-xs font-sans font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 shadow-sm"
         >
           <Plus size={14} />
           <span>Add Category</span>
@@ -338,7 +338,7 @@ export const AdminCategoriesPage: React.FC = () => {
                 <button
                   type="submit"
                   disabled={isSaving}
-                  className="px-5 py-2 bg-stone-900 hover:bg-stone-800 disabled:opacity-50 text-white rounded-xl font-bold uppercase tracking-wider flex items-center justify-center gap-2 shadow-sm"
+                  className="px-5 py-2 bg-[#561C08] hover:bg-[#561C08]/90 disabled:opacity-50 text-white rounded-xl font-bold uppercase tracking-wider flex items-center justify-center gap-2 shadow-sm"
                 >
                   {isSaving && <Loader2 size={14} className="animate-spin" />}
                   <span>{isSaving ? 'Saving...' : 'Save Category'}</span>

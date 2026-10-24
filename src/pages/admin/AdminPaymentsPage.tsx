@@ -53,11 +53,11 @@ export const AdminPaymentsPage: React.FC = () => {
         </div>
         <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-xs space-y-1">
           <span className="text-[10px] font-sans font-bold uppercase text-stone-400">UPI Success Rate</span>
-          <p className="font-serif text-2xl font-bold text-stone-900">98.4%</p>
+          <p className="font-serif text-2xl font-bold text-[#561C08]">98.4%</p>
         </div>
         <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-xs space-y-1">
           <span className="text-[10px] font-sans font-bold uppercase text-stone-400">Settlement Cycle</span>
-          <p className="font-serif text-2xl font-bold text-stone-900">T + 1 Days</p>
+          <p className="font-serif text-2xl font-bold text-[#561C08]">T + 1 Days</p>
         </div>
         <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-xs space-y-1">
           <span className="text-[10px] font-sans font-bold uppercase text-stone-400">Environment</span>
@@ -106,7 +106,7 @@ export const AdminPaymentsPage: React.FC = () => {
                     <p className="text-[10px] text-stone-400">{pay.customerEmail}</p>
                   </td>
                   <td className="p-4 font-semibold text-stone-700">{pay.method}</td>
-                  <td className="p-4 font-bold text-stone-900">₹ {pay.amount.toLocaleString('en-IN')}</td>
+                  <td className="p-4 font-bold text-[#561C08]">₹ {pay.amount.toLocaleString('en-IN')}</td>
                   <td className="p-4 font-mono text-[10px] text-stone-500">{pay.reference}</td>
                   <td className="p-4 text-right">
                     <StatusBadge status={pay.status} size="sm" />

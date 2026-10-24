@@ -96,7 +96,7 @@ export const AdminAnalyticsPage: React.FC = () => {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-xs space-y-1">
               <span className="text-[10px] font-bold uppercase text-stone-400">Gross Sales</span>
-              <p className="font-serif text-2xl font-bold text-stone-900">₹ {totalSales.toLocaleString('en-IN')}</p>
+              <p className="font-serif text-2xl font-bold text-[#561C08]">₹ {totalSales.toLocaleString('en-IN')}</p>
             </div>
             <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-xs space-y-1">
               <span className="text-[10px] font-bold uppercase text-stone-400">Net Revenue</span>
@@ -108,7 +108,7 @@ export const AdminAnalyticsPage: React.FC = () => {
             </div>
             <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-xs space-y-1">
               <span className="text-[10px] font-bold uppercase text-stone-400">Paid Orders Count</span>
-              <p className="font-serif text-2xl font-bold text-stone-900">{paidOrdersCount}</p>
+              <p className="font-serif text-2xl font-bold text-[#561C08]">{paidOrdersCount}</p>
             </div>
           </div>
 
@@ -136,8 +136,8 @@ export const AdminAnalyticsPage: React.FC = () => {
                     ? salesData.topProducts.map((p, idx) => (
                         <tr key={idx} className="hover:bg-stone-50/70 transition-colors">
                           <td className="p-4 font-serif text-sm font-medium text-stone-900">{p.name}</td>
-                          <td className="p-4 font-bold text-stone-900">{p.unitsSold} units</td>
-                          <td className="p-4 text-right font-serif font-bold text-stone-900 text-sm">
+                          <td className="p-4 font-bold text-[#561C08]">{p.unitsSold} units</td>
+                          <td className="p-4 text-right font-serif font-bold text-[#561C08] text-sm">
                             ₹ {p.totalRevenue.toLocaleString('en-IN')}
                           </td>
                         </tr>
@@ -145,8 +145,8 @@ export const AdminAnalyticsPage: React.FC = () => {
                     : mockTopProducts.map((p, idx) => (
                         <tr key={idx} className="hover:bg-stone-50/70 transition-colors">
                           <td className="p-4 font-serif text-sm font-medium text-stone-900">{p.name}</td>
-                          <td className="p-4 font-bold text-stone-900">{p.salesCount} units</td>
-                          <td className="p-4 text-right font-serif font-bold text-stone-900 text-sm">
+                          <td className="p-4 font-bold text-[#561C08]">{p.salesCount} units</td>
+                          <td className="p-4 text-right font-serif font-bold text-[#561C08] text-sm">
                             ₹ {p.revenue.toLocaleString('en-IN')}
                           </td>
                         </tr>
@@ -164,7 +164,7 @@ export const AdminAnalyticsPage: React.FC = () => {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-xs space-y-1">
               <span className="text-[10px] font-bold uppercase text-stone-400">Meta CAPI Total</span>
-              <p className="font-serif text-2xl font-bold text-stone-900">
+              <p className="font-serif text-2xl font-bold text-[#561C08]">
                 {trackingData?.metaEvents.total ?? 0}
               </p>
             </div>
@@ -210,7 +210,7 @@ export const AdminAnalyticsPage: React.FC = () => {
               ].map(item => (
                 <div key={item.event} className="p-4 bg-stone-50 rounded-xl border border-stone-100 space-y-1">
                   <span className="text-[10px] font-mono font-bold uppercase text-stone-400">{item.event}</span>
-                  <p className="font-serif text-xl font-bold text-stone-900">{item.count.toLocaleString()}</p>
+                  <p className="font-serif text-xl font-bold text-[#561C08]">{item.count.toLocaleString()}</p>
                   <p className="text-[11px] text-stone-500">{item.label}</p>
                 </div>
               ))}
@@ -235,14 +235,14 @@ export const AdminAnalyticsPage: React.FC = () => {
                 <div className="flex justify-between items-center text-sm">
                   <span className="font-bold text-stone-900 font-serif text-base">{stg.stage}</span>
                   <div className="flex items-center gap-3">
-                    <span className="font-mono font-bold text-stone-800">{stg.count.toLocaleString()} Users</span>
+                    <span className="font-mono font-bold text-[#561C08]">{stg.count.toLocaleString()} Users</span>
                     <span className="text-stone-400 text-xs font-normal font-sans">({stg.percentage}%)</span>
                   </div>
                 </div>
 
                 <div className="w-full bg-stone-200 h-3 rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-stone-900 rounded-full transition-all duration-700"
+                    className="h-full bg-[#561C08] rounded-full transition-all duration-700"
                     style={{ width: `${stg.percentage}%` }}
                   />
                 </div>

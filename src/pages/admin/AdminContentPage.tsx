@@ -78,7 +78,7 @@ export const AdminContentPage: React.FC = () => {
 
             <button
               onClick={handleSave}
-              className="px-5 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-xl font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 shadow-sm"
+              className="px-5 py-2 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-xl font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 shadow-sm"
             >
               <Save size={13} />
               <span>Save Page</span>

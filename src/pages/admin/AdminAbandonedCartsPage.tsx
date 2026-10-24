@@ -306,14 +306,14 @@ export const AdminAbandonedCartsPage: React.FC = () => {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-xs space-y-1">
           <span className="text-[10px] font-sans font-bold uppercase text-stone-400">Abandoned Carts</span>
-          <p className="font-serif text-2xl font-bold text-stone-900">
+          <p className="font-serif text-2xl font-bold text-[#561C08]">
             {marketingAnalytics?.abandonedCarts.total ?? total}
           </p>
           <p className="text-[10px] text-stone-400">Total left bags</p>
         </div>
         <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-xs space-y-1">
           <span className="text-[10px] font-sans font-bold uppercase text-stone-400">Value at Risk</span>
-          <p className="font-serif text-2xl font-bold text-stone-900">{inr(valueAtRisk)}</p>
+          <p className="font-serif text-2xl font-bold text-[#561C08]">{inr(valueAtRisk)}</p>
           <p className="text-[10px] text-stone-400">{marketingAnalytics?.abandonedCarts.pending ?? openCarts.length} pending recovery</p>
         </div>
         <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-xs space-y-1">
@@ -344,7 +344,7 @@ export const AdminAbandonedCartsPage: React.FC = () => {
               setPage(1);
             }}
             className={`px-3.5 py-1.5 rounded-full text-xs font-sans font-semibold whitespace-nowrap transition-colors ${
-              statusFilter === f.value ? 'bg-stone-900 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+              statusFilter === f.value ? 'bg-[#561C08] text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
             }`}
           >
             {f.label}
@@ -412,7 +412,7 @@ export const AdminAbandonedCartsPage: React.FC = () => {
                           </div>
                         </div>
                       </td>
-                      <td className="p-4 font-bold text-stone-900">{inr(cart.cartValue)}</td>
+                      <td className="p-4 font-bold text-[#561C08]">{inr(cart.cartValue)}</td>
                       <td className="p-4 text-stone-500" title={formatDateTime(cart.lastActivityAt)}>
                         {timeAgo(cart.lastActivityAt || cart.abandonedAt)}
                       </td>

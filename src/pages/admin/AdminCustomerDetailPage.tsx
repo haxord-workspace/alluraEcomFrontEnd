@@ -68,7 +68,7 @@ export const AdminCustomerDetailPage: React.FC = () => {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-xs space-y-1">
           <span className="text-[10px] font-sans font-bold uppercase text-stone-400">Total Lifetime Spend</span>
-          <p className="font-serif text-2xl font-bold text-stone-900">
+          <p className="font-serif text-2xl font-bold text-[#561C08]">
             ₹ {(customer.totalSpent || 22497).toLocaleString('en-IN')}
           </p>
         </div>
@@ -108,7 +108,7 @@ export const AdminCustomerDetailPage: React.FC = () => {
                   <div>
                     <p className="font-serif text-base font-medium text-stone-900">{order.orderNumber}</p>
                     <p className="text-stone-500">{order.date} • {order.items.length} items</p>
-                    <p className="font-bold text-stone-900">₹ {order.total.toLocaleString('en-IN')}</p>
+                    <p className="font-bold text-[#561C08]">₹ {order.total.toLocaleString('en-IN')}</p>
                   </div>
                 </div>
 
