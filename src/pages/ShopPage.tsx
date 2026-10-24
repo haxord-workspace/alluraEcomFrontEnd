@@ -70,7 +70,7 @@ export const ShopPage: React.FC = () => {
   // Paginated products state (Infinite scroll batches of 8)
   const [productsList, setProductsList] = useState<Product[]>([]);
   const [page, setPage] = useState<number>(1);
-  const [meta, setMeta] = useState<ProductSearchPagination>({
+  const [, setMeta] = useState<ProductSearchPagination>({
     total: 0,
     page: 1,
     limit: 8,

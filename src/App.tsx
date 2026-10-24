@@ -18,7 +18,7 @@ import { SearchModal } from './components/modals/SearchModal';
 import { QuickViewModal } from './components/modals/QuickViewModal';
 import { ToastContainer } from './components/common/ToastContainer';
 import { ProtectedRoute } from './components/common/ProtectedRoute';
-import { AlluraAIAssistant } from './components/customer/AlluraAIAssistant';
+// import { AlluraAIAssistant } from './components/customer/AlluraAIAssistant';
 
 // Storefront Core Pages
 import { HomePage } from './pages/HomePage';
