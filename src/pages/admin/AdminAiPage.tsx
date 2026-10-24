@@ -79,7 +79,7 @@ export const AdminAiPage: React.FC = () => {
 
           <button
             onClick={() => setIsAddArticleOpen(true)}
-            className="px-4 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-xl text-xs font-sans font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 shadow-sm"
+            className="px-4 py-2 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-xl text-xs font-sans font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 shadow-sm"
           >
             <Plus size={14} />
             <span>Add Knowledge Doc</span>
@@ -118,7 +118,7 @@ export const AdminAiPage: React.FC = () => {
             <span className="text-[10px] font-sans font-bold uppercase">PROCESSING / WAITING</span>
             <Clock size={14} />
           </div>
-          <p className="font-serif text-xl font-bold text-stone-900">
+          <p className="font-serif text-xl font-bold text-[#561C08]">
             {(aiDashboard?.queue.active ?? 0) + (aiDashboard?.queue.waiting ?? 0)}
           </p>
           <p className="text-[11px] text-stone-500 font-sans">
@@ -252,7 +252,7 @@ export const AdminAiPage: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-stone-900 text-white rounded-xl font-bold uppercase"
+                  className="px-5 py-2 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-xl font-bold uppercase"
                 >
                   Save Knowledge
                 </button>

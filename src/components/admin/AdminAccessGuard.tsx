@@ -89,7 +89,7 @@ export const AdminAccessGuard: React.FC<AdminAccessGuardProps> = ({
         <div className="flex items-center justify-center gap-3">
           <Link
             to="/admin/dashboard"
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-stone-900 text-white text-xs font-sans font-semibold hover:bg-stone-800 transition-colors shadow-xs"
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#561C08] text-white text-xs font-sans font-semibold hover:bg-[#561C08]/90 transition-colors shadow-xs"
           >
             <ArrowLeft size={14} />
             <span>Return to Dashboard</span>

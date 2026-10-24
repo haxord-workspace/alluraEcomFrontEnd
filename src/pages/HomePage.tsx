@@ -25,6 +25,7 @@ import { useShop } from '../context/ShopContext';
 import { SEOHead } from '../components/common/SEOHead';
 import { getStoreCollections, type StoreCollection } from '../service/store';
 import { mockFaqsData } from '../data/mockFaqs';
+import { useCategoryCarousel } from '../hooks/useCategoryCarousel';
 
 export const HomePage: React.FC = () => {
   const navigate = useNavigate();
@@ -40,41 +41,8 @@ export const HomePage: React.FC = () => {
   const [tile1Index, setTile1Index] = useState(0);
   const [tile2Index, setTile2Index] = useState(1);
 
-  // Category carousel scroll ref and state
-  const categoryScrollRef = useRef<HTMLDivElement>(null);
-  const [canScrollLeftCat, setCanScrollLeftCat] = useState(false);
-  const [canScrollRightCat, setCanScrollRightCat] = useState(true);
-
-  const checkCategoryScroll = () => {
-    if (categoryScrollRef.current) {
-      const { scrollLeft, scrollWidth, clientWidth } = categoryScrollRef.current;
-      setCanScrollLeftCat(scrollLeft > 10);
-      setCanScrollRightCat(scrollLeft < scrollWidth - clientWidth - 10);
-    }
-  };
-
-  const scrollCategory = (direction: 'left' | 'right') => {
-    if (categoryScrollRef.current) {
-      const scrollAmount = categoryScrollRef.current.clientWidth * 0.75;
-      categoryScrollRef.current.scrollBy({
-        left: direction === 'left' ? -scrollAmount : scrollAmount,
-        behavior: 'smooth',
-      });
-    }
-  };
-
-  useEffect(() => {
-    const el = categoryScrollRef.current;
-    if (el) {
-      el.addEventListener('scroll', checkCategoryScroll, { passive: true });
-      checkCategoryScroll();
-      const timeout = setTimeout(checkCategoryScroll, 300);
-      return () => {
-        el.removeEventListener('scroll', checkCategoryScroll);
-        clearTimeout(timeout);
-      };
-    }
-  }, [categories]);
+  // Category carousel — infinite auto-scroll powered by hook
+  const { trackRef: categoryTrackRef, scrollByCards: scrollCategory, pauseAutoScroll: pauseCatAuto, scheduleResume: scheduleCatResume } = useCategoryCarousel(categories.length);
 
   useEffect(() => {
     let isMounted = true;
@@ -498,9 +466,9 @@ export const HomePage: React.FC = () => {
             </h2>
             <div className="h-4 w-28 bg-[#561C08]/10 rounded animate-pulse" />
           </div>
-          <div className="flex items-start gap-4 sm:gap-6 overflow-hidden py-2">
+          <div className="flex items-start gap-3 sm:gap-6 overflow-hidden py-2">
             {[...Array(5)].map((_, idx) => (
-              <div key={idx} className="flex-shrink-0 w-[170px] sm:w-[200px] md:w-[225px] lg:w-[235px]">
+              <div key={idx} className="flex-shrink-0 w-[calc((100vw_-_4.5rem)_/_3)] sm:w-[200px] md:w-[225px] lg:w-[235px]">
                 <CategoryCardSkeleton count={1} />
               </div>
             ))}
@@ -517,27 +485,17 @@ export const HomePage: React.FC = () => {
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => scrollCategory('left')}
-                  disabled={!canScrollLeftCat}
+                  onClick={() => { scrollCategory('left'); }}
                   aria-label="Previous categories"
-                  className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center border transition-all duration-300 ${
-                    canScrollLeftCat
-                      ? 'border-[#561C08]/30 text-[#561C08] hover:bg-[#561C08] hover:text-white shadow-xs cursor-pointer hover:scale-105 active:scale-95'
-                      : 'border-[#561C08]/10 text-[#561C08]/30 cursor-not-allowed opacity-40'
-                  }`}
+                  className="w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center border transition-all duration-300 border-[#561C08]/30 text-[#561C08] hover:bg-[#561C08] hover:text-white shadow-xs cursor-pointer hover:scale-105 active:scale-95"
                 >
                   <ChevronLeft size={16} />
                 </button>
                 <button
                   type="button"
-                  onClick={() => scrollCategory('right')}
-                  disabled={!canScrollRightCat}
+                  onClick={() => { scrollCategory('right'); }}
                   aria-label="Next categories"
-                  className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center border transition-all duration-300 ${
-                    canScrollRightCat
-                      ? 'border-[#561C08]/30 text-[#561C08] hover:bg-[#561C08] hover:text-white shadow-xs cursor-pointer hover:scale-105 active:scale-95'
-                      : 'border-[#561C08]/10 text-[#561C08]/30 cursor-not-allowed opacity-40'
-                  }`}
+                  className="w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center border transition-all duration-300 border-[#561C08]/30 text-[#561C08] hover:bg-[#561C08] hover:text-white shadow-xs cursor-pointer hover:scale-105 active:scale-95"
                 >
                   <ChevronRight size={16} />
                 </button>
@@ -553,43 +511,43 @@ export const HomePage: React.FC = () => {
             </div>
           </div>
 
-          <div className="relative group/cattrack">
+          <div className="relative group/cattrack overflow-hidden">
             {/* Left Edge Floating Arrow (desktop hover) */}
-            {canScrollLeftCat && (
-              <button
-                type="button"
-                onClick={() => scrollCategory('left')}
-                aria-label="Scroll left"
-                className="hidden md:flex absolute -left-4 top-1/2 -translate-y-1/2 z-20 w-11 h-11 rounded-full bg-white/95 text-[#561C08] border border-[#561C08]/20 shadow-xl backdrop-blur-md items-center justify-center hover:bg-[#561C08] hover:text-white transition-all duration-300 opacity-0 group-hover/cattrack:opacity-100 hover:scale-110 active:scale-95"
-              >
-                <ChevronLeft size={20} />
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => { scrollCategory('left'); }}
+              aria-label="Scroll left"
+              className="hidden md:flex absolute -left-0 top-1/2 -translate-y-1/2 z-20 w-11 h-11 rounded-full bg-white/95 text-[#561C08] border border-[#561C08]/20 shadow-xl backdrop-blur-md items-center justify-center hover:bg-[#561C08] hover:text-white transition-all duration-300 opacity-0 group-hover/cattrack:opacity-100 hover:scale-110 active:scale-95"
+            >
+              <ChevronLeft size={20} />
+            </button>
 
             {/* Right Edge Floating Arrow (desktop hover) */}
-            {canScrollRightCat && (
-              <button
-                type="button"
-                onClick={() => scrollCategory('right')}
-                aria-label="Scroll right"
-                className="hidden md:flex absolute -right-4 top-1/2 -translate-y-1/2 z-20 w-11 h-11 rounded-full bg-white/95 text-[#561C08] border border-[#561C08]/20 shadow-xl backdrop-blur-md items-center justify-center hover:bg-[#561C08] hover:text-white transition-all duration-300 opacity-0 group-hover/cattrack:opacity-100 hover:scale-110 active:scale-95"
-              >
-                <ChevronRight size={20} />
-              </button>
-            )}
-
-            <div
-              ref={categoryScrollRef}
-              className="flex items-start gap-4 sm:gap-6 overflow-x-auto scroll-smooth snap-x snap-mandatory py-2 px-1 no-scrollbar"
-              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+            <button
+              type="button"
+              onClick={() => { scrollCategory('right'); }}
+              aria-label="Scroll right"
+              className="hidden md:flex absolute -right-0 top-1/2 -translate-y-1/2 z-20 w-11 h-11 rounded-full bg-white/95 text-[#561C08] border border-[#561C08]/20 shadow-xl backdrop-blur-md items-center justify-center hover:bg-[#561C08] hover:text-white transition-all duration-300 opacity-0 group-hover/cattrack:opacity-100 hover:scale-110 active:scale-95"
             >
-              {categories.map(cat => {
+              <ChevronRight size={20} />
+            </button>
+
+            {/* Infinite-scroll track: items are duplicated for seamless looping */}
+            <div
+              ref={categoryTrackRef}
+              className="flex items-start gap-3 sm:gap-6 py-2 will-change-transform"
+              style={{ width: 'max-content' }}
+              onMouseEnter={pauseCatAuto}
+              onMouseLeave={scheduleCatResume}
+            >
+              {/* Render categories twice for seamless infinite loop */}
+              {[...categories, ...categories].map((cat, idx) => {
                 const imageUrl = typeof cat.image === 'string' ? cat.image : cat.image?.url;
                 return (
                   <Link
-                    key={cat.id}
+                    key={`${cat.id}-${idx}`}
                     to={`/shop?category=${encodeURIComponent(cat.name)}`}
-                    className="flex-shrink-0 w-[170px] sm:w-[200px] md:w-[225px] lg:w-[235px] snap-start group flex flex-col items-center text-center focus:outline-none select-none transition-transform duration-300 hover:-translate-y-1"
+                    className="flex-shrink-0 w-[calc((100vw_-_4.5rem)_/_3)] sm:w-[200px] md:w-[225px] lg:w-[235px] group flex flex-col items-center text-center focus:outline-none select-none transition-transform duration-300 hover:-translate-y-1"
                   >
                     {/* Arched Portal Image Frame */}
                     <div className="relative w-full aspect-[9/14] sm:aspect-[3/4.8] rounded-t-full rounded-b-2xl sm:rounded-b-3xl overflow-hidden border border-[#561C08]/10 bg-[#561C08]/5 shadow-xs transition-all duration-500 group-hover:shadow-lg group-hover:border-[#561C08]/30">

@@ -45,7 +45,7 @@ export const AdminPromotionsPage: React.FC = () => {
 
         <button
           onClick={() => setIsCreateOpen(true)}
-          className="px-4 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-xl text-xs font-sans font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 shadow-sm"
+          className="px-4 py-2 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-xl text-xs font-sans font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 shadow-sm"
         >
           <Plus size={14} />
           <span>New Promotion</span>
@@ -70,7 +70,7 @@ export const AdminPromotionsPage: React.FC = () => {
               <p className="text-stone-600 leading-relaxed">{p.conditions}</p>
               <div className="pt-2">
                 <span className="text-[10px] uppercase font-bold text-stone-400">Campaign Benefit</span>
-                <p className="font-serif text-lg font-bold text-stone-900">{p.discount}</p>
+                <p className="font-serif text-lg font-bold text-[#561C08]">{p.discount}</p>
               </div>
             </div>
 
@@ -134,7 +134,7 @@ export const AdminPromotionsPage: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-stone-900 text-white rounded-xl font-bold uppercase"
+                  className="px-5 py-2 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-xl font-bold uppercase"
                 >
                   Save
                 </button>

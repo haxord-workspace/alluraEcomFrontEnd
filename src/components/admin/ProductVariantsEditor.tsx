@@ -530,7 +530,7 @@ export const ProductVariantsEditor: React.FC<ProductVariantsEditorProps> = ({
                   onClick={() => setPickedColors(toggle(pickedColors, c.name))}
                   className={`flex items-center gap-1.5 pl-1.5 pr-2.5 py-1 rounded-full border text-[11px] transition-all ${
                     active
-                      ? 'border-stone-900 bg-stone-900 text-white font-semibold shadow-xs'
+                      ? 'border-[#561C08] bg-[#561C08] text-white font-semibold shadow-xs'
                       : 'border-stone-200 bg-white text-stone-700 hover:border-stone-400'
                   }`}
                 >
@@ -551,7 +551,7 @@ export const ProductVariantsEditor: React.FC<ProductVariantsEditorProps> = ({
                   key={p}
                   type="button"
                   onClick={() => setPickedColors(toggle(pickedColors, p))}
-                  className="flex items-center gap-1.5 pl-1.5 pr-2.5 py-1 rounded-full border border-stone-900 bg-stone-900 text-white text-[11px] font-semibold"
+                  className="flex items-center gap-1.5 pl-1.5 pr-2.5 py-1 rounded-full border border-[#561C08] bg-[#561C08] text-white text-[11px] font-semibold"
                   title="Remove custom colour"
                 >
                   <Swatch name={p} size={14} />
@@ -591,7 +591,7 @@ export const ProductVariantsEditor: React.FC<ProductVariantsEditorProps> = ({
                   type="button"
                   onClick={() => setPickedSizes(toggle(pickedSizes, s))}
                   className={`min-w-[42px] px-3 py-1 rounded-lg border text-xs font-semibold transition-all ${
-                    active ? 'bg-stone-900 border-stone-900 text-white shadow-xs' : 'bg-white border-stone-200 text-stone-700 hover:border-stone-400'
+                    active ? 'bg-[#561C08] border-[#561C08] text-white shadow-xs' : 'bg-white border-stone-200 text-stone-700 hover:border-stone-400'
                   }`}
                 >
                   {s}
@@ -617,7 +617,7 @@ export const ProductVariantsEditor: React.FC<ProductVariantsEditorProps> = ({
           type="button"
           onClick={addCombos}
           disabled={newCombos.length === 0}
-          className="w-full py-2.5 rounded-lg bg-stone-900 hover:bg-stone-800 text-white text-xs font-bold uppercase tracking-wider disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 transition-colors shadow-2xs"
+          className="w-full py-2.5 rounded-lg bg-[#561C08] hover:bg-[#561C08]/90 text-white text-xs font-bold uppercase tracking-wider disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 transition-colors shadow-2xs"
         >
           <Plus size={14} />
           {newCombos.length === 0

@@ -230,7 +230,7 @@ export const AdminVariantsPage: React.FC = () => {
 
           <button
             onClick={handleOpenAdd}
-            className="px-4 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-xl text-xs font-sans font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 shadow-sm"
+            className="px-4 py-2 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-xl text-xs font-sans font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 shadow-sm"
           >
             <Plus size={14} />
             <span>New Variant</span>
@@ -296,7 +296,7 @@ export const AdminVariantsPage: React.FC = () => {
                         {v.barcode?.value ? `${v.barcode.value} (${v.barcode.type})` : '—'}
                       </td>
                       <td className="p-4">
-                        <p className="font-bold text-stone-900">
+                        <p className="font-bold text-[#561C08]">
                           {v.pricing?.currency} {v.pricing?.sellingPrice?.toLocaleString()}
                         </p>
                         <p className="text-[10px] text-stone-400 line-through">
@@ -505,7 +505,7 @@ export const AdminVariantsPage: React.FC = () => {
                 <button
                   type="submit"
                   disabled={isSaving}
-                  className="px-5 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-xl font-bold uppercase tracking-wider disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm"
+                  className="px-5 py-2 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-xl font-bold uppercase tracking-wider disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm"
                 >
                   {isSaving && <Loader2 size={14} className="animate-spin" />}
                   <span>{isSaving ? 'Saving...' : 'Save Variant'}</span>

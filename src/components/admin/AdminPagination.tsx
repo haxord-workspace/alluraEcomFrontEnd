@@ -85,7 +85,7 @@ export const AdminPagination: React.FC<AdminPaginationProps> = ({
                 onClick={() => onPageChange(pageNum)}
                 className={`w-8 h-8 rounded-lg text-xs font-semibold transition-all ${
                   isCurrent
-                    ? 'bg-stone-900 text-white shadow-xs'
+                    ? 'bg-[#561C08] text-white shadow-xs'
                     : 'bg-white hover:bg-stone-100 text-stone-700 border border-stone-200 shadow-xs'
                 }`}
               >

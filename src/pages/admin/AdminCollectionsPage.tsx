@@ -314,7 +314,7 @@ export const AdminCollectionsPage: React.FC = () => {
 
           <button
             onClick={handleOpenAdd}
-            className="px-4 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-xl text-xs font-sans font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 shadow-sm"
+            className="px-4 py-2 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-xl text-xs font-sans font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 shadow-sm"
           >
             <Plus size={14} />
             <span>New Collection</span>
@@ -676,7 +676,7 @@ export const AdminCollectionsPage: React.FC = () => {
                         >
                           <div
                             className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
-                              isSelected ? 'bg-stone-900 border-stone-900 text-white' : 'border-stone-300 bg-white'
+                              isSelected ? 'bg-[#561C08] border-[#561C08] text-white' : 'border-stone-300 bg-white'
                             }`}
                           >
                             {isSelected && <Check size={11} strokeWidth={3} />}
@@ -809,7 +809,7 @@ export const AdminCollectionsPage: React.FC = () => {
                 <button
                   type="submit"
                   disabled={isSaving}
-                  className="px-5 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-xl font-bold uppercase tracking-wider disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm"
+                  className="px-5 py-2 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-xl font-bold uppercase tracking-wider disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm"
                 >
                   {isSaving && <Loader2 size={14} className="animate-spin" />}
                   <span>{isSaving ? 'Saving...' : 'Save Collection'}</span>

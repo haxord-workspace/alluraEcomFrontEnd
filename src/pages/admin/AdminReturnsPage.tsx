@@ -46,7 +46,7 @@ export const AdminReturnsPage: React.FC = () => {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-xs space-y-1">
           <span className="text-[10px] font-sans font-bold uppercase text-stone-400">Total Requests</span>
-          <p className="font-serif text-2xl font-bold text-stone-900">{returns.length}</p>
+          <p className="font-serif text-2xl font-bold text-[#561C08]">{returns.length}</p>
         </div>
         <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-xs space-y-1">
           <span className="text-[10px] font-sans font-bold uppercase text-amber-700">Pending Review</span>
@@ -62,7 +62,7 @@ export const AdminReturnsPage: React.FC = () => {
         </div>
         <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-xs space-y-1">
           <span className="text-[10px] font-sans font-bold uppercase text-stone-400">Return Window</span>
-          <p className="font-serif text-2xl font-bold text-stone-900">7 Days</p>
+          <p className="font-serif text-2xl font-bold text-[#561C08]">7 Days</p>
         </div>
       </div>
 
@@ -149,7 +149,7 @@ export const AdminReturnsPage: React.FC = () => {
                             setSelectedReturnForAction(ret);
                             setActionType('pickup');
                           }}
-                          className="px-3 py-1 bg-stone-900 hover:bg-stone-800 text-white rounded-lg text-[11px] font-bold uppercase flex items-center gap-1"
+                          className="px-3 py-1 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-lg text-[11px] font-bold uppercase flex items-center gap-1"
                         >
                           <Truck size={12} />
                           <span>Schedule Reverse Pickup</span>
@@ -221,7 +221,7 @@ export const AdminReturnsPage: React.FC = () => {
               <button
                 type="button"
                 onClick={handleExecuteAction}
-                className="px-5 py-2 bg-stone-900 text-white rounded-xl font-bold uppercase tracking-wider"
+                className="px-5 py-2 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-xl font-bold uppercase tracking-wider"
               >
                 Confirm Delhivery Pickup
               </button>

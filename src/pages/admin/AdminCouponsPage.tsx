@@ -233,7 +233,7 @@ export const AdminCouponsPage: React.FC = () => {
           {canCreate && (
             <button
               onClick={openCreate}
-              className="px-4 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-xl text-xs font-sans font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 shadow-sm"
+              className="px-4 py-2 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-xl text-xs font-sans font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 shadow-sm"
             >
               <Plus size={14} />
               <span>Create Coupon</span>
@@ -296,7 +296,7 @@ export const AdminCouponsPage: React.FC = () => {
                         <p className="text-[11px] text-stone-500 line-clamp-1">{coupon.description}</p>
                       )}
                     </td>
-                    <td className="p-4 font-bold text-stone-900">{benefitLabel(coupon)}</td>
+                    <td className="p-4 font-bold text-[#561C08]">{benefitLabel(coupon)}</td>
                     <td className="p-4 font-semibold text-stone-700">
                       {coupon.minOrderValue > 0 ? `₹ ${coupon.minOrderValue.toLocaleString('en-IN')}` : '—'}
                     </td>
@@ -520,7 +520,7 @@ export const AdminCouponsPage: React.FC = () => {
                 <button
                   type="submit"
                   disabled={isSaving}
-                  className="px-6 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-xl font-bold uppercase tracking-wider shadow-sm disabled:opacity-50 flex items-center gap-2"
+                  className="px-6 py-2 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-xl font-bold uppercase tracking-wider shadow-sm disabled:opacity-50 flex items-center gap-2"
                 >
                   {isSaving && <Loader2 size={13} className="animate-spin" />}
                   {editingId ? 'Save Changes' : form.status === 'ACTIVE' ? 'Publish Coupon' : 'Save Draft'}

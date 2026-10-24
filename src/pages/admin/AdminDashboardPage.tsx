@@ -150,7 +150,7 @@ export const AdminDashboardPage: React.FC = () => {
 
           <Link
             to="/admin/products/new"
-            className="px-4 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-xl text-xs font-sans font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 shadow-sm"
+            className="px-4 py-2 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-xl text-xs font-sans font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 shadow-sm"
           >
             <Plus size={14} />
             <span className="hidden sm:inline">Add Product</span>
@@ -172,7 +172,7 @@ export const AdminDashboardPage: React.FC = () => {
               <ArrowUpRight size={14} />
             </div>
           </div>
-          <p className="font-serif text-2xl sm:text-3xl font-bold text-stone-900">
+          <p className="font-serif text-2xl sm:text-3xl font-bold text-[#561C08]">
             ₹ {(overviewData?.sales.grossSales ?? mockOverview.revenue).toLocaleString('en-IN')}
           </p>
           <p className="text-[11px] font-sans text-stone-400">
@@ -192,7 +192,7 @@ export const AdminDashboardPage: React.FC = () => {
               <ArrowUpRight size={14} />
             </div>
           </div>
-          <p className="font-serif text-2xl sm:text-3xl font-bold text-stone-900">
+          <p className="font-serif text-2xl sm:text-3xl font-bold text-[#561C08]">
             {overviewData?.orders.totalOrders ?? (totalOrders || mockOverview.orders)}
           </p>
           <p className="text-[11px] font-sans text-amber-700 font-medium">
@@ -212,7 +212,7 @@ export const AdminDashboardPage: React.FC = () => {
               <ArrowUpRight size={14} />
             </div>
           </div>
-          <p className="font-serif text-2xl sm:text-3xl font-bold text-stone-900">
+          <p className="font-serif text-2xl sm:text-3xl font-bold text-[#561C08]">
             {overviewData?.customers.totalCustomers ?? mockOverview.customers}
           </p>
           <p className="text-[11px] font-sans text-stone-400">
@@ -231,7 +231,7 @@ export const AdminDashboardPage: React.FC = () => {
               {overviewData?.catalog.totalVariants ?? products.length} Variants
             </span>
           </div>
-          <p className="font-serif text-2xl sm:text-3xl font-bold text-stone-900">
+          <p className="font-serif text-2xl sm:text-3xl font-bold text-[#561C08]">
             {overviewData?.catalog.totalProducts ?? products.length}
           </p>
           <p className="text-[11px] font-sans text-rose-700 font-medium">
@@ -276,7 +276,7 @@ export const AdminDashboardPage: React.FC = () => {
                       ₹{Math.round(day.revenue / 1000)}k
                     </div>
                     <div
-                      className="w-full max-w-[40px] bg-stone-900 group-hover:bg-allura-gold transition-colors rounded-t-lg"
+                      className="w-full max-w-[40px] bg-[#561C08] group-hover:bg-allura-gold transition-colors rounded-t-lg"
                       style={{ height: `${heightPct}%` }}
                     />
                     <span className="text-[10px] font-sans text-stone-500 truncate max-w-[48px]">{day.label}</span>
@@ -304,11 +304,11 @@ export const AdminDashboardPage: React.FC = () => {
               <div key={i} className="space-y-1 text-xs font-sans">
                 <div className="flex justify-between text-stone-700">
                   <span className="font-medium">{stg.stage}</span>
-                  <span className="font-mono font-bold text-stone-900">{stg.count.toLocaleString()}</span>
+                  <span className="font-mono font-bold text-[#561C08]">{stg.count.toLocaleString()}</span>
                 </div>
                 <div className="w-full bg-stone-100 h-2 rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-stone-800 rounded-full"
+                    className="h-full bg-[#561C08] rounded-full"
                     style={{ width: `${stg.percentage}%` }}
                   />
                 </div>
@@ -372,7 +372,7 @@ export const AdminDashboardPage: React.FC = () => {
                       <p className="font-medium text-stone-800">{order.customer.name}</p>
                       <p className="text-[10px] text-stone-400">{order.shippingAddress.city}</p>
                     </td>
-                    <td className="py-3 font-bold text-stone-900">
+                    <td className="py-3 font-bold text-[#561C08]">
                       ₹ {order.total.toLocaleString('en-IN')}
                     </td>
                     <td className="py-3">

@@ -92,7 +92,7 @@ export const AdminNotificationsPage: React.FC = () => {
             <span className="text-[10px] font-sans font-bold uppercase">IN FLIGHT / WAITING</span>
             <Clock size={14} />
           </div>
-          <p className="font-serif text-2xl font-bold text-stone-900">
+          <p className="font-serif text-2xl font-bold text-[#561C08]">
             {(queueMetrics?.counts.waiting ?? 0) + (queueMetrics?.counts.active ?? 0)}
           </p>
           <p className="text-[11px] text-stone-500 font-sans">
@@ -159,7 +159,7 @@ export const AdminNotificationsPage: React.FC = () => {
                   key={ch}
                   onClick={() => setChannel(ch)}
                   className={`px-3 py-1 rounded-lg text-xs font-semibold ${
-                    channel === ch ? 'bg-stone-900 text-white' : 'bg-stone-100 text-stone-600'
+                    channel === ch ? 'bg-[#561C08] text-white' : 'bg-stone-100 text-stone-600'
                   }`}
                 >
                   {ch}
@@ -208,7 +208,7 @@ export const AdminNotificationsPage: React.FC = () => {
             <div className="flex justify-end gap-3 pt-2">
               <button
                 type="submit"
-                className="px-6 py-2.5 bg-stone-900 hover:bg-stone-800 text-white rounded-xl font-bold uppercase tracking-wider transition-colors shadow-sm flex items-center gap-2"
+                className="px-6 py-2.5 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-xl font-bold uppercase tracking-wider transition-colors shadow-sm flex items-center gap-2"
               >
                 <Send size={13} />
                 <span>Test Broadcast</span>

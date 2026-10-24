@@ -740,7 +740,7 @@ export const AdminBannersPage: React.FC = () => {
           {hasPermission('marketing', 'create') && (
             <button
               onClick={handleOpenCreate}
-              className="px-4 py-2.5 bg-stone-900 hover:bg-stone-800 text-white rounded-xl text-xs font-sans font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 shadow-sm"
+              className="px-4 py-2.5 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-xl text-xs font-sans font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 shadow-sm"
             >
               <Plus size={14} />
               <span>Create Slide / Banner</span>
@@ -760,7 +760,7 @@ export const AdminBannersPage: React.FC = () => {
           }`}
         >
           <span className="text-[10px] uppercase font-bold text-stone-400">Total Banners</span>
-          <p className="font-serif text-2xl font-bold text-stone-900 mt-0.5">{stats.total}</p>
+          <p className="font-serif text-2xl font-bold text-[#561C08] mt-0.5">{stats.total}</p>
           <p className="text-[11px] text-stone-500 mt-0.5 flex items-center gap-1">
             <Layers size={11} /> All campaign areas
           </p>
@@ -820,7 +820,7 @@ export const AdminBannersPage: React.FC = () => {
             onClick={() => setPlacementFilter('All')}
             className={`px-3 py-1.5 rounded-xl font-medium transition-all whitespace-nowrap ${
               placementFilter === 'All'
-                ? 'bg-stone-900 text-white font-bold shadow-xs'
+                ? 'bg-[#561C08] text-white font-bold shadow-xs'
                 : 'bg-stone-100 text-stone-600 hover:bg-stone-200/70 border border-stone-200'
             }`}
           >
@@ -836,7 +836,7 @@ export const AdminBannersPage: React.FC = () => {
                 onClick={() => setPlacementFilter(opt.value)}
                 className={`px-3 py-1.5 rounded-xl font-medium transition-all whitespace-nowrap flex items-center gap-1 ${
                   placementFilter === opt.value
-                    ? 'bg-stone-900 text-white font-bold shadow-xs'
+                    ? 'bg-[#561C08] text-white font-bold shadow-xs'
                     : 'bg-stone-100 text-stone-600 hover:bg-stone-200/70 border border-stone-200'
                 }`}
               >
@@ -1803,7 +1803,7 @@ export const AdminBannersPage: React.FC = () => {
                     type="submit"
                     form="banner-form"
                     disabled={isSaving}
-                    className="px-6 py-2.5 bg-stone-900 hover:bg-stone-800 text-white rounded-xl font-bold uppercase tracking-wider shadow-sm transition-colors flex items-center gap-2 disabled:opacity-50"
+                    className="px-6 py-2.5 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-xl font-bold uppercase tracking-wider shadow-sm transition-colors flex items-center gap-2 disabled:opacity-50"
                   >
                     {isSaving && <Loader2 size={13} className="animate-spin" />}
                     <span>{editingBanner ? 'Update Banner' : 'Publish Banner'}</span>
@@ -1888,7 +1888,7 @@ export const AdminBannersPage: React.FC = () => {
                 type="button"
                 onClick={handleConfirmSchedule}
                 disabled={isScheduling || !scheduleStartAt}
-                className="px-5 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-xl font-bold uppercase tracking-wider flex items-center gap-1.5 disabled:opacity-50"
+                className="px-5 py-2 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-xl font-bold uppercase tracking-wider flex items-center gap-1.5 disabled:opacity-50"
               >
                 {isScheduling && <Loader2 size={13} className="animate-spin" />}
                 <span>Confirm Schedule</span>

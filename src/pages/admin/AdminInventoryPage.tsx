@@ -217,7 +217,7 @@ export const AdminInventoryPage: React.FC = () => {
     {
       label: 'Units On Hand',
       value: inventoryAnalytics?.stockMovementSummary.totalOnHand ?? totalUnits,
-      tone: 'text-stone-900',
+      tone: 'text-[#561C08]',
     },
     {
       label: 'Reserved (Orders)',
@@ -280,7 +280,7 @@ export const AdminInventoryPage: React.FC = () => {
             <button
               onClick={() => openModal(null, 'Add')}
               disabled={rows.length === 0}
-              className="px-4 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-xl text-xs font-sans font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 shadow-xs disabled:opacity-50"
+              className="px-4 py-2 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-xl text-xs font-sans font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 shadow-xs disabled:opacity-50"
             >
               <PackagePlus size={15} />
               <span>Add Stock</span>
@@ -439,9 +439,9 @@ export const AdminInventoryPage: React.FC = () => {
                         </div>
                       </td>
                       <td className="p-4 font-mono font-semibold text-stone-700">{record.sku || '—'}</td>
-                      <td className="p-4 text-center font-mono font-bold text-stone-800 text-sm">{untracked ? '—' : record.quantityOnHand}</td>
+                      <td className="p-4 text-center font-mono font-bold text-[#561C08] text-sm">{untracked ? '—' : record.quantityOnHand}</td>
                       <td className="p-4 text-center font-mono text-amber-700 font-semibold">{untracked ? '—' : record.quantityReserved}</td>
-                      <td className="p-4 text-center font-mono font-bold text-stone-900 text-sm">{untracked ? '—' : record.quantityAvailable}</td>
+                      <td className="p-4 text-center font-mono font-bold text-[#561C08] text-sm">{untracked ? '—' : record.quantityAvailable}</td>
                       <td className="p-4">
                         <span
                           className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold uppercase whitespace-nowrap ${
@@ -463,7 +463,7 @@ export const AdminInventoryPage: React.FC = () => {
                             <div className="flex justify-end">
                               <button
                                 onClick={() => openModal(record, 'Add')}
-                                className="px-3.5 py-1.5 bg-stone-900 hover:bg-stone-800 text-white rounded-xl text-xs font-sans font-bold transition-colors shadow-xs flex items-center gap-1.5 whitespace-nowrap"
+                                className="px-3.5 py-1.5 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-xl text-xs font-sans font-bold transition-colors shadow-xs flex items-center gap-1.5 whitespace-nowrap"
                               >
                                 <Plus size={13} />
                                 Add First Stock
@@ -482,7 +482,7 @@ export const AdminInventoryPage: React.FC = () => {
                               </button>
                               <button
                                 onClick={() => openModal(record, 'Add')}
-                                className="w-8 h-8 flex items-center justify-center rounded-lg bg-stone-900 text-white hover:bg-stone-800 transition-colors"
+                                className="w-8 h-8 flex items-center justify-center rounded-lg bg-[#561C08] text-white hover:bg-[#561C08]/90 transition-colors"
                                 title="Add stock"
                                 aria-label="Add stock"
                               >

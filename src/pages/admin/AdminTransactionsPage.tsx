@@ -393,7 +393,7 @@ export const AdminTransactionsPage: React.FC = () => {
                       )}
                     </td>
                     <td className="p-4 font-mono text-stone-600 whitespace-nowrap">
-                      {tx.previousStock} &rarr; <strong className="text-stone-900">{tx.newStock}</strong>
+                      {tx.previousStock} &rarr; <strong className="text-[#561C08]">{tx.newStock}</strong>
                     </td>
                     <td className="p-4">
                       <p className="text-stone-800 font-medium">{tx.reason}</p>

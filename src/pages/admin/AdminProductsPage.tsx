@@ -508,7 +508,7 @@ export const AdminProductsPage: React.FC = () => {
           {hasPermission('products', 'create') && (
             <button
               onClick={handleOpenAdd}
-              className="px-4 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-xl text-xs font-sans font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 shadow-sm"
+              className="px-4 py-2 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-xl text-xs font-sans font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 shadow-sm"
             >
               <Plus size={14} />
               <span>Add New Product</span>
@@ -521,7 +521,7 @@ export const AdminProductsPage: React.FC = () => {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <div className="bg-white border border-stone-200 rounded-2xl p-4 shadow-xs space-y-1">
           <span className="text-[10px] font-bold uppercase text-stone-400">Total Catalog</span>
-          <p className="font-serif text-2xl font-bold text-stone-900">
+          <p className="font-serif text-2xl font-bold text-[#561C08]">
             {catalogAnalytics?.totalProducts ?? products.length}
           </p>
           <p className="text-[11px] text-stone-500 font-sans">
@@ -537,7 +537,7 @@ export const AdminProductsPage: React.FC = () => {
         </div>
         <div className="bg-white border border-stone-200 rounded-2xl p-4 shadow-xs space-y-1">
           <span className="text-[10px] font-bold uppercase text-stone-400">Drafts & Archived</span>
-          <p className="font-serif text-2xl font-bold text-stone-900">
+          <p className="font-serif text-2xl font-bold text-[#561C08]">
             {catalogAnalytics?.inactiveProducts ?? products.filter(p => p.status !== 'ACTIVE').length}
           </p>
           <p className="text-[11px] text-stone-500 font-sans">Unpublished items</p>
@@ -718,7 +718,7 @@ export const AdminProductsPage: React.FC = () => {
                         </div>
                       </td>
                       <td className="p-4">
-                        <p className="font-bold text-stone-900">
+                        <p className="font-bold text-[#561C08]">
                           {product.pricing.currency === 'INR' ? '₹' : product.pricing.currency}{' '}
                           {product.pricing.sellingPrice.toLocaleString('en-IN')}
                         </p>
@@ -998,7 +998,7 @@ export const AdminProductsPage: React.FC = () => {
                 <button
                   type="submit"
                   disabled={isSaving}
-                  className="px-5 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-xl text-xs font-bold uppercase tracking-wider disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm"
+                  className="px-5 py-2 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-xl text-xs font-bold uppercase tracking-wider disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm"
                 >
                   {isSaving && <Loader2 size={13} className="animate-spin" />}
                   <span>{isSaving ? saveProgress || 'Saving...' : 'Save Product'}</span>

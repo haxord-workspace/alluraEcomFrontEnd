@@ -798,7 +798,7 @@ export const AdminSettingsPage: React.FC = () => {
               type="button"
               onClick={fetchHealth}
               disabled={isHealthLoading}
-              className="px-4 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-xl text-xs font-sans font-bold uppercase tracking-wider transition-colors flex items-center gap-2 shadow-sm"
+              className="px-4 py-2 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-xl text-xs font-sans font-bold uppercase tracking-wider transition-colors flex items-center gap-2 shadow-sm"
             >
               <RefreshCw size={13} className={isHealthLoading ? 'animate-spin' : ''} />
               <span>Ping Connectivity</span>
@@ -826,7 +826,7 @@ export const AdminSettingsPage: React.FC = () => {
                 Primary persistence cluster for orders, catalog, patrons, and schema collections.
               </p>
               <div className="pt-2 text-xs font-mono text-stone-600">
-                Latency: <span className="font-bold text-stone-900">{systemHealth?.services.mongodb.latencyMs ?? 12} ms</span>
+                Latency: <span className="font-bold text-[#561C08]">{systemHealth?.services.mongodb.latencyMs ?? 12} ms</span>
               </div>
             </div>
 
@@ -849,7 +849,7 @@ export const AdminSettingsPage: React.FC = () => {
                 Session stores, BullMQ job queues, and sub-millisecond SEO & CMS caching layer.
               </p>
               <div className="pt-2 text-xs font-mono text-stone-600">
-                Latency: <span className="font-bold text-stone-900">{systemHealth?.services.redis.latencyMs ?? 2} ms</span>
+                Latency: <span className="font-bold text-[#561C08]">{systemHealth?.services.redis.latencyMs ?? 2} ms</span>
               </div>
             </div>
           </div>

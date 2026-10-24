@@ -62,11 +62,11 @@ export const AdminShippingPage: React.FC = () => {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-xs space-y-1">
           <span className="text-[10px] font-sans font-bold uppercase text-stone-400">Kerala Express SLA</span>
-          <p className="font-serif text-2xl font-bold text-stone-900">24–48 Hrs</p>
+          <p className="font-serif text-2xl font-bold text-[#561C08]">24–48 Hrs</p>
         </div>
         <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-xs space-y-1">
           <span className="text-[10px] font-sans font-bold uppercase text-stone-400">All-India Courier SLA</span>
-          <p className="font-serif text-2xl font-bold text-stone-900">3–5 Days</p>
+          <p className="font-serif text-2xl font-bold text-[#561C08]">3–5 Days</p>
         </div>
         <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-xs space-y-1">
           <span className="text-[10px] font-sans font-bold uppercase text-emerald-700">On-Time Delivery</span>
@@ -133,7 +133,7 @@ export const AdminShippingPage: React.FC = () => {
                     {s.awb === 'Pending Generation' ? (
                       <button
                         onClick={() => generateDelhiveryAWB(s.orderId)}
-                        className="px-3 py-1.5 bg-stone-900 hover:bg-stone-800 text-white rounded-lg text-xs font-bold uppercase tracking-wider"
+                        className="px-3 py-1.5 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-lg text-xs font-bold uppercase tracking-wider"
                       >
                         Generate AWB
                       </button>

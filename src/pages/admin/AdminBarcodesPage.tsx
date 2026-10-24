@@ -208,7 +208,7 @@ export const AdminBarcodesPage: React.FC = () => {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-xs space-y-1">
           <span className="text-[10px] font-sans font-bold uppercase tracking-wider text-stone-400">Total Variants</span>
-          <p className="font-serif text-2xl font-bold text-stone-900">{variants.length}</p>
+          <p className="font-serif text-2xl font-bold text-[#561C08]">{variants.length}</p>
         </div>
         <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-xs space-y-1">
           <span className="text-[10px] font-sans font-bold uppercase tracking-wider text-emerald-700">Assigned Barcodes</span>
@@ -216,7 +216,7 @@ export const AdminBarcodesPage: React.FC = () => {
         </div>
         <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-xs space-y-1">
           <span className="text-[10px] font-sans font-bold uppercase tracking-wider text-stone-400">Unassigned</span>
-          <p className="font-serif text-2xl font-bold text-stone-900">{unassigned.length}</p>
+          <p className="font-serif text-2xl font-bold text-[#561C08]">{unassigned.length}</p>
         </div>
         <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-xs space-y-1">
           <span className="text-[10px] font-sans font-bold uppercase tracking-wider text-stone-400">Barcode Standard</span>
@@ -275,7 +275,7 @@ export const AdminBarcodesPage: React.FC = () => {
                         <p className="font-medium text-stone-900 font-serif">{product?.name || v.productId}</p>
                       </td>
                       <td className="p-4 font-mono text-stone-600 font-semibold">{v.sku}</td>
-                      <td className="p-4 font-bold text-stone-900">
+                      <td className="p-4 font-bold text-[#561C08]">
                         {v.pricing?.currency} {v.pricing?.sellingPrice?.toLocaleString()}
                       </td>
                       <td className="p-4 text-right">
@@ -329,7 +329,7 @@ export const AdminBarcodesPage: React.FC = () => {
               <button
                 onClick={handleGenerate}
                 disabled={isGenerating}
-                className="w-full px-4 py-2.5 bg-stone-900 hover:bg-stone-800 text-white rounded-xl font-bold uppercase tracking-wider disabled:opacity-50 flex items-center justify-center gap-2"
+                className="w-full px-4 py-2.5 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-xl font-bold uppercase tracking-wider disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {isGenerating ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
                 <span>{isGenerating ? 'Generating...' : 'Generate'}</span>

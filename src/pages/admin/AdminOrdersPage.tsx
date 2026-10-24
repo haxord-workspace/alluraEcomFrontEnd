@@ -109,7 +109,7 @@ export const AdminOrdersPage: React.FC = () => {
           </button>
           <Link
             to="/admin/shipping"
-            className="px-4 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-xl text-xs font-sans font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 shadow-sm"
+            className="px-4 py-2 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-xl text-xs font-sans font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 shadow-sm"
           >
             <Truck size={14} />
             <span>Shipping Dispatch Hub</span>
@@ -122,7 +122,7 @@ export const AdminOrdersPage: React.FC = () => {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <div className="bg-white border border-stone-200 rounded-2xl p-4 shadow-xs space-y-1">
             <span className="text-[10px] font-bold uppercase text-stone-400">Total Volume</span>
-            <p className="font-serif text-2xl font-bold text-stone-900">{summary.pagination.total}</p>
+            <p className="font-serif text-2xl font-bold text-[#561C08]">{summary.pagination.total}</p>
             <p className="text-[11px] text-stone-500 font-sans">Across all channels</p>
           </div>
           <div className="bg-white border border-stone-200 rounded-2xl p-4 shadow-xs space-y-1">
@@ -140,7 +140,7 @@ export const AdminOrdersPage: React.FC = () => {
               <span className="text-[10px] font-bold uppercase">Awaiting Payment</span>
               <Clock size={14} />
             </div>
-            <p className="font-serif text-2xl font-bold text-stone-900">
+            <p className="font-serif text-2xl font-bold text-[#561C08]">
               {summary.attentionRequired.pendingPayment}
             </p>
             <p className="text-[11px] text-stone-500 font-sans">Checkout incomplete</p>
@@ -189,7 +189,7 @@ export const AdminOrdersPage: React.FC = () => {
                 }}
                 className={`px-3.5 py-1.5 rounded-full text-xs font-sans font-semibold transition-colors whitespace-nowrap flex items-center gap-1.5 ${
                   statusFilter === st
-                    ? 'bg-stone-900 text-white shadow-xs'
+                    ? 'bg-[#561C08] text-white shadow-xs'
                     : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
                 }`}
               >
@@ -267,7 +267,7 @@ export const AdminOrdersPage: React.FC = () => {
                         </p>
                       )}
                     </td>
-                    <td className="p-4 font-bold text-stone-900">
+                    <td className="p-4 font-bold text-[#561C08]">
                       ₹ {order.total.toLocaleString('en-IN')}
                     </td>
                     <td className="p-4">
@@ -286,7 +286,7 @@ export const AdminOrdersPage: React.FC = () => {
                     <td className="p-4 text-right">
                       <Link
                         to={`/admin/orders/${order.id}`}
-                        className="px-3 py-1.5 bg-stone-900 hover:bg-stone-800 text-white rounded-lg font-bold text-xs uppercase tracking-wider inline-flex items-center gap-1 shadow-xs"
+                        className="px-3 py-1.5 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-lg font-bold text-xs uppercase tracking-wider inline-flex items-center gap-1 shadow-xs"
                       >
                         <Eye size={12} />
                         <span>Manage</span>

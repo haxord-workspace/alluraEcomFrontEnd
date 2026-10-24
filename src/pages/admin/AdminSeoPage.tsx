@@ -273,7 +273,7 @@ export const AdminSeoPage: React.FC = () => {
                 onClick={() => handleTypeChange(type)}
                 className={`px-4 py-2 rounded-xl text-xs font-sans font-semibold transition-all ${
                   entityType === type
-                    ? 'bg-stone-900 text-white shadow-sm'
+                    ? 'bg-[#561C08] text-white shadow-sm'
                     : 'bg-stone-100 hover:bg-stone-200 text-stone-700'
                 }`}
               >
@@ -387,7 +387,7 @@ export const AdminSeoPage: React.FC = () => {
             type="button"
             onClick={handleSave}
             disabled={isSaving || !entityId.trim()}
-            className="w-full sm:w-auto px-6 py-2.5 bg-stone-900 hover:bg-stone-800 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-sm disabled:opacity-50"
+            className="w-full sm:w-auto px-6 py-2.5 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-sm disabled:opacity-50"
           >
             <Save size={14} />
             <span>{isSaving ? 'Saving & Purging Cache...' : 'Save SEO Overrides'}</span>
