@@ -2,11 +2,11 @@
   "rewrites": [
     {
       "source": "/sitemap.xml",
-      "destination": "https://alluraecombackend.onrender.com/api/v1/sitemap.xml"
+      "destination": "http://brrznrocasztfxgjracrzfru.200.141.6.198.sslip.io/api/v1/sitemap.xml"
     },
     {
       "source": "/robots.txt",
-      "destination": "https://alluraecombackend.onrender.com/api/v1/robots.txt"
+      "destination": "http://brrznrocasztfxgjracrzfru.200.141.6.198.sslip.io/api/v1/robots.txt"
     },
     {
       "source": "/(.*)",

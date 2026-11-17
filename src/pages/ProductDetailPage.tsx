@@ -19,6 +19,7 @@ import {
 import { useShop } from '../context/ShopContext';
 import { useAdmin } from '../context/AdminContext';
 import { getStoreProductBySlug } from '../service/store';
+import { trackProductView } from '../service/tracking';
 import { ProductCard } from '../components/ui/ProductCard';
 import { BottomSheet } from '../components/modals/BottomSheet';
 import type { Product } from '../types';
@@ -26,11 +27,22 @@ import { useAddToBag } from '../hooks/useAddToBag';
 import { AddToBagLabel, addToBagButtonState } from '../components/ui/AddToBagLabel';
 import { SEOHead } from '../components/common/SEOHead';
 import { ProductDetailSkeleton } from '../components/ui/ProductDetailSkeleton';
+import { LazyProductReviews } from '../components/reviews/LazyProductReviews';
+import { ProductRatingInline } from '../components/reviews/ProductRatingInline';
 
 export const ProductDetailPage: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
-  const { products, addToCart, toggleWishlist, isInWishlist, formatPrice, showToast } = useShop();
+  const {
+    products,
+    addToCart,
+    toggleWishlist,
+    isInWishlist,
+    formatPrice,
+    showToast,
+    freeShippingRemaining,
+    freeShippingThreshold,
+  } = useShop();
   const { banners } = useAdmin();
 
   const activeProductPromo = (banners || []).find(
@@ -87,6 +99,7 @@ export const ProductDetailPage: React.FC = () => {
           initialSize = fetched.sizes?.[0] || '';
         }
         setSelectedSize(initialSize);
+        trackProductView(fetched, 'pdp');
       })
       .catch(() => {
         if (!cancelled) setNotFound(true);
@@ -372,6 +385,7 @@ export const ProductDetailPage: React.FC = () => {
             <span className="text-xs font-sans font-bold tracking-[0.25em] uppercase text-allura-goldDark">
               ALLURA • {product.category}
             </span>
+            <ProductRatingInline productId={product.id} rating={product.rating} reviewsCount={product.reviewsCount}>
             <div className="flex items-center gap-1.5 text-xs text-amber-700 font-sans">
               <div className="flex text-amber-500">
                 {[...Array(5)].map((_, i) => (
@@ -381,6 +395,7 @@ export const ProductDetailPage: React.FC = () => {
               <span className="font-semibold">{product.rating}</span>
               <span className="text-allura-muted">({product.reviewsCount} reviews)</span>
             </div>
+            </ProductRatingInline>
           </div>
 
           <h1 className="font-serif text-2xl sm:text-4xl text-allura-text font-normal uppercase tracking-tight">
@@ -543,7 +558,13 @@ export const ProductDetailPage: React.FC = () => {
           <div className="grid grid-cols-3 gap-2 py-4 border-y border-allura-border/60 text-center text-[10px] font-sans text-allura-muted">
             <div className="flex flex-col items-center gap-1">
               <Truck size={14} className="text-allura-goldDark" />
-              <span>Free Shipping &gt; ₹2,999</span>
+              <span>
+                {freeShippingRemaining > 0
+                  ? `Free Shipping > ${formatPrice(freeShippingRemaining)}`
+                  : freeShippingThreshold === 0
+                    ? 'Free Shipping on All Orders'
+                    : 'Free Shipping Unlocked'}
+              </span>
             </div>
             <div className="flex flex-col items-center gap-1">
               <RefreshCw size={14} className="text-allura-goldDark" />
@@ -686,6 +707,8 @@ export const ProductDetailPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      <LazyProductReviews productId={product.id} />
 
       {/* Complete The Look Section */}
       <section className="mt-8 sm:mt-14 pt-8 sm:pt-12 border-t border-allura-border/60">

@@ -20,19 +20,22 @@ import { HeroBannerSkeleton } from '../components/ui/HeroBannerSkeleton';
 import { CategoryCardSkeleton } from '../components/ui/CategoryCardSkeleton';
 import { AlluraCircleSection } from '../components/ui/AlluraCircleSection';
 import { AbandonedCartBanner } from '../components/customer/AbandonedCartBanner';
-import { useAdmin } from '../context/AdminContext';
 import { useShop } from '../context/ShopContext';
 import { SEOHead } from '../components/common/SEOHead';
 import { getStoreCollectionPage, type StoreCollection } from '../service/store';
-import { mockFaqsData } from '../data/mockFaqs';
+import { getPublicFaqs, type PublicFaq } from '../service/faqs';
+import { getPublicBanners } from '../service/adminBanners';
+import type { Banner } from '../types';
 import { useCategoryCarousel } from '../hooks/useCategoryCarousel';
 
 export const HomePage: React.FC = () => {
   const navigate = useNavigate();
-  const { banners, isLoadingBanners, faqs } = useAdmin();
   const { products, categories, isLoadingProducts } = useShop();
   const [currentSlide, setCurrentSlide] = useState(0);
   const [openFaqId, setOpenFaqId] = useState<string | null>(null);
+  const [faqs, setFaqs] = useState<PublicFaq[]>([]);
+  const [banners, setBanners] = useState<Banner[]>([]);
+  const [isLoadingBanners, setIsLoadingBanners] = useState(true);
   const touchStartX = useRef<number | null>(null);
   const touchEndX = useRef<number | null>(null);
 
@@ -78,6 +81,28 @@ export const HomePage: React.FC = () => {
     fetchTile1Collection(1);
     fetchTile2Collection(2);
   }, [fetchTile1Collection, fetchTile2Collection]);
+
+  useEffect(() => {
+    getPublicFaqs()
+      .then(setFaqs)
+      .catch(err => console.warn('Failed to load FAQs:', err));
+  }, []);
+
+  // GET /banners (public) — real hero slider banners, no stale/cached fallback
+  useEffect(() => {
+    let isMounted = true;
+    getPublicBanners({ placement: 'HOME_HERO', sortBy: 'displayOrder', sortOrder: 'asc' })
+      .then(data => {
+        if (isMounted) setBanners(data);
+      })
+      .catch(err => console.warn('Failed to load hero banners:', err))
+      .finally(() => {
+        if (isMounted) setIsLoadingBanners(false);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Helper to extract banner image from any field
   const getBannerImage = (b: any): string => {
@@ -953,7 +978,7 @@ export const HomePage: React.FC = () => {
         </div>
 
         <div className="space-y-3 sm:space-y-3.5">
-          {(faqs && faqs.length > 0 ? faqs : mockFaqsData).slice(0, 6).map((faq) => {
+          {faqs.slice(0, 6).map((faq) => {
             const isOpen = openFaqId === faq.id;
             return (
               <div

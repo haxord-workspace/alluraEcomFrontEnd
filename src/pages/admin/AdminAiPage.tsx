@@ -1,20 +1,20 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, Bot, CheckCircle2, Clock, AlertTriangle } from 'lucide-react';
+import React, { useState, } from 'react';
+import { Plus } from 'lucide-react';
 import { useAdmin } from '../../context/AdminContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
-import { getDashboardAi, type AiAnalyticsResponse } from '../../service/adminDashboard';
+// import { type AiAnalyticsResponse } from '../../service/adminDashboard';
 
 export const AdminAiPage: React.FC = () => {
   const { aiArticles, addAIArticle } = useAdmin();
   const [activeTab, setActiveTab] = useState<'kb' | 'logs' | 'actions'>('kb');
   const [isAddArticleOpen, setIsAddArticleOpen] = useState(false);
-  const [aiDashboard, setAiDashboard] = useState<AiAnalyticsResponse | null>(null);
+  // const [aiDashboard] = useState<AiAnalyticsResponse | null>(null);
 
-  useEffect(() => {
-    getDashboardAi()
-      .then(setAiDashboard)
-      .catch(err => console.warn('Could not load AI dashboard:', err));
-  }, []);
+  // useEffect(() => {
+  //   getDashboardAi()
+  //     .then(setAiDashboard)
+  //     .catch(err => console.warn('Could not load AI dashboard:', err));
+  // }, []);
 
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState<'FAQ' | 'Shipping Policy' | 'Return Policy' | 'Product Sizing' | 'Care & Craft'>('Product Sizing');
@@ -66,11 +66,10 @@ export const AdminAiPage: React.FC = () => {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
-                className={`px-3.5 py-1.5 rounded-lg transition-colors ${
-                  activeTab === tab.id
-                    ? 'bg-white text-stone-900 shadow-xs'
-                    : 'text-stone-500 hover:text-stone-900'
-                }`}
+                className={`px-3.5 py-1.5 rounded-lg transition-colors ${activeTab === tab.id
+                  ? 'bg-white text-stone-900 shadow-xs'
+                  : 'text-stone-500 hover:text-stone-900'
+                  }`}
               >
                 {tab.label}
               </button>
@@ -88,7 +87,7 @@ export const AdminAiPage: React.FC = () => {
       </div>
 
       {/* DeepSeek AI Engine Status & Queue Analytics */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      {/* <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <div className="bg-white border border-stone-200 rounded-2xl p-4 shadow-xs space-y-1">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-sans font-bold uppercase text-stone-400">ENGINE STATUS</span>
@@ -136,7 +135,7 @@ export const AdminAiPage: React.FC = () => {
           </p>
           <p className="text-[11px] text-rose-700 font-sans">Zero timeout drops</p>
         </div>
-      </div>
+      </div> */}
 
       {/* TAB 1: KNOWLEDGE BASE */}
       {activeTab === 'kb' && (

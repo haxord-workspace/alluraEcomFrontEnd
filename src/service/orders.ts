@@ -35,7 +35,7 @@ export interface StatusUpdatePayload {
 
 // ── Status mapping (backend UPPER_SNAKE <-> UI labels) ─────────────────────────
 
-const STATUS_TO_UI: Record<string, OrderStatus> = {
+export const STATUS_TO_UI: Record<string, OrderStatus> = {
   PENDING: 'Pending',
   PENDING_PAYMENT: 'Pending',
   PLACED: 'Pending',
@@ -114,6 +114,14 @@ const formatDateTime = (value?: string) => {
     : d.toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 };
 
+const formatDateTimeWithYear = (value?: string) => {
+  if (!value) return '';
+  const d = new Date(value);
+  return Number.isNaN(d.getTime())
+    ? value
+    : d.toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+};
+
 const splitPhone = (value: string) => {
   const v = value.replace(/\s+/g, '');
   const m = v.match(/^(\+\d{1,3})(\d{6,})$/);
@@ -122,7 +130,7 @@ const splitPhone = (value: string) => {
   return m ? { countryCode: m[1], number: m[2] } : { countryCode: '+91', number: v };
 };
 
-const mapAddress = (raw: any): SavedAddress => {
+export const mapAddress = (raw: any): SavedAddress => {
   const phone = raw?.phone ?? raw?.phoneNumber ?? raw?.mobile;
   const nameFromParts = [raw?.firstName, raw?.lastName]
     .map((v: any) => (typeof v === 'string' ? v.trim() : ''))
@@ -249,8 +257,12 @@ export const mapOrder = (raw: any): Order => {
     couponCode: raw?.couponCode || pricing?.couponCode,
     tax: num(pricing?.taxAmount, pricing?.tax, raw?.taxAmount),
     total: num(pricing?.totalAmount, pricing?.total, pricing?.grandTotal, raw?.totalAmount, raw?.total),
+    currency: pricing?.currency || raw?.currency || 'INR',
+    invoiceNumber: raw?.invoice?.invoiceNumber || raw?.invoiceNumber,
+    invoiceIssuedAt: formatDateTimeWithYear(raw?.invoice?.issuedAt || raw?.invoiceIssuedAt),
     paymentMethod: toPaymentMethod(payment?.method || raw?.paymentMethod),
     paymentStatus: PAYMENT_STATUS[String(payment?.status || raw?.paymentStatus || 'PENDING').toUpperCase()] || 'Pending',
+    transactionId: payment?.transactionId || payment?.txnId || payment?.paymentId || payment?.referenceId || raw?.transactionId,
     orderStatus: toUiStatus(rawStatus),
     tracking:
       trackingNumber || carrier || history.length
@@ -333,6 +345,42 @@ import { getBackendErrorMessage } from '../utils/apiResponse';
 export const orderErrorMessage = (error: any, fallback: string): string =>
   getBackendErrorMessage(error, fallback);
 
+// ── Invoice download (blob) ───────────────────────────────────────────────────
+
+export interface InvoiceDownload {
+  blob: Blob;
+  filename: string;
+}
+
+const filenameFromDisposition = (header: string | undefined, fallback: string): string => {
+  if (!header) return fallback;
+  const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(header);
+  return match ? decodeURIComponent(match[1]) : fallback;
+};
+
+/**
+ * Runs a blob-returning request. If the server actually sent a JSON error (still
+ * fetched as a Blob because of responseType: 'blob'), it's unpacked back into
+ * `error.response.data` so orderErrorMessage() can read the real backend message.
+ */
+const fetchInvoiceBlob = async (request: () => Promise<any>, fallbackFilename: string): Promise<InvoiceDownload> => {
+  try {
+    const response = await request();
+    const header = response.headers?.['content-disposition'] ?? response.headers?.['Content-Disposition'];
+    return { blob: response.data as Blob, filename: filenameFromDisposition(header, fallbackFilename) };
+  } catch (error: any) {
+    const data = error?.response?.data;
+    if (data instanceof Blob && /json/i.test(data.type)) {
+      try {
+        error.response.data = JSON.parse(await data.text());
+      } catch {
+        // leave as-is; orderErrorMessage() falls back to a generic message
+      }
+    }
+    throw error;
+  }
+};
+
 // ── Customer ──────────────────────────────────────────────────────────────────
 
 /** GET /orders */
@@ -347,6 +395,13 @@ export const getMyOrder = async (orderId: string): Promise<Order> => {
   const response = await api.get(`/orders/${orderId}`);
   return mapOrder(unwrap(response));
 };
+
+/** GET /orders/{orderId}/invoice */
+export const downloadOrderInvoice = (orderId: string, invoiceNumber?: string): Promise<InvoiceDownload> =>
+  fetchInvoiceBlob(
+    () => api.get(`/orders/${orderId}/invoice`, { responseType: 'blob' }),
+    `invoice-${invoiceNumber || orderId}.pdf`
+  );
 
 /** POST /orders/{orderId}/cancel */
 export const cancelMyOrder = async (orderId: string, reason: string, note?: string): Promise<Order | null> => {
@@ -387,3 +442,10 @@ export const cancelAdminOrder = async (orderId: string, reason: string, note?: s
   const data = unwrap(response);
   return data && (data._id || data.id) ? mapOrder(data) : null;
 };
+
+/** GET /admin/orders/{orderId}/invoice */
+export const downloadAdminOrderInvoice = (orderId: string, invoiceNumber?: string): Promise<InvoiceDownload> =>
+  fetchInvoiceBlob(
+    () => adminApi.get(`/admin/orders/${orderId}/invoice`, { responseType: 'blob' }),
+    `invoice-${invoiceNumber || orderId}.pdf`
+  );

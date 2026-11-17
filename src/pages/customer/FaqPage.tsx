@@ -1,16 +1,41 @@
-import React, { useState } from 'react';
-import { Search, ChevronDown, HelpCircle, MessageCircle, ArrowRight } from 'lucide-react';
-import { mockFaqsData } from '../../data/mockFaqs';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Search, ChevronDown, HelpCircle, MessageCircle, ArrowRight, Loader2 } from 'lucide-react';
+import { getPublicFaqs, getPublicFaqCategories, faqErrorMessage, type PublicFaq } from '../../service/faqs';
 import { Link } from 'react-router-dom';
 
 export const FaqPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<string>('All');
-  const [openFaqId, setOpenFaqId] = useState<string | null>(mockFaqsData[0].id);
+  const [openFaqId, setOpenFaqId] = useState<string | null>(null);
 
-  const categories = ['All', 'Orders', 'Payments', 'Shipping', 'Returns', 'Sizing', 'Products'];
+  const [faqs, setFaqs] = useState<PublicFaq[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const filteredFaqs = mockFaqsData.filter(faq => {
+  const fetchFaqs = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const [faqData, categoryData] = await Promise.all([
+        getPublicFaqs(),
+        getPublicFaqCategories().catch(() => []),
+      ]);
+      setFaqs(faqData);
+      setCategories(categoryData.length > 0 ? categoryData : Array.from(new Set(faqData.map(f => f.category))));
+      setOpenFaqId(faqData[0]?.id ?? null);
+    } catch (err) {
+      setError(faqErrorMessage(err, 'Could not load the FAQs right now.'));
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchFaqs();
+  }, [fetchFaqs]);
+
+  const filteredFaqs = faqs.filter(faq => {
     const matchesCategory = activeCategory === 'All' || faq.category === activeCategory;
     const matchesQuery =
       faq.question.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -50,24 +75,49 @@ export const FaqPage: React.FC = () => {
       </div>
 
       {/* Category Pills */}
-      <div className="flex justify-center gap-2 overflow-x-auto pb-2">
-        {categories.map(cat => (
+      {!isLoading && !error && categories.length > 0 && (
+        <div className="flex justify-center gap-2 overflow-x-auto pb-2">
+          {['All', ...categories].map(cat => (
+            <button
+              key={cat}
+              onClick={() => setActiveCategory(cat)}
+              className={`px-4 py-2 rounded-full text-xs font-sans font-semibold transition-colors whitespace-nowrap ${
+                activeCategory === cat
+                  ? 'bg-allura-darkBrown text-white shadow-xs'
+                  : 'bg-allura-card text-allura-muted hover:text-allura-text border border-allura-border'
+              }`}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Loading state */}
+      {isLoading && (
+        <div className="flex flex-col items-center justify-center gap-3 py-16 text-allura-muted">
+          <Loader2 size={28} className="animate-spin text-allura-goldDark" />
+          <p className="text-xs font-sans">Loading frequently asked questions…</p>
+        </div>
+      )}
+
+      {/* Error state */}
+      {!isLoading && error && (
+        <div className="bg-allura-card border border-allura-border rounded-2xl p-12 text-center space-y-3 shadow-subtle">
+          <HelpCircle size={28} className="mx-auto text-rose-500" />
+          <h3 className="font-serif text-lg text-allura-text">Could not load the FAQs</h3>
+          <p className="text-xs font-sans text-allura-muted">{error}</p>
           <button
-            key={cat}
-            onClick={() => setActiveCategory(cat)}
-            className={`px-4 py-2 rounded-full text-xs font-sans font-semibold transition-colors whitespace-nowrap ${
-              activeCategory === cat
-                ? 'bg-allura-darkBrown text-white shadow-xs'
-                : 'bg-allura-card text-allura-muted hover:text-allura-text border border-allura-border'
-            }`}
+            onClick={fetchFaqs}
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-allura-darkBrown hover:bg-allura-softBrown text-white rounded-xl text-xs font-sans font-bold uppercase tracking-wider transition-colors"
           >
-            {cat}
+            Retry
           </button>
-        ))}
-      </div>
+        </div>
+      )}
 
       {/* FAQ Accordion List */}
-      {filteredFaqs.length === 0 ? (
+      {!isLoading && !error && filteredFaqs.length === 0 ? (
         <div className="bg-allura-card border border-allura-border rounded-2xl p-12 text-center space-y-3 shadow-subtle">
           <HelpCircle size={28} className="mx-auto text-allura-goldDark" />
           <h3 className="font-serif text-lg text-allura-text">No matching questions found</h3>
@@ -75,7 +125,7 @@ export const FaqPage: React.FC = () => {
             Can’t find what you’re looking for? Reach out directly to our Perinthalmanna boutique team.
           </p>
         </div>
-      ) : (
+      ) : !isLoading && !error ? (
         <div className="space-y-4">
           {filteredFaqs.map(faq => {
             const isOpen = openFaqId === faq.id;
@@ -114,7 +164,7 @@ export const FaqPage: React.FC = () => {
             );
           })}
         </div>
-      )}
+      ) : null}
 
       {/* Need more help CTA */}
       <div className="bg-allura-bgSecondary/60 border border-allura-border rounded-2xl p-8 text-center space-y-4">

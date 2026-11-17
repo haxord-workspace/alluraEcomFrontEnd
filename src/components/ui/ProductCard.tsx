@@ -11,7 +11,8 @@ interface ProductCardProps {
   showCategory?: boolean;
 }
 
-export const ProductCard: React.FC<ProductCardProps> = ({ product, showCategory = true }) => {
+// Memoised so parent re-renders (sort dropdown, filter sheets) don't re-render every card in the grid
+export const ProductCard = React.memo(function ProductCard({ product, showCategory = true }: ProductCardProps) {
   const { toggleWishlist, isInWishlist, setQuickViewProduct, formatPrice } = useShop();
   const bag = useAddToBag();
   const [selectedColorIdx, setSelectedColorIdx] = useState(0);
@@ -197,4 +198,4 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, showCategory 
       </div>
     </div>
   );
-};
+});

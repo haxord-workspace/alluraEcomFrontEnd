@@ -301,6 +301,40 @@ export const getStoreCollections = async (params?: StoreCollectionParams): Promi
 };
 
 // -----------------------------------------------------------------------------
+// GET /store/settings — public storefront boutique profile & shipping tariffs
+// -----------------------------------------------------------------------------
+
+export interface StoreBoutiqueProfile {
+  legalName?: string;
+  tagline?: string;
+  whatsappNumber?: string;
+  supportEmail?: string;
+  gstin?: string;
+  currency?: string;
+  timezone?: string;
+  address?: string;
+}
+
+export interface StoreShippingSettings {
+  freeShippingMinOrder?: number;
+  standardTariff?: number;
+  expressTariff?: number;
+}
+
+export interface StoreSettings {
+  boutiqueProfile?: StoreBoutiqueProfile;
+  shipping?: StoreShippingSettings;
+}
+
+/**
+ * GET /store/settings — public boutique profile (name, tagline, contact details) & shipping tariffs.
+ */
+export const getStoreSettings = async (): Promise<StoreSettings> => {
+  const response = await api.get('/store/settings');
+  return response.data?.data || {};
+};
+
+// -----------------------------------------------------------------------------
 // GET /products/search — Search and filter products (Customer/Admin)
 // -----------------------------------------------------------------------------
 
@@ -317,10 +351,71 @@ export interface ProductSearchParams {
   featured?: boolean;
   newArrival?: boolean;
   bestSeller?: boolean;
+  /** Single variant size, e.g. "M" */
+  size?: string;
+  /** Multiple variant sizes; sent as a comma-separated list, e.g. sizes=XS,S,M */
+  sizes?: string[] | string;
   sort?: string; // 'featured' | 'newest' | 'price_asc' | 'price_desc'
   page?: number;
   limit?: number;
 }
+
+// Exact query param names accepted by GET /products/search (Swagger)
+const PRODUCT_SEARCH_KEYS = [
+  'q', 'categoryId', 'subcategoryId', 'collectionId', 'brand',
+  'minPrice', 'maxPrice', 'hasDiscount', 'availability', 'size', 'sizes',
+  'featured', 'newArrival', 'bestSeller', 'sort', 'page', 'limit',
+] as const;
+
+const NUMERIC_KEYS = new Set<string>(['minPrice', 'maxPrice', 'page', 'limit']);
+const BOOLEAN_KEYS = new Set<string>(['hasDiscount', 'featured', 'newArrival', 'bestSeller']);
+const EMPTY_VALUES = new Set(['', 'all', 'undefined', 'null', 'nan']);
+
+/**
+ * Builds a clean query object for GET /products/search:
+ * - only the Swagger param names are sent
+ * - empty / null / undefined / "all" / NaN values are dropped
+ * - numbers and booleans are normalised; size lists become "XS,S,M"
+ */
+export const buildProductQuery = (params: ProductSearchParams = {}): Record<string, string | number | boolean> => {
+  const query: Record<string, string | number | boolean> = {};
+
+  for (const key of PRODUCT_SEARCH_KEYS) {
+    const value: unknown = params[key];
+    if (value === undefined || value === null) continue;
+
+    if (NUMERIC_KEYS.has(key)) {
+      const num = typeof value === 'number' ? value : Number(String(value).trim());
+      if (String(value).trim() === '' || !Number.isFinite(num) || num < 0) continue;
+      if ((key === 'page' || key === 'limit') && num < 1) continue;
+      query[key] = key === 'page' || key === 'limit' ? Math.floor(num) : num;
+      continue;
+    }
+
+    if (BOOLEAN_KEYS.has(key)) {
+      if (typeof value === 'boolean') query[key] = value;
+      else if (value === 'true' || value === 'false') query[key] = value === 'true';
+      continue;
+    }
+
+    if (Array.isArray(value)) {
+      const list = value.map(v => String(v).trim()).filter(v => v && !EMPTY_VALUES.has(v.toLowerCase()));
+      if (list.length > 0) query[key] = Array.from(new Set(list)).join(',');
+      continue;
+    }
+
+    const str = String(value).trim();
+    if (!EMPTY_VALUES.has(str.toLowerCase())) query[key] = str;
+  }
+
+  return query;
+};
+
+/** True when a request was cancelled via AbortController (stale request, not an error to show). */
+export const isRequestCanceled = (err: unknown): boolean => {
+  const e = err as { name?: string; code?: string } | null;
+  return !!e && (e.name === 'CanceledError' || e.name === 'AbortError' || e.code === 'ERR_CANCELED');
+};
 
 export interface ProductSearchPagination {
   page: number;
@@ -342,14 +437,16 @@ export interface ProductSearchResult {
  */
 export const searchProducts = async (
   params?: ProductSearchParams,
-  categoryMap?: Record<string, string>
+  categoryMap?: Record<string, string>,
+  signal?: AbortSignal
 ): Promise<ProductSearchResult> => {
-  const response = await api.get('/products/search', { params });
+  const query = buildProductQuery(params);
+  const response = await api.get('/products/search', signal ? { params: query, signal } : { params: query });
   const data = response.data?.data || {};
-  const rawProducts = data.products || [];
-  const pagination: ProductSearchPagination = data.pagination || {
-    page: params?.page || 1,
-    limit: params?.limit || rawProducts.length || 20,
+  const rawProducts = Array.isArray(data) ? data : (data.products || []);
+  const pagination: ProductSearchPagination = data.pagination || response.data?.meta || {
+    page: Number(query.page) || 1,
+    limit: Number(query.limit) || rawProducts.length || 20,
     total: rawProducts.length,
     totalPages: 1,
     hasNextPage: false,

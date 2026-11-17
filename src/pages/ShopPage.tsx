@@ -8,6 +8,8 @@ import { ProductCardSkeleton } from '../components/ui/ProductCardSkeleton';
 import { BottomSheet } from '../components/modals/BottomSheet';
 import {
   searchProducts,
+  buildProductQuery,
+  isRequestCanceled,
   getStoreCollections,
   type ProductSearchParams,
   type ProductSearchPagination,
@@ -26,6 +28,8 @@ const SORT_OPTIONS: { label: string; value: 'featured' | 'newest' | 'price_asc' 
   { label: 'Customer Rating', value: 'rating' },
 ];
 
+// TODO(backend): sort values must match the Swagger enum for GET /products/search `sort`.
+// Unchanged from before; verify once the exact enum is confirmed.
 const getBackendSortValue = (sort: string): string => {
   if (sort === 'price_asc' || sort === 'price-asc') return 'price_asc';
   if (sort === 'price_desc' || sort === 'price-desc') return 'price_desc';
@@ -34,29 +38,90 @@ const getBackendSortValue = (sort: string): string => {
   return 'featured';
 };
 
+// TODO(backend): availability value must match the Swagger enum for `availability`. Unchanged from before.
+const IN_STOCK_AVAILABILITY = 'IN_STOCK';
+
+const PAGE_SIZE = 8;
+const PRICE_MIN = 3000;
+const PRICE_MAX = 25000; // slider max = "no price limit"
+const PRICE_DEBOUNCE_MS = 400;
+const SIZE_OPTIONS = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
+const SORT_VALUES = new Set<string>(['featured', 'newest', 'price_asc', 'price_desc', 'rating', 'price-asc', 'price-desc']);
+
+const parseSizesParam = (raw: string | null): string[] =>
+  (raw || '')
+    .split(',')
+    .map(s => s.trim().toUpperCase())
+    .filter((s, i, all) => SIZE_OPTIONS.includes(s) && all.indexOf(s) === i);
+
+const parseMaxPriceParam = (raw: string | null): number => {
+  const n = raw === null || raw.trim() === '' ? NaN : Number(raw);
+  if (!Number.isFinite(n)) return PRICE_MAX;
+  return Math.min(PRICE_MAX, Math.max(PRICE_MIN, n));
+};
+
 export const ShopPage: React.FC = () => {
-  const { categories } = useShop();
+  const { categories, isLoadingProducts } = useShop();
   const { banners } = useAdmin();
   const [searchParams, setSearchParams] = useSearchParams();
   const filterParam = searchParams.get('filter');
   const catParam = searchParams.get('category');
-  const occParam = searchParams.get('occasion');
   const colParam = searchParams.get('collection');
   const qParam = searchParams.get('q') || searchParams.get('search');
+  // TODO(backend): `?occasion=` and colour filtering are not supported by GET /products/search,
+  // so they are intentionally not applied until the backend adds query params for them.
+
+  // Size, max price and sort live in the URL (written with replace, so no history spam)
+  const sizesParam = searchParams.get('sizes') || searchParams.get('size');
+  const selectedSizes = useMemo(() => parseSizesParam(sizesParam), [sizesParam]);
+  const maxPrice = parseMaxPriceParam(searchParams.get('maxPrice'));
+  const sortParam = searchParams.get('sort');
+  const defaultSort: SortOptionValue = filterParam === 'new' ? 'newest' : 'featured';
+  const sortBy: SortOptionValue =
+    sortParam && SORT_VALUES.has(sortParam) ? (sortParam as SortOptionValue) : defaultSort;
+
+  const updateUrlParams = useCallback(
+    (changes: Record<string, string | null>) => {
+      setSearchParams(
+        prev => {
+          const next = new URLSearchParams(prev);
+          Object.entries(changes).forEach(([key, value]) => {
+            if (value === null || value === '') next.delete(key);
+            else next.set(key, value);
+          });
+          return next;
+        },
+        { replace: true }
+      );
+    },
+    [setSearchParams]
+  );
+
+  const setSortBy = useCallback(
+    (value: SortOptionValue) => updateUrlParams({ sort: value === defaultSort ? null : value }),
+    [updateUrlParams, defaultSort]
+  );
+
+  // Slider moves instantly; the URL (and therefore the request) is updated after a 400ms pause
+  const [priceDraft, setPriceDraft] = useState<number>(maxPrice);
+  useEffect(() => {
+    setPriceDraft(maxPrice);
+  }, [maxPrice]);
+  useEffect(() => {
+    if (priceDraft === maxPrice) return;
+    const timer = setTimeout(() => {
+      updateUrlParams({ maxPrice: priceDraft >= PRICE_MAX ? null : String(priceDraft) });
+    }, PRICE_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [priceDraft, maxPrice, updateUrlParams]);
 
   const [selectedCategory, setSelectedCategory] = useState<string>(catParam || 'All');
   const [selectedCollection, setSelectedCollection] = useState<string>(colParam || 'All');
-  const [selectedOccasion, setSelectedOccasion] = useState<string>(occParam || 'All');
-  const [selectedSizes, setSelectedSizes] = useState<string[]>([]);
-  const [selectedColors, setSelectedColors] = useState<string[]>([]);
-  const [maxPrice, setMaxPrice] = useState<number>(25000);
   const [inStockOnly, setInStockOnly] = useState(false);
-  const [sortBy, setSortBy] = useState<SortOptionValue>(
-    filterParam === 'new' ? 'newest' : 'featured'
-  );
   const [isSortDropdownOpen, setIsSortDropdownOpen] = useState(false);
   const sortDropdownRef = useRef<HTMLDivElement>(null);
   const [storeCollections, setStoreCollections] = useState<StoreCollection[]>([]);
+  const [collectionsLoaded, setCollectionsLoaded] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -68,6 +133,9 @@ export const ShopPage: React.FC = () => {
       })
       .catch(err => {
         console.warn('Failed to load store collections for filter:', err);
+      })
+      .finally(() => {
+        if (active) setCollectionsLoaded(true);
       });
     return () => {
       active = false;
@@ -105,8 +173,10 @@ export const ShopPage: React.FC = () => {
         c.id.toLowerCase() === selectedCollection.toLowerCase() ||
         c.slug.toLowerCase() === selectedCollection.toLowerCase()
     );
+    // Local fallback collections (e.g. "col-festive") are not backend IDs, so never send them as collectionId
+    if (storeCollections.length === 0) return undefined;
     return found && found.id !== 'all' ? found.id : undefined;
-  }, [selectedCollection, collectionOptions]);
+  }, [selectedCollection, collectionOptions, storeCollections.length]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -123,13 +193,12 @@ export const ShopPage: React.FC = () => {
     return SORT_OPTIONS.find(opt => opt.value === sortBy || opt.value === normalized) || SORT_OPTIONS[0];
   }, [sortBy]);
 
-  // Paginated products state (Infinite scroll batches of 8)
+  // Paginated products state (infinite scroll, server-side pagination)
   const [productsList, setProductsList] = useState<Product[]>([]);
-  const [page, setPage] = useState<number>(1);
-  const [, setMeta] = useState<ProductSearchPagination>({
+  const [meta, setMeta] = useState<ProductSearchPagination>({
     total: 0,
     page: 1,
-    limit: 8,
+    limit: PAGE_SIZE,
     totalPages: 1,
     hasNextPage: true,
   });
@@ -139,8 +208,10 @@ export const ShopPage: React.FC = () => {
   const [initialError, setInitialError] = useState<string | null>(null);
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
 
-  const isRequestInProgressRef = useRef(false);
   const sentinelRef = useRef<HTMLDivElement>(null);
+  // The single in-flight request; aborted whenever the query changes so stale responses never land
+  const requestRef = useRef<AbortController | null>(null);
+  const pageRef = useRef(1);
 
   // Category map for resolving category names from IDs
   const categoryMap = useMemo(() => {
@@ -158,141 +229,111 @@ export const ShopPage: React.FC = () => {
     return found ? found.id : undefined;
   }, [selectedCategory, categories]);
 
-  // Construct backend search query params with sorting, pagination, and filters
-  const buildSearchParams = useCallback((pageNum: number): ProductSearchParams => {
-    const params: ProductSearchParams = {
-      page: pageNum,
-      limit: 8,
+  // Wait until a category/collection name from the URL can be resolved to its backend ID,
+  // otherwise we'd fire one unfiltered request first and then a second filtered one.
+  const isCategoryPending = selectedCategory !== 'All' && categories.length === 0 && isLoadingProducts;
+  const isCollectionPending =
+    selectedCollection !== 'All' && selectedCollection !== 'all' && !collectionsLoaded;
+  const isQueryReady = !isCategoryPending && !isCollectionPending;
+
+  // All filters that the backend supports, using the exact Swagger param names
+  const queryParams = useMemo<ProductSearchParams>(
+    () => ({
+      limit: PAGE_SIZE,
       sort: getBackendSortValue(sortBy),
-    };
+      q: qParam || undefined,
+      categoryId: selectedCategoryId,
+      collectionId: selectedCollectionId,
+      maxPrice: maxPrice < PRICE_MAX ? maxPrice : undefined,
+      sizes: selectedSizes,
+      availability: inStockOnly ? IN_STOCK_AVAILABILITY : undefined,
+      bestSeller: filterParam === 'bestseller' ? true : undefined,
+      newArrival: filterParam === 'new' ? true : undefined,
+    }),
+    [sortBy, qParam, selectedCategoryId, selectedCollectionId, maxPrice, selectedSizes, inStockOnly, filterParam]
+  );
+  // Stable string key: identical queries never trigger a second request
+  const queryKey = useMemo(() => JSON.stringify(buildProductQuery(queryParams)), [queryParams]);
+  const queryParamsRef = useRef(queryParams);
+  queryParamsRef.current = queryParams;
 
-    if (selectedCategoryId) {
-      params.categoryId = selectedCategoryId;
+  const loadPage = useCallback(async (pageNum: number) => {
+    const append = pageNum > 1;
+    requestRef.current?.abort();
+    const controller = new AbortController();
+    requestRef.current = controller;
+
+    if (append) {
+      setIsLoadingMore(true);
+      setLoadMoreError(null);
+    } else {
+      setIsLoading(true);
+      setInitialError(null);
+      setLoadMoreError(null);
     }
-
-    if (selectedCollectionId) {
-      params.collectionId = selectedCollectionId;
-    }
-
-    if (qParam) {
-      params.q = qParam;
-    }
-
-    if (maxPrice < 25000) {
-      params.maxPrice = maxPrice;
-    }
-
-    if (inStockOnly) {
-      params.availability = 'IN_STOCK';
-    }
-
-    if (filterParam === 'bestseller') {
-      params.bestSeller = true;
-    } else if (filterParam === 'new') {
-      params.newArrival = true;
-    }
-
-    return params;
-  }, [sortBy, selectedCategoryId, selectedCollectionId, qParam, maxPrice, inStockOnly, filterParam]);
-
-  // Initial batch load: page 1, limit 8 using backend search & sort
-  const fetchInitialProducts = useCallback(async () => {
-    isRequestInProgressRef.current = true;
-    setIsLoading(true);
-    setInitialError(null);
-    setLoadMoreError(null);
-    setPage(1);
 
     try {
-      const searchParams = buildSearchParams(1);
-      const res = await searchProducts(searchParams, categoryMap);
+      const res = await searchProducts({ ...queryParamsRef.current, page: pageNum }, undefined, controller.signal);
+      if (controller.signal.aborted) return;
 
       const items = res.products || [];
-      const newPagination = res.pagination;
+      const pagination = res.pagination;
+      if (append) {
+        setProductsList(prev => {
+          const seen = new Set(prev.map(p => p.id));
+          return [...prev, ...items.filter(p => !seen.has(p.id))];
+        });
+      } else {
+        setProductsList(items);
+      }
 
-      setProductsList(items);
-      setMeta(newPagination);
+      pageRef.current = pageNum;
+      setMeta(pagination);
 
       const reachedEnd =
-        newPagination.hasNextPage === false ||
+        pagination.hasNextPage === false ||
         items.length === 0 ||
-        items.length < 8 ||
-        (newPagination.totalPages ? 1 >= newPagination.totalPages : false) ||
-        (newPagination.total ? items.length >= newPagination.total : false);
-
+        items.length < PAGE_SIZE ||
+        (pagination.totalPages ? pageNum >= pagination.totalPages : false) ||
+        (pagination.total ? pageNum * PAGE_SIZE >= pagination.total : false);
       setHasMore(!reachedEnd);
     } catch (err: any) {
-      console.error('Failed to load initial products:', err);
-      setInitialError(err?.response?.data?.message || err?.message || 'Failed to load products');
-      setProductsList([]);
-      setHasMore(false);
+      if (controller.signal.aborted || isRequestCanceled(err)) return;
+      const message = err?.response?.data?.message || err?.message || 'Failed to load products';
+      if (append) {
+        console.error('Failed to load more products:', err);
+        setLoadMoreError(message);
+      } else {
+        console.error('Failed to load initial products:', err);
+        setInitialError(message);
+        setProductsList([]);
+        setHasMore(false);
+      }
     } finally {
-      setIsLoading(false);
-      isRequestInProgressRef.current = false;
+      if (requestRef.current === controller) {
+        requestRef.current = null;
+        setIsLoading(false);
+        setIsLoadingMore(false);
+      }
     }
-  }, [buildSearchParams, categoryMap]);
+  }, []);
 
-  // Next batch load: page + 1, limit 8
-  const fetchNextProducts = useCallback(async () => {
-    if (isRequestInProgressRef.current || !hasMore || isLoading || isLoadingMore) {
-      return;
-    }
+  const fetchInitialProducts = useCallback(() => loadPage(1), [loadPage]);
 
-    isRequestInProgressRef.current = true;
-    setIsLoadingMore(true);
-    setLoadMoreError(null);
+  const fetchNextProducts = useCallback(() => {
+    if (requestRef.current || !hasMore || isLoading || isLoadingMore) return;
+    loadPage(pageRef.current + 1);
+  }, [hasMore, isLoading, isLoadingMore, loadPage]);
 
-    const nextPage = page + 1;
-
-    try {
-      const searchParams = buildSearchParams(nextPage);
-      const res = await searchProducts(searchParams, categoryMap);
-
-      const newItems = res.products || [];
-      const newPagination = res.pagination;
-
-      setProductsList(prev => {
-        const seen = new Set(prev.map(p => p.id));
-        const unique = newItems.filter(p => !seen.has(p.id));
-        const combined = [...prev, ...unique];
-
-        const reachedEnd =
-          newPagination.hasNextPage === false ||
-          newItems.length === 0 ||
-          newItems.length < 8 ||
-          (newPagination.totalPages ? nextPage >= newPagination.totalPages : false) ||
-          (newPagination.total ? combined.length >= newPagination.total : false);
-
-        setHasMore(!reachedEnd);
-        return combined;
-      });
-
-      setPage(nextPage);
-      setMeta(newPagination);
-    } catch (err: any) {
-      console.error('Failed to load more products:', err);
-      setLoadMoreError(err?.response?.data?.message || err?.message || 'Failed to load more products');
-    } finally {
-      setIsLoadingMore(false);
-      isRequestInProgressRef.current = false;
-    }
-  }, [hasMore, isLoading, isLoadingMore, page, buildSearchParams, categoryMap]);
-
-  // Reset and fetch initial batch whenever category, collection, search, or filters change
+  // Reset to page 1 and fetch whenever the actual backend query changes
   useEffect(() => {
-    fetchInitialProducts();
-  }, [
-    fetchInitialProducts,
-    selectedCategory,
-    selectedCollection,
-    selectedOccasion,
-    selectedSizes,
-    selectedColors,
-    maxPrice,
-    inStockOnly,
-    sortBy,
-    filterParam,
-  ]);
+    if (!isQueryReady) return;
+    pageRef.current = 1;
+    loadPage(1);
+  }, [queryKey, isQueryReady, loadPage]);
+
+  // Abort any in-flight request when leaving the page
+  useEffect(() => () => requestRef.current?.abort(), []);
 
   // IntersectionObserver to auto-fetch next batch when near bottom
   useEffect(() => {
@@ -302,7 +343,7 @@ export const ShopPage: React.FC = () => {
     const observer = new IntersectionObserver(
       entries => {
         const [first] = entries;
-        if (first.isIntersecting && hasMore && !isLoading && !isLoadingMore && !isRequestInProgressRef.current) {
+        if (first.isIntersecting && hasMore && !isLoading && !isLoadingMore && !requestRef.current) {
           fetchNextProducts();
         }
       },
@@ -323,7 +364,7 @@ export const ShopPage: React.FC = () => {
   // Scroll listener fallback for rapid window scrolling
   useEffect(() => {
     const handleScroll = () => {
-      if (!hasMore || isLoading || isLoadingMore || isRequestInProgressRef.current) return;
+      if (!hasMore || isLoading || isLoadingMore || requestRef.current) return;
       const scrollPosition = window.innerHeight + window.scrollY;
       const threshold = document.documentElement.scrollHeight - 400;
       if (scrollPosition >= threshold) {
@@ -360,116 +401,47 @@ export const ShopPage: React.FC = () => {
   useEffect(() => {
     if (catParam) setSelectedCategory(catParam);
     if (colParam) setSelectedCollection(colParam);
-    if (occParam) setSelectedOccasion(occParam);
-    if (filterParam === 'new') setSortBy('newest');
-  }, [catParam, colParam, occParam, filterParam]);
+  }, [catParam, colParam]);
 
   const categoryOptions = ['All', ...categories.map(c => c.name)];
-  const sizes = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
-  const colors = [
-    { name: 'Ivory', hex: '#EBE3D5' },
-    { name: 'Rose', hex: '#E5BFB8' },
-    { name: 'Sage', hex: '#C2CBB8' },
-    { name: 'Black', hex: '#1C1B1A' },
-    { name: 'Crimson', hex: '#7A1C28' },
-    { name: 'Emerald', hex: '#1C4A3A' },
-    { name: 'Navy', hex: '#151F30' },
-  ];
+  const sizes = SIZE_OPTIONS;
+  // TODO(backend): colour filter UI is hidden because GET /products/search has no colour param.
+  // Re-enable once the backend supports e.g. `colors=Ivory,Rose`.
 
   const handleSizeToggle = (size: string) => {
-    setSelectedSizes(prev =>
-      prev.includes(size) ? prev.filter(s => s !== size) : [...prev, size]
-    );
-  };
-
-  const handleColorToggle = (colorName: string) => {
-    setSelectedColors(prev =>
-      prev.includes(colorName) ? prev.filter(c => c !== colorName) : [...prev, colorName]
-    );
+    const next = selectedSizes.includes(size)
+      ? selectedSizes.filter(s => s !== size)
+      : [...selectedSizes, size];
+    updateUrlParams({ sizes: next.length > 0 ? next.join(',') : null, size: null });
   };
 
   const resetFilters = () => {
     setSelectedCategory('All');
     setSelectedCollection('All');
-    setSelectedOccasion('All');
-    setSelectedSizes([]);
-    setSelectedColors([]);
-    setMaxPrice(25000);
+    setPriceDraft(PRICE_MAX);
     setInStockOnly(false);
-    setSortBy('featured');
-    setSearchParams({});
+    setSearchParams({}, { replace: true });
   };
 
   const hasActiveFilters =
     selectedCategory !== 'All' ||
     (selectedCollection !== 'All' && selectedCollection !== 'all') ||
-    selectedOccasion !== 'All' ||
     selectedSizes.length > 0 ||
-    selectedColors.length > 0 ||
-    maxPrice < 25000 ||
+    maxPrice < PRICE_MAX ||
     inStockOnly;
 
-  const filteredProducts = useMemo(() => {
-    let result = [...productsList];
-
-    if (filterParam === 'bestseller') {
-      result = result.filter(p => p.isBestSeller);
-    } else if (filterParam === 'new') {
-      result = result.filter(p => p.isNewArrival);
-    }
-
-    if (selectedCategory !== 'All') {
-      result = result.filter(
-        p => (p.category && p.category.toLowerCase() === selectedCategory.toLowerCase()) ||
-             p.categoryId === selectedCategoryId
-      );
-    }
-
-    if (selectedCollection !== 'All' && selectedCollection !== 'all' && selectedCollectionId) {
-      result = result.filter(p => {
-        if ((p as any).collectionId) {
-          return (p as any).collectionId === selectedCollectionId;
-        }
-        return true;
-      });
-    }
-
-    if (selectedOccasion !== 'All') {
-      result = result.filter(p => p.occasion && p.occasion.toLowerCase() === selectedOccasion.toLowerCase());
-    }
-
-    if (selectedSizes.length > 0) {
-      result = result.filter(p => p.sizes && p.sizes.some(s => selectedSizes.includes(s)));
-    }
-
-    if (selectedColors.length > 0) {
-      result = result.filter(p =>
-        p.colors && p.colors.some(c =>
-          selectedColors.some(sc => c.name.toLowerCase().includes(sc.toLowerCase()))
-        )
-      );
-    }
-
-    result = result.filter(p => p.price <= maxPrice);
-
-    if (inStockOnly) {
-      result = result.filter(p => p.inStock);
-    }
-
-    return result;
-  }, [
-    productsList,
-    selectedCategory,
-    selectedCategoryId,
-    selectedCollection,
-    selectedCollectionId,
-    selectedOccasion,
-    selectedSizes,
-    selectedColors,
-    maxPrice,
-    inStockOnly,
-    filterParam,
-  ]);
+  // Results come filtered & paginated from the server; only fill in category names
+  // when the search response returned bare category IDs.
+  const displayProducts = useMemo(
+    () =>
+      productsList.map(p =>
+        !p.category && p.categoryId && categoryMap[p.categoryId]
+          ? { ...p, category: categoryMap[p.categoryId] }
+          : p
+      ),
+    [productsList, categoryMap]
+  );
+  const totalCount = meta.total || displayProducts.length;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-8 sm:py-12">
@@ -644,48 +616,21 @@ export const ShopPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Color Filter */}
-          <div className="space-y-3">
-            <h4 className="text-xs font-sans font-bold tracking-[0.2em] text-allura-darkBrown uppercase">
-              COLOUR
-            </h4>
-            <div className="flex flex-wrap gap-2">
-              {colors.map(color => {
-                const isSelected = selectedColors.includes(color.name);
-                return (
-                  <button
-                    key={color.name}
-                    onClick={() => handleColorToggle(color.name)}
-                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-sans transition-all ${
-                      isSelected
-                        ? 'border-allura-gold bg-allura-bgSecondary/60 font-semibold'
-                        : 'border-allura-border bg-allura-card text-allura-muted hover:border-allura-gold'
-                    }`}
-                  >
-                    <span
-                      className="w-2.5 h-2.5 rounded-full border border-allura-border"
-                      style={{ backgroundColor: color.hex }}
-                    />
-                    <span>{color.name}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          {/* Color Filter: hidden until GET /products/search supports a colour param (see TODO above) */}
 
-          {/* Price Range Slider */}
+          {/* Price Range Slider (debounced ~400ms before it hits the URL / API) */}
           <div className="space-y-3">
             <div className="flex justify-between items-center text-xs font-sans">
               <h4 className="font-bold tracking-[0.2em] text-allura-darkBrown uppercase">MAX PRICE</h4>
-              <span className="font-serif font-semibold text-allura-text">₹ {maxPrice.toLocaleString('en-IN')}</span>
+              <span className="font-serif font-semibold text-allura-text">₹ {priceDraft.toLocaleString('en-IN')}</span>
             </div>
             <input
               type="range"
-              min={3000}
-              max={25000}
+              min={PRICE_MIN}
+              max={PRICE_MAX}
               step={500}
-              value={maxPrice}
-              onChange={e => setMaxPrice(Number(e.target.value))}
+              value={priceDraft}
+              onChange={e => setPriceDraft(Number(e.target.value))}
               className="w-full accent-allura-goldDark cursor-pointer"
             />
           </div>
@@ -708,7 +653,7 @@ export const ShopPage: React.FC = () => {
         <div className="lg:col-span-3">
           <div className="hidden lg:flex items-center justify-between mb-6 pb-3 border-b border-allura-border/60">
             <span className="text-xs font-sans text-allura-muted tracking-wider uppercase">
-              Showing <strong className="text-allura-text">{filteredProducts.length}</strong> items
+              Showing <strong className="text-allura-text">{isLoading ? '…' : totalCount}</strong> items
             </span>
 
             {/* Custom Luxury Sort Dropdown */}
@@ -783,7 +728,7 @@ export const ShopPage: React.FC = () => {
                 <span>RETRY</span>
               </button>
             </div>
-          ) : filteredProducts.length === 0 ? (
+          ) : displayProducts.length === 0 ? (
             <div className="py-20 text-center space-y-4 bg-allura-card rounded-xl border border-allura-border p-8">
               <div className="w-16 h-16 rounded-full bg-allura-bgSecondary flex items-center justify-center text-allura-gold mx-auto">
                 <Sparkles size={24} />
@@ -804,7 +749,7 @@ export const ShopPage: React.FC = () => {
           ) : (
             <>
               <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-3 gap-4 sm:gap-6">
-                {filteredProducts.map(product => (
+                {displayProducts.map(product => (
                   <ProductCard key={product.id} product={product} showCategory={true} />
                 ))}
               </div>
@@ -845,7 +790,7 @@ export const ShopPage: React.FC = () => {
                     ✦ You've reached the end of the collection ✦
                   </span>
                   <span className="text-[10px] text-allura-muted/80 font-sans mt-1 block">
-                    Showing all {filteredProducts.length} pieces
+                    Showing all {displayProducts.length} pieces
                   </span>
                 </div>
               )}
@@ -877,7 +822,7 @@ export const ShopPage: React.FC = () => {
               onClick={() => setIsFilterSheetOpen(false)}
               className="flex-1 py-3 bg-allura-goldDark text-allura-card rounded-sm text-xs font-sans font-bold uppercase tracking-wider"
             >
-              Apply ({filteredProducts.length})
+              Apply ({isLoading ? '…' : totalCount})
             </button>
           </div>
         }

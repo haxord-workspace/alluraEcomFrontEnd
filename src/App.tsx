@@ -4,6 +4,7 @@ import { ShopProvider } from './context/ShopContext';
 import { AdminProvider } from './context/AdminContext';
 import { ConfirmProvider } from './context/ConfirmContext';
 import { trackPageView } from './utils/metaPixel';
+import { trackStorefrontPageView } from './service/tracking';
 
 // Layout & Navigation Components
 import { AnnouncementBar } from './components/layout/AnnouncementBar';
@@ -47,6 +48,8 @@ import { OffersPage } from './pages/customer/OffersPage';
 import { FaqPage } from './pages/customer/FaqPage';
 import { AIAssistantPage } from './pages/customer/AIAssistantPage';
 import { CMSPageViewer } from './pages/customer/CMSPageViewer';
+import { renderMyReviewsRoute } from './components/reviews/reviewRoutes';
+import { renderAdminReviewRoutes } from './components/admin/reviews/adminReviewRoutes';
 
 // Admin Operations Suite Components & Pages
 import { AdminLayout } from './components/admin/AdminLayout';
@@ -63,11 +66,11 @@ import { AdminInventoryPage } from './pages/admin/AdminInventoryPage';
 import { AdminTransactionsPage } from './pages/admin/AdminTransactionsPage';
 import { AdminReservationsPage } from './pages/admin/AdminReservationsPage';
 import { AdminOrdersPage } from './pages/admin/AdminOrdersPage';
-import { AdminReturnsPage } from './pages/admin/AdminReturnsPage';
-import { AdminRefundsPage } from './pages/admin/AdminRefundsPage';
+// import { AdminReturnsPage } from './pages/admin/AdminReturnsPage';
+// import { AdminRefundsPage } from './pages/admin/AdminRefundsPage';
 import { AdminOrderDetailPage } from './pages/admin/AdminOrderDetailPage';
 import { AdminPaymentsPage } from './pages/admin/AdminPaymentsPage';
-import { AdminShippingPage } from './pages/admin/AdminShippingPage';
+// import { AdminShippingPage } from './pages/admin/AdminShippingPage';
 import { AdminCustomersPage } from './pages/admin/AdminCustomersPage';
 import { AdminCustomerDetailPage } from './pages/admin/AdminCustomerDetailPage';
 import { AdminCouponsPage } from './pages/admin/AdminCouponsPage';
@@ -76,6 +79,7 @@ import { AdminBannersPage } from './pages/admin/AdminBannersPage';
 import { AdminAbandonedCartsPage } from './pages/admin/AdminAbandonedCartsPage';
 import { AdminNotificationsPage } from './pages/admin/AdminNotificationsPage';
 import { AdminContentPage } from './pages/admin/AdminContentPage';
+import { AdminFaqsPage } from './pages/admin/AdminFaqsPage';
 import { AdminSeoPage } from './pages/admin/AdminSeoPage';
 import { AdminAnalyticsPage } from './pages/admin/AdminAnalyticsPage';
 import { AdminAiPage } from './pages/admin/AdminAiPage';
@@ -99,9 +103,12 @@ export const AppContent: React.FC = () => {
   const isProductPage = location.pathname.startsWith('/product/');
   const isAdminRoute = location.pathname.startsWith('/admin');
 
-  // Meta Pixel: the app never reloads between pages, so send a PageView on every route change
+  // Meta Pixel & storefront analytics: the app never reloads between pages, so send PageView/PAGE_VIEW on every route change
   useEffect(() => {
-    if (!isAdminRoute) trackPageView();
+    if (!isAdminRoute) {
+      trackPageView();
+      trackStorefrontPageView(location.pathname);
+    }
   }, [location.pathname, isAdminRoute]);
 
   // Admin Portal Views
@@ -110,7 +117,7 @@ export const AppContent: React.FC = () => {
       <div className="min-h-screen flex flex-col bg-stone-100 text-stone-900">
         <ScrollToTop />
         <ToastContainer />
-        
+
         <Routes>
           <Route path="/admin/login" element={<AdminLoginPage />} />
           <Route element={<AdminLayout />}>
@@ -127,11 +134,11 @@ export const AppContent: React.FC = () => {
             <Route path="/admin/inventory/transactions" element={<AdminAccessGuard module="inventory"><AdminTransactionsPage /></AdminAccessGuard>} />
             <Route path="/admin/inventory/reservations" element={<AdminAccessGuard module="inventory"><AdminReservationsPage /></AdminAccessGuard>} />
             <Route path="/admin/orders" element={<AdminAccessGuard module="orders"><AdminOrdersPage /></AdminAccessGuard>} />
-            <Route path="/admin/orders/returns" element={<AdminAccessGuard module="orders"><AdminReturnsPage /></AdminAccessGuard>} />
-            <Route path="/admin/orders/refunds" element={<AdminAccessGuard module="orders" action="refund"><AdminRefundsPage /></AdminAccessGuard>} />
+            {/* <Route path="/admin/orders/returns" element={<AdminAccessGuard module="orders"><AdminReturnsPage /></AdminAccessGuard>} /> */}
+            {/* <Route path="/admin/orders/refunds" element={<AdminAccessGuard module="orders" action="refund"><AdminRefundsPage /></AdminAccessGuard>} /> */}
             <Route path="/admin/orders/:id" element={<AdminAccessGuard module="orders"><AdminOrderDetailPage /></AdminAccessGuard>} />
             <Route path="/admin/payments" element={<AdminAccessGuard module="orders"><AdminPaymentsPage /></AdminAccessGuard>} />
-            <Route path="/admin/shipping" element={<AdminAccessGuard module="orders"><AdminShippingPage /></AdminAccessGuard>} />
+            {/* <Route path="/admin/shipping" element={<AdminAccessGuard module="orders"><AdminShippingPage /></AdminAccessGuard>} /> */}
             <Route path="/admin/customers" element={<AdminAccessGuard module="customers"><AdminCustomersPage /></AdminAccessGuard>} />
             <Route path="/admin/customers/:id" element={<AdminAccessGuard module="customers"><AdminCustomerDetailPage /></AdminAccessGuard>} />
             <Route path="/admin/marketing/coupons" element={<AdminAccessGuard module="marketing"><AdminCouponsPage /></AdminAccessGuard>} />
@@ -141,14 +148,15 @@ export const AppContent: React.FC = () => {
             <Route path="/admin/marketing/abandoned-carts" element={<AdminAccessGuard module="marketing"><AdminAbandonedCartsPage /></AdminAccessGuard>} />
             <Route path="/admin/notifications" element={<AdminAccessGuard module="notifications"><AdminNotificationsPage /></AdminAccessGuard>} />
             <Route path="/admin/content" element={<AdminAccessGuard module="cms"><AdminContentPage /></AdminAccessGuard>} />
-            <Route path="/admin/content/faqs" element={<AdminAccessGuard module="cms"><AdminContentPage /></AdminAccessGuard>} />
+            <Route path="/admin/content/faqs" element={<AdminAccessGuard module="cms"><AdminFaqsPage /></AdminAccessGuard>} />
             <Route path="/admin/seo" element={<AdminAccessGuard module="seo"><AdminSeoPage /></AdminAccessGuard>} />
             <Route path="/admin/analytics" element={<AdminAccessGuard module="analytics"><AdminAnalyticsPage /></AdminAccessGuard>} />
-            <Route path="/admin/analytics/search" element={<AdminAccessGuard module="analytics"><AdminAnalyticsPage /></AdminAccessGuard>} />
+            <Route path="/admin/analytics/search" element={<Navigate to="/admin/analytics" replace />} />
             <Route path="/admin/ai" element={<AdminAccessGuard module="ai"><AdminAiPage /></AdminAccessGuard>} />
             <Route path="/admin/settings" element={<AdminAccessGuard module="settings"><AdminSettingsPage /></AdminAccessGuard>} />
             <Route path="/admin/settings/admins" element={<AdminAccessGuard module="adminManagement"><AdminSettingsPage /></AdminAccessGuard>} />
             <Route path="/admin/audit-logs" element={<AdminAccessGuard module="auditLogs"><AdminAuditLogsPage /></AdminAccessGuard>} />
+            {renderAdminReviewRoutes()}
             <Route path="/admin/*" element={<Navigate to="/admin" replace />} />
           </Route>
         </Routes>
@@ -203,6 +211,7 @@ export const AppContent: React.FC = () => {
           <Route path="/account/orders/:orderId/tracking" element={<ProtectedRoute><OrderTrackingPage /></ProtectedRoute>} />
           <Route path="/account/orders/:orderId/return" element={<ProtectedRoute><OrderReturnPage /></ProtectedRoute>} />
           <Route path="/account/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
+          {renderMyReviewsRoute()}
           <Route path="/offers" element={<OffersPage />} />
           <Route path="/faq" element={<FaqPage />} />
           <Route path="/ai-assistant" element={<AIAssistantPage />} />

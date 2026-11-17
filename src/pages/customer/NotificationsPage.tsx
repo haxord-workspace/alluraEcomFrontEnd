@@ -1,11 +1,67 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Bell, Check, CheckCheck, Package, Tag, User, Truck, ArrowLeft, ArrowRight } from 'lucide-react';
+import {
+  Bell,
+  Check,
+  CheckCheck,
+  Package,
+  Tag,
+  User,
+  Truck,
+  ArrowLeft,
+  ArrowRight,
+  Loader2,
+  AlertTriangle,
+  BellRing,
+  BellOff,
+  CheckCircle2,
+  AlertCircle,
+  Share2,
+} from 'lucide-react';
 import { useShop } from '../../context/ShopContext';
 
 export const NotificationsPage: React.FC = () => {
-  const { notifications, markNotificationAsRead, markAllNotificationsAsRead } = useShop();
+  const {
+    notifications,
+    markNotificationAsRead,
+    markAllNotificationsAsRead,
+    isLoadingNotifications,
+    notificationsError,
+    refreshNotifications,
+    enablePushNotifications,
+  } = useShop();
   const [activeCategory, setActiveCategory] = useState<string>('All');
+
+  // Push notification state detection
+  const isPushSupported = typeof window !== 'undefined' && 'Notification' in window && 'serviceWorker' in navigator;
+  const isIOS =
+    typeof navigator !== 'undefined' &&
+    (/iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
+  const isStandalone =
+    typeof window !== 'undefined' &&
+    (window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone === true);
+
+  const [pushStatus, setPushStatus] = useState<string>(() => {
+    if (!isPushSupported) return 'unsupported';
+    if (isIOS && !isStandalone) return 'ios_not_pwa';
+    return Notification.permission; // 'default' | 'granted' | 'denied'
+  });
+  const [isEnablingPush, setIsEnablingPush] = useState(false);
+
+  const handleEnablePush = async () => {
+    setIsEnablingPush(true);
+    try {
+      const result = await enablePushNotifications();
+      if (result.status === 'granted') {
+        setPushStatus('granted');
+      } else if (result.status === 'denied') {
+        setPushStatus('denied');
+      }
+    } finally {
+      setIsEnablingPush(false);
+    }
+  };
 
   const categories = ['All', 'Orders', 'Shipping', 'Offers', 'Account'];
 
@@ -55,6 +111,96 @@ export const NotificationsPage: React.FC = () => {
         </button>
       </div>
 
+      {/* Push Notifications Status / Control Card */}
+      <div className="bg-allura-card border border-allura-border/80 rounded-2xl p-5 sm:p-6 shadow-subtle">
+        {pushStatus === 'unsupported' ? (
+          <div className="flex items-start sm:items-center gap-3.5">
+            <div className="w-10 h-10 rounded-full bg-allura-bgSecondary flex items-center justify-center flex-shrink-0 text-allura-muted">
+              <BellOff size={18} />
+            </div>
+            <div>
+              <h3 className="font-serif text-sm font-medium text-allura-text">Browser Unsupported</h3>
+              <p className="text-xs font-sans text-allura-muted mt-0.5">
+                Push notifications are not supported on this device/browser.
+              </p>
+            </div>
+          </div>
+        ) : pushStatus === 'ios_not_pwa' ? (
+          <div className="flex items-start sm:items-center gap-3.5">
+            <div className="w-10 h-10 rounded-full bg-amber-50 text-amber-700 flex items-center justify-center flex-shrink-0">
+              <Share2 size={18} />
+            </div>
+            <div>
+              <h3 className="font-serif text-sm font-medium text-allura-text">Enable on iOS</h3>
+              <p className="text-xs font-sans text-allura-muted mt-0.5">
+                To enable notifications on iOS, tap the Share button and select "Add to Home Screen".
+              </p>
+            </div>
+          </div>
+        ) : pushStatus === 'denied' ? (
+          <div className="flex items-start sm:items-center gap-3.5">
+            <div className="w-10 h-10 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center flex-shrink-0">
+              <AlertCircle size={18} />
+            </div>
+            <div>
+              <h3 className="font-serif text-sm font-medium text-allura-text">Notifications Blocked</h3>
+              <p className="text-xs font-sans text-allura-muted mt-0.5">
+                Notifications are blocked. Please allow them in your browser site settings.
+              </p>
+            </div>
+          </div>
+        ) : pushStatus === 'granted' ? (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-start sm:items-center gap-3.5">
+              <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center flex-shrink-0">
+                <CheckCircle2 size={18} />
+              </div>
+              <div>
+                <h3 className="font-serif text-sm font-medium text-allura-text">Push Notifications Active</h3>
+                <p className="text-xs font-sans text-allura-muted mt-0.5">
+                  Notifications are enabled. You will receive live updates on your orders and exclusive boutique offers.
+                </p>
+              </div>
+            </div>
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200/80 rounded-full text-xs font-sans font-semibold self-start sm:self-auto">
+              <Check size={12} />
+              <span>Enabled</span>
+            </span>
+          </div>
+        ) : (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-start sm:items-center gap-3.5">
+              <div className="w-10 h-10 rounded-full bg-allura-bgSecondary text-allura-gold flex items-center justify-center flex-shrink-0">
+                <BellRing size={18} />
+              </div>
+              <div>
+                <h3 className="font-serif text-base font-normal text-allura-text">Instant Order & Boutique Alerts</h3>
+                <p className="text-xs font-sans text-allura-muted mt-0.5">
+                  Enable push notifications to receive real-time updates on shipping milestones and private offers.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={handleEnablePush}
+              disabled={isEnablingPush}
+              className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-allura-darkBrown hover:bg-black text-white text-xs font-sans font-semibold rounded-xl transition-colors shadow-xs disabled:opacity-50 self-start sm:self-auto flex-shrink-0"
+            >
+              {isEnablingPush ? (
+                <>
+                  <Loader2 size={14} className="animate-spin" />
+                  <span>Enabling…</span>
+                </>
+              ) : (
+                <>
+                  <Bell size={14} />
+                  <span>Enable Push Notifications</span>
+                </>
+              )}
+            </button>
+          </div>
+        )}
+      </div>
+
       {/* Category Tabs */}
       <div className="flex gap-2 overflow-x-auto pb-2 border-b border-allura-border/40">
         {categories.map(cat => (
@@ -73,7 +219,20 @@ export const NotificationsPage: React.FC = () => {
       </div>
 
       {/* Notifications List */}
-      {filtered.length === 0 ? (
+      {isLoadingNotifications && notifications.length === 0 ? (
+        <div className="bg-allura-card border border-allura-border rounded-2xl p-12 text-center space-y-3 shadow-subtle">
+          <Loader2 size={24} className="animate-spin text-allura-goldDark mx-auto" />
+          <p className="text-xs font-sans text-allura-muted">Loading your notifications…</p>
+        </div>
+      ) : notificationsError ? (
+        <div className="bg-allura-card border border-allura-border rounded-2xl p-12 text-center space-y-3 shadow-subtle">
+          <AlertTriangle size={24} className="text-rose-500 mx-auto" />
+          <p className="text-xs font-sans text-allura-muted">{notificationsError}</p>
+          <button onClick={refreshNotifications} className="text-xs font-sans font-bold text-allura-goldDark underline">
+            Retry
+          </button>
+        </div>
+      ) : filtered.length === 0 ? (
         <div className="bg-allura-card border border-allura-border rounded-2xl p-12 text-center space-y-3 shadow-subtle">
           <div className="w-12 h-12 rounded-full bg-allura-bgSecondary text-allura-goldDark flex items-center justify-center mx-auto">
             <Bell size={24} />

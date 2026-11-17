@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { X, Heart, MessageCircle, Star, Check, ArrowRight } from 'lucide-react';
 import { useShop } from '../../context/ShopContext';
 import { useAddToBag } from '../../hooks/useAddToBag';
 import { AddToBagLabel, addToBagButtonState } from '../ui/AddToBagLabel';
+import { trackProductView } from '../../service/tracking';
 
 export const QuickViewModal: React.FC = () => {
   const {
@@ -19,33 +20,32 @@ export const QuickViewModal: React.FC = () => {
   const [activeImageIdx, setActiveImageIdx] = useState(0);
   const bag = useAddToBag();
 
-  if (!quickViewProduct) return null;
-
-  const product = quickViewProduct;
-  const inWishlist = isInWishlist(product.id);
-  const currentColor = product.colors[selectedColorIdx] || product.colors[0];
+  const currentColor = quickViewProduct?.colors?.[selectedColorIdx] || quickViewProduct?.colors?.[0];
 
   const isColorMatching = (variantColor?: { name?: string }, targetColorName?: string) => {
     if (!targetColorName) return true;
     const vName = variantColor?.name?.trim();
     if (!vName) {
-      return (product.colors?.length || 0) <= 1;
+      return (quickViewProduct?.colors?.length || 0) <= 1;
     }
     return vName.toLowerCase() === targetColorName.toLowerCase().trim();
   };
 
+  // Called unconditionally (before the quickViewProduct null check below) so hook
+  // order stays stable across renders; it guards for a null product internally.
   const availableSizes = React.useMemo(() => {
-    if (!product.variants || product.variants.length === 0) {
-      return product.sizes || [];
+    if (!quickViewProduct) return [];
+    if (!quickViewProduct.variants || quickViewProduct.variants.length === 0) {
+      return quickViewProduct.sizes || [];
     }
-    const matchingVariants = product.variants.filter(v =>
+    const matchingVariants = quickViewProduct.variants.filter(v =>
       isColorMatching(v.color, currentColor?.name) && Boolean(v.size?.trim())
     );
     if (matchingVariants.length === 0) {
-      return product.sizes || [];
+      return quickViewProduct.sizes || [];
     }
     const colorSizeSet = new Set(matchingVariants.map(v => v.size.trim().toLowerCase()));
-    const ordered = (product.sizes || []).filter(s => colorSizeSet.has(s.trim().toLowerCase()));
+    const ordered = (quickViewProduct.sizes || []).filter(s => colorSizeSet.has(s.trim().toLowerCase()));
     if (ordered.length > 0) return ordered;
     const uniqueSizes: string[] = [];
     matchingVariants.forEach(v => {
@@ -55,7 +55,25 @@ export const QuickViewModal: React.FC = () => {
       }
     });
     return uniqueSizes;
-  }, [product, currentColor?.name]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quickViewProduct, currentColor?.name]);
+
+  const lastTrackedQuickViewIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!quickViewProduct?.id) {
+      lastTrackedQuickViewIdRef.current = null;
+      return;
+    }
+    if (lastTrackedQuickViewIdRef.current === quickViewProduct.id) return;
+    lastTrackedQuickViewIdRef.current = quickViewProduct.id;
+    trackProductView(quickViewProduct, 'quick_view');
+  }, [quickViewProduct]);
+
+  if (!quickViewProduct) return null;
+
+  const product = quickViewProduct;
+  const inWishlist = isInWishlist(product.id);
 
   const currentSize = (availableSizes.some(s => s.toLowerCase() === selectedSize.toLowerCase()) ? selectedSize : availableSizes[0]) || product.sizes[0] || '';
 

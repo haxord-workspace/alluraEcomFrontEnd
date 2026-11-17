@@ -2,9 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { Search, X, Package, ShoppingBag, Users, Tag, Settings, ArrowRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAdmin } from '../../context/AdminContext';
+import { usePermissions } from '../../hooks/usePermissions';
 
 export const AdminCommandSearch: React.FC = () => {
-  const { isCommandOpen, setIsCommandOpen, products, orders, customers, coupons, hasPermission } = useAdmin();
+  const { isCommandOpen, setIsCommandOpen, products, orders, customers, coupons } = useAdmin();
+  const { can } = usePermissions();
   const [query, setQuery] = useState('');
   const navigate = useNavigate();
 
@@ -26,25 +28,25 @@ export const AdminCommandSearch: React.FC = () => {
 
   const cleanQuery = query.toLowerCase().trim();
 
-  const matchedProducts = hasPermission('products')
+  const matchedProducts = can('products_catalog', 'view')
     ? products.filter(
         p => p.name.toLowerCase().includes(cleanQuery) || p.sku.toLowerCase().includes(cleanQuery)
       ).slice(0, 3)
     : [];
 
-  const matchedOrders = hasPermission('orders')
+  const matchedOrders = can('order_processing', 'view')
     ? orders.filter(
         o => o.orderNumber.toLowerCase().includes(cleanQuery) || o.customer.name.toLowerCase().includes(cleanQuery)
       ).slice(0, 3)
     : [];
 
-  const matchedCustomers = hasPermission('customers')
+  const matchedCustomers = can('customer_crm', 'view')
     ? customers.filter(
         c => c.name.toLowerCase().includes(cleanQuery) || c.email.toLowerCase().includes(cleanQuery)
       ).slice(0, 3)
     : [];
 
-  const matchedCoupons = hasPermission('marketing')
+  const matchedCoupons = can('coupons_banners', 'view')
     ? coupons.filter(
         cp => cp.code.toLowerCase().includes(cleanQuery)
       ).slice(0, 2)
@@ -57,13 +59,13 @@ export const AdminCommandSearch: React.FC = () => {
   };
 
   const navShortcuts = [
-    { label: 'Products Catalog', path: '/admin/products', icon: <Package size={14} />, module: 'products' as const },
-    { label: 'Order Processing', path: '/admin/orders', icon: <ShoppingBag size={14} />, module: 'orders' as const },
-    { label: 'Stock Adjustments', path: '/admin/inventory', icon: <Package size={14} />, module: 'inventory' as const },
-    { label: 'Customer CRM', path: '/admin/customers', icon: <Users size={14} />, module: 'customers' as const },
-    { label: 'Coupons & Promos', path: '/admin/marketing/coupons', icon: <Tag size={14} />, module: 'marketing' as const },
-    { label: 'Store Settings', path: '/admin/settings', icon: <Settings size={14} />, module: 'settings' as const },
-  ].filter(item => hasPermission(item.module));
+    { label: 'Products Catalog', path: '/admin/products', icon: <Package size={14} />, module: 'products_catalog' as const },
+    { label: 'Order Processing', path: '/admin/orders', icon: <ShoppingBag size={14} />, module: 'order_processing' as const },
+    { label: 'Stock Adjustments', path: '/admin/inventory', icon: <Package size={14} />, module: 'inventory_stock' as const },
+    { label: 'Customer CRM', path: '/admin/customers', icon: <Users size={14} />, module: 'customer_crm' as const },
+    { label: 'Coupons & Promos', path: '/admin/marketing/coupons', icon: <Tag size={14} />, module: 'coupons_banners' as const },
+    { label: 'Store Settings', path: '/admin/settings', icon: <Settings size={14} />, module: 'system_settings' as const },
+  ].filter(item => can(item.module, 'view'));
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center pt-16 sm:pt-24 px-4 bg-allura-darkBrown/60 backdrop-blur-sm animate-fade-in">

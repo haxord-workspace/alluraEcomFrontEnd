@@ -1,43 +1,149 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAdmin } from '../../context/AdminContext';
 import { useShop } from '../../context/ShopContext';
 import { useConfirm } from '../../context/ConfirmContext';
+import { usePermissions } from '../../hooks/usePermissions';
 import { PermissionMatrix } from '../../components/admin/PermissionMatrix';
-import { 
-  Building2, 
-  CreditCard, 
-  Truck, 
-  Sparkles, 
-  ShieldCheck, 
-  Users, 
-  Save, 
+import {
+  Building2,
+  Truck,
+  Users,
+  Save,
   RotateCcw,
   CheckCircle2,
-  Key,
-  Database,
-  Lock,
   Activity,
   Server,
   RefreshCw,
-  AlertTriangle
+  AlertTriangle,
+  Loader2
 } from 'lucide-react';
 import { getDashboardSystemHealth, type SystemHealthResponse } from '../../service/adminDashboard';
-import type { AdminRole } from '../../types';
+import {
+  getBoutiqueSettings,
+  updateBoutiqueSettings,
+  getAdminStaff,
+  settingsErrorMessage,
+  settingsFieldErrors,
+} from '../../service/settings';
+import type {
+  AdminStaffMember,
+  SettingsResponse,
+  UpdateBoutiqueProfileRequest,
+} from '../../types/settings';
+import { getStaffInitials } from '../../utils/rbac';
+import { normalizeMobile } from '../../utils/addressValidation';
+import {
+  validateBoutiqueSettings,
+  legalNameError,
+  taglineError,
+  whatsappError,
+  emailError,
+  gstinError,
+  addressError,
+  freeShippingThresholdError,
+  standardShippingFeeError,
+  expressShippingFeeError,
+  type BoutiqueSettingsForm,
+  type BoutiqueSettingsErrors,
+} from '../../utils/boutiqueSettingsValidation';
+
+const EMPTY_BOUTIQUE_FORM: BoutiqueSettingsForm = {
+  storeName: '',
+  tagline: '',
+  whatsapp: '',
+  email: '',
+  gstin: '',
+  address: '',
+  freeShippingThreshold: '',
+  standardShippingFee: '',
+  expressShippingFee: '',
+};
+
+const toForm = (s: SettingsResponse): BoutiqueSettingsForm => ({
+  storeName: s.boutiqueProfile?.legalName ?? '',
+  tagline: s.boutiqueProfile?.tagline ?? '',
+  whatsapp: s.boutiqueProfile?.whatsappNumber ?? '',
+  email: s.boutiqueProfile?.supportEmail ?? '',
+  gstin: s.boutiqueProfile?.gstin ?? '',
+  address: s.boutiqueProfile?.address ?? '',
+  freeShippingThreshold:
+    s.shipping?.freeShippingMinOrder !== undefined ? String(s.shipping.freeShippingMinOrder) : '',
+  standardShippingFee:
+    s.shipping?.standardTariff !== undefined ? String(s.shipping.standardTariff) : '',
+  expressShippingFee:
+    s.shipping?.expressTariff !== undefined ? String(s.shipping.expressTariff) : '',
+});
+
+const BACKEND_TO_FORM_FIELD: Record<string, keyof BoutiqueSettingsForm> = {
+  legalName: 'storeName',
+  storeName: 'storeName',
+  tagline: 'tagline',
+  whatsappNumber: 'whatsapp',
+  whatsapp: 'whatsapp',
+  supportEmail: 'email',
+  email: 'email',
+  gstin: 'gstin',
+  address: 'address',
+  freeShippingMinOrder: 'freeShippingThreshold',
+  freeShippingThreshold: 'freeShippingThreshold',
+  standardTariff: 'standardShippingFee',
+  standardShippingFee: 'standardShippingFee',
+  expressTariff: 'expressShippingFee',
+  expressShippingFee: 'expressShippingFee',
+};
 
 export const AdminSettingsPage: React.FC = () => {
-  const { 
-    adminUsers, 
-    role, 
-    setRole, 
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const {
+    setRole,
     logAdminAction,
-    hasPermission
   } = useAdmin();
+  const { can, role, realRole, roles: availableRoles } = usePermissions();
   const { showToast } = useShop();
   const confirm = useConfirm();
 
-  const [activeTab, setActiveTab] = useState<'store' | 'integrations' | 'admins' | 'security' | 'health'>('store');
+  const canViewAdminMatrix =
+    role === 'SUPER_ADMIN' || role === 'ADMIN' || can('admin_management', 'view');
+
+  const urlTab = searchParams.get('tab');
+  const activeTab: 'store' | 'admins' | 'health' =
+    urlTab === 'admins' || (location.pathname.endsWith('/admins') && !urlTab)
+      ? 'admins'
+      : urlTab === 'health'
+        ? 'health'
+        : 'store';
   const [systemHealth, setSystemHealth] = useState<SystemHealthResponse | null>(null);
   const [isHealthLoading, setIsHealthLoading] = useState(false);
+  const [isMatrixDirty, setIsMatrixDirty] = useState(false);
+
+  // Admin staff list — loaded from GET /admin/settings/admins on Admins tab mount
+  const [staffList, setStaffList] = useState<AdminStaffMember[]>([]);
+  const [isStaffLoading, setIsStaffLoading] = useState(false);
+  const [isStaffLoaded, setIsStaffLoaded] = useState(false);
+  const [staffError, setStaffError] = useState<string | null>(null);
+
+  const fetchAdminStaff = useCallback(async () => {
+    setIsStaffLoading(true);
+    setStaffError(null);
+    try {
+      const staff = await getAdminStaff();
+      setStaffList(staff);
+      setIsStaffLoaded(true);
+    } catch (err) {
+      setStaffError(settingsErrorMessage(err, 'Could not load staff directory'));
+    } finally {
+      setIsStaffLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'admins' && canViewAdminMatrix && !isStaffLoaded && !staffError) {
+      void fetchAdminStaff();
+    }
+  }, [activeTab, canViewAdminMatrix, isStaffLoaded, staffError, fetchAdminStaff]);
 
   const fetchHealth = async () => {
     setIsHealthLoading(true);
@@ -55,78 +161,214 @@ export const AdminSettingsPage: React.FC = () => {
     fetchHealth();
   }, []);
 
-  // Store Settings Form
-  const [storeSettings, setStoreSettings] = useState({
-    storeName: 'Allura Boutique Atelier',
-    tagline: 'Kerala Modest & Ethnic Couture',
-    phone: '+91 90379 91774',
-    whatsapp: '9037991774',
-    email: 'concierge@alluraboutique.in',
-    gstin: '32AAACA1234A1Z5',
-    address: 'Near Jubilee Mission Hospital, Bypass Road, Perinthalmanna, Malappuram, Kerala - 679322',
-    currency: 'INR (₹)',
-    timezone: 'Asia/Kolkata (IST +05:30)',
-    freeShippingThreshold: 2999,
-    standardShippingFee: 149,
-    expressShippingFee: 299,
-  });
+  // Boutique Profile form — loaded from GET /admin/settings
+  const [boutiqueForm, setBoutiqueForm] = useState<BoutiqueSettingsForm>(EMPTY_BOUTIQUE_FORM);
+  const [boutiqueOriginal, setBoutiqueOriginal] = useState<BoutiqueSettingsForm>(EMPTY_BOUTIQUE_FORM);
+  const [boutiqueReadOnly, setBoutiqueReadOnly] = useState({ currency: '', timezone: '' });
+  const [boutiqueErrors, setBoutiqueErrors] = useState<BoutiqueSettingsErrors>({});
+  const [boutiqueTouched, setBoutiqueTouched] = useState<Partial<Record<keyof BoutiqueSettingsForm, boolean>>>({});
+  const [isBoutiqueLoading, setIsBoutiqueLoading] = useState(false);
+  const [isBoutiqueLoaded, setIsBoutiqueLoaded] = useState(false);
+  const [boutiqueLoadError, setBoutiqueLoadError] = useState<string | null>(null);
+  const [isBoutiqueSaving, setIsBoutiqueSaving] = useState(false);
 
-  // Integrations Form
-  const [integrations, setIntegrations] = useState({
-    razorpayKey: 'rzp_live_892Kls9910293J',
-    razorpaySecret: '••••••••••••••••••••••••••••',
-    razorpayTestMode: false,
-    delhiveryToken: 'dlhv_live_tok_99182371928419',
-    delhiveryClientId: 'ALLURA_EXP_PERINTHALMANNA',
-    delhiveryWarehouseCode: 'KL-PMNA-HUB-01',
-    whatsappPhoneId: '109832819284719',
-    whatsappToken: '••••••••••••••••••••••••••••',
-    whatsappEnabled: true,
-    emailApiKey: 're_live_9981293847192',
-    fromEmail: 'orders@alluraboutique.in',
-    aiModel: 'gemini-1.5-flash',
-    aiTemperature: 0.7,
-  });
+  const isBoutiqueDirty = (Object.keys(boutiqueForm) as (keyof BoutiqueSettingsForm)[]).some(
+    key => boutiqueForm[key] !== boutiqueOriginal[key]
+  );
+  const hasBoutiqueErrors = Object.values(boutiqueErrors).some(Boolean);
 
-  // Security Form
-  const [securitySettings, setSecuritySettings] = useState({
-    enforce2FA: true,
-    sessionTimeoutMins: 60,
-    ipWhitelisting: false,
-    auditRetentionDays: 90,
-  });
+  const fetchBoutiqueSettings = useCallback(async () => {
+    setIsBoutiqueLoading(true);
+    setBoutiqueLoadError(null);
+    try {
+      const data = await getBoutiqueSettings();
+      const form = toForm(data);
+      setBoutiqueForm(form);
+      setBoutiqueOriginal(form);
+      setBoutiqueReadOnly({
+        currency: data.boutiqueProfile?.currency ?? '',
+        timezone: data.boutiqueProfile?.timezone ?? '',
+      });
+      setBoutiqueErrors({});
+      setBoutiqueTouched({});
+      setIsBoutiqueLoaded(true);
+    } catch (err) {
+      setBoutiqueLoadError(settingsErrorMessage(err, 'Could not load boutique settings'));
+    } finally {
+      setIsBoutiqueLoading(false);
+    }
+  }, []);
 
-  const isEditable = hasPermission('settings', 'edit');
+  useEffect(() => {
+    if (activeTab === 'store' && !isBoutiqueLoaded) {
+      fetchBoutiqueSettings();
+    }
+  }, [activeTab, isBoutiqueLoaded, fetchBoutiqueSettings]);
 
-  const handleSaveStore = (e: React.FormEvent) => {
+  // Warn on browser close/reload with unsaved changes
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (isBoutiqueDirty || isMatrixDirty) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [isBoutiqueDirty, isMatrixDirty]);
+
+  const BOUTIQUE_VALIDATORS: Record<keyof BoutiqueSettingsForm, (form: BoutiqueSettingsForm) => string> = {
+    storeName: f => legalNameError(f.storeName),
+    tagline: f => taglineError(f.tagline),
+    whatsapp: f => whatsappError(f.whatsapp),
+    email: f => emailError(f.email),
+    gstin: f => gstinError(f.gstin),
+    address: f => addressError(f.address),
+    freeShippingThreshold: f => freeShippingThresholdError(f.freeShippingThreshold),
+    standardShippingFee: f => standardShippingFeeError(f.standardShippingFee),
+    expressShippingFee: f => expressShippingFeeError(f.expressShippingFee, f.standardShippingFee),
+  };
+
+  const setBoutiqueField = (field: keyof BoutiqueSettingsForm, value: string) => {
+    const next = { ...boutiqueForm, [field]: value };
+    setBoutiqueForm(next);
+    if (boutiqueTouched[field]) {
+      setBoutiqueErrors(prev => ({ ...prev, [field]: BOUTIQUE_VALIDATORS[field](next) || undefined }));
+    }
+  };
+
+  const blurBoutiqueField = (field: keyof BoutiqueSettingsForm) => {
+    setBoutiqueTouched(prev => ({ ...prev, [field]: true }));
+    setBoutiqueErrors(prev => ({ ...prev, [field]: BOUTIQUE_VALIDATORS[field](boutiqueForm) || undefined }));
+  };
+
+  const handleResetBoutique = () => {
+    setBoutiqueForm(boutiqueOriginal);
+    setBoutiqueErrors({});
+    setBoutiqueTouched({});
+  };
+
+  const isEditable = can('system_settings', 'edit');
+
+  const switchTab = async (tab: 'store' | 'admins' | 'health') => {
+    if (tab === activeTab) return;
+    if (activeTab === 'store' && isBoutiqueDirty) {
+      const ok = await confirm({
+        title: 'Discard changes?',
+        message: 'The Boutique Profile has unsaved changes. Switch tabs and discard them?',
+        confirmLabel: 'Discard changes',
+        isDestructive: true,
+      });
+      if (!ok) return;
+    }
+    if (activeTab === 'admins' && isMatrixDirty) {
+      const ok = await confirm({
+        title: 'Discard changes?',
+        message: 'The Role Permissions Matrix has unsaved changes. Switch tabs and discard them?',
+        confirmLabel: 'Discard changes',
+        isDestructive: true,
+      });
+      if (!ok) return;
+      setIsMatrixDirty(false);
+    }
+    if (location.pathname.endsWith('/admins') && tab !== 'admins') {
+      navigate(tab === 'store' ? '/admin/settings' : `/admin/settings?tab=${tab}`);
+      return;
+    }
+    setSearchParams(tab === 'store' ? {} : { tab });
+  };
+
+  const handleSaveStore = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isEditable) {
       showToast('Action restricted: Read-only access for current role', 'error');
       return;
     }
-    logAdminAction('Updated', 'Settings', 'Store Configuration', 'Updated boutique details and shipping rates');
-    showToast('Boutique settings saved successfully', 'success');
-  };
 
-  const handleSaveIntegrations = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!isEditable) {
-      showToast('Action restricted: Read-only access for current role', 'error');
+    const errors = validateBoutiqueSettings(boutiqueForm);
+    if (Object.keys(errors).length > 0) {
+      setBoutiqueErrors(errors);
+      setBoutiqueTouched({
+        storeName: true,
+        tagline: true,
+        whatsapp: true,
+        email: true,
+        gstin: true,
+        address: true,
+        freeShippingThreshold: true,
+        standardShippingFee: true,
+        expressShippingFee: true,
+      });
       return;
     }
-    logAdminAction('Updated', 'Settings', 'API Integrations', 'Updated Razorpay, Delhivery & AI gateway credentials');
-    showToast('Integration keys and parameters saved', 'gold');
+    if (!isBoutiqueDirty) return;
+
+    // Build a true PATCH: only the fields that actually changed
+    const payload: UpdateBoutiqueProfileRequest = {};
+    if (boutiqueForm.storeName !== boutiqueOriginal.storeName) payload.legalName = boutiqueForm.storeName.trim();
+    if (boutiqueForm.tagline !== boutiqueOriginal.tagline) payload.tagline = boutiqueForm.tagline.trim();
+    if (boutiqueForm.whatsapp !== boutiqueOriginal.whatsapp) {
+      const digits = normalizeMobile(boutiqueForm.whatsapp);
+      payload.whatsappNumber = digits.length === 10 ? `+91${digits}` : boutiqueForm.whatsapp.trim();
+    }
+    if (boutiqueForm.email !== boutiqueOriginal.email) payload.supportEmail = boutiqueForm.email.trim().toLowerCase();
+    if (boutiqueForm.gstin !== boutiqueOriginal.gstin) payload.gstin = boutiqueForm.gstin.trim().toUpperCase();
+    if (boutiqueForm.address !== boutiqueOriginal.address) payload.address = boutiqueForm.address.trim();
+    if (boutiqueForm.freeShippingThreshold !== boutiqueOriginal.freeShippingThreshold)
+      payload.freeShippingMinOrder = Number(boutiqueForm.freeShippingThreshold);
+    if (boutiqueForm.standardShippingFee !== boutiqueOriginal.standardShippingFee)
+      payload.standardTariff = Number(boutiqueForm.standardShippingFee);
+    if (boutiqueForm.expressShippingFee !== boutiqueOriginal.expressShippingFee)
+      payload.expressTariff = Number(boutiqueForm.expressShippingFee);
+
+    setIsBoutiqueSaving(true);
+    try {
+      const updated = await updateBoutiqueSettings(payload);
+      const form = toForm(updated);
+      setBoutiqueForm(form);
+      setBoutiqueOriginal(form);
+      setBoutiqueReadOnly({
+        currency: updated.boutiqueProfile?.currency ?? '',
+        timezone: updated.boutiqueProfile?.timezone ?? '',
+      });
+      setBoutiqueErrors({});
+      setBoutiqueTouched({});
+      logAdminAction('Updated', 'Settings', 'Store Configuration', 'Updated boutique details and shipping rates');
+      showToast('Boutique profile updated', 'success');
+      // Best-effort cache-bust for any other part of the app that reads boutique
+      // settings (e.g. the invoice/header store name) — nothing subscribes yet.
+      window.dispatchEvent(new CustomEvent('boutique-settings-updated', { detail: updated }));
+    } catch (err: unknown) {
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      if (status === 401 || status === 403) {
+        showToast('Your role does not have permission to update boutique settings.', 'error');
+      } else {
+        const rawFieldErrors = settingsFieldErrors(err);
+        const mappedErrors: BoutiqueSettingsErrors = {};
+        Object.entries(rawFieldErrors).forEach(([key, message]) => {
+          const formKey = BACKEND_TO_FORM_FIELD[key];
+          if (formKey) mappedErrors[formKey] = message;
+        });
+        if (Object.keys(mappedErrors).length > 0) {
+          setBoutiqueErrors(prev => ({ ...prev, ...mappedErrors }));
+        }
+        showToast(settingsErrorMessage(err, 'Could not update boutique profile'), 'error');
+      }
+    } finally {
+      setIsBoutiqueSaving(false);
+    }
   };
 
-  const handleSaveSecurity = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (role !== 'SUPER_ADMIN') {
-      showToast('Super Admin access required for security settings', 'error');
-      return;
-    }
-    logAdminAction('Updated', 'Settings', 'Security Policies', 'Updated 2FA and session timeout policies');
-    showToast('Security configurations updated', 'success');
-  };
+  const boutiqueErrorId = (field: keyof BoutiqueSettingsForm) => `boutique-${field}-error`;
+  const boutiqueInputClass = (field: keyof BoutiqueSettingsForm, extra = '') =>
+    `w-full px-3.5 py-2 text-sm bg-white border rounded-lg text-primary-900 focus:outline-none focus:border-accent-gold disabled:bg-primary-100/60 disabled:text-primary-500 ${boutiqueErrors[field] ? 'border-rose-400 focus:border-rose-500' : 'border-primary-200'
+    } ${extra}`;
+  const BoutiqueFieldError: React.FC<{ field: keyof BoutiqueSettingsForm }> = ({ field }) =>
+    boutiqueErrors[field] ? (
+      <p id={boutiqueErrorId(field)} role="alert" className="text-[11px] text-rose-600 mt-1">
+        {boutiqueErrors[field]}
+      </p>
+    ) : null;
 
   return (
     <div className="space-y-8 max-w-6xl">
@@ -136,26 +378,32 @@ export const AdminSettingsPage: React.FC = () => {
           <span className="text-xs uppercase tracking-widest text-accent-gold font-bold">Administration</span>
           <h1 className="font-serif text-3xl text-primary-900 mt-1">Atelier Settings & Integrations</h1>
           <p className="text-primary-600 text-sm mt-1 font-sans">
-            Configure boutique metadata, logistics APIs, payment gateways, permissions, and security controls.
+            Configure boutique profile, shipping thresholds, admin permissions, and system health.
           </p>
         </div>
 
-        {/* Role Quick Switch */}
-        <div className="flex items-center gap-2 bg-primary-100/70 p-1.5 rounded-lg border border-primary-200">
+        {/* Role Indicator / Dynamic Quick Switch */}
+        <div className="flex flex-wrap items-center gap-2 bg-primary-100/70 p-1.5 rounded-lg border border-primary-200">
           <span className="text-xs font-semibold text-primary-700 px-2">Role:</span>
-          {(['SUPER_ADMIN', 'ADMIN', 'CATALOG_MANAGER', 'ORDER_MANAGER'] as AdminRole[]).map((r) => (
-            <button
-              key={r}
-              onClick={() => setRole(r)}
-              className={`px-2.5 py-1 text-xs font-mono font-medium rounded transition-colors ${
-                role === r
+          {realRole === 'SUPER_ADMIN' && availableRoles.length > 0 ? (
+            availableRoles.map((r) => (
+              <button
+                key={r}
+                type="button"
+                onClick={() => setRole(r)}
+                className={`px-2.5 py-1 text-xs font-mono font-medium rounded transition-colors ${role === r
                   ? 'bg-primary-900 text-primary-50 shadow-sm font-bold'
                   : 'text-primary-700 hover:bg-primary-200/50'
-              }`}
-            >
-              {r.replace('_', ' ')}
-            </button>
-          ))}
+                  }`}
+              >
+                {r.replace(/_/g, ' ')}
+              </button>
+            ))
+          ) : (
+            <span className="px-2.5 py-1 text-xs font-mono font-bold rounded bg-primary-900 text-primary-50 shadow-sm">
+              {(role || realRole || '—').replace(/_/g, ' ')}
+            </span>
+          )}
         </div>
       </div>
 
@@ -163,7 +411,7 @@ export const AdminSettingsPage: React.FC = () => {
         <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-xs font-sans flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="text-sm">⚠️</span>
-            <span><strong>Read-Only Configuration Mode:</strong> Active role (<span className="font-mono font-bold">{role}</span>) has view access only.</span>
+            <span><strong>Read-Only Configuration Mode:</strong> Active role (<span className="font-mono font-bold">{role || '—'}</span>) has view access only.</span>
           </div>
           <span className="text-[10px] uppercase font-bold tracking-wider bg-amber-100 text-amber-800 px-2 py-0.5 rounded">
             Protected
@@ -172,66 +420,42 @@ export const AdminSettingsPage: React.FC = () => {
       )}
 
       {/* Tabs */}
-      <div className="flex border-b border-primary-200/80 gap-6">
+      <div className="flex border-b border-primary-200/80 gap-6 overflow-x-auto">
         <button
-          onClick={() => setActiveTab('store')}
-          className={`flex items-center gap-2 pb-3 text-sm font-medium border-b-2 transition-colors ${
-            activeTab === 'store'
-              ? 'border-accent-gold text-primary-950 font-semibold'
-              : 'border-transparent text-primary-600 hover:text-primary-900'
-          }`}
+          type="button"
+          onClick={() => switchTab('store')}
+          className={`flex items-center gap-2 pb-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap shrink-0 ${activeTab === 'store'
+            ? 'border-accent-gold text-primary-950 font-semibold'
+            : 'border-transparent text-primary-600 hover:text-primary-900'
+            }`}
         >
           <Building2 size={16} />
           Boutique Profile
+          {isBoutiqueDirty && <span className="w-1.5 h-1.5 rounded-full bg-accent-gold" aria-hidden="true" />}
         </button>
 
-        <button
-          onClick={() => setActiveTab('integrations')}
-          className={`flex items-center gap-2 pb-3 text-sm font-medium border-b-2 transition-colors ${
-            activeTab === 'integrations'
+        {canViewAdminMatrix && (
+          <button
+            type="button"
+            onClick={() => switchTab('admins')}
+            className={`flex items-center gap-2 pb-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap shrink-0 ${activeTab === 'admins'
               ? 'border-accent-gold text-primary-950 font-semibold'
               : 'border-transparent text-primary-600 hover:text-primary-900'
-          }`}
-        >
-          <Key size={16} />
-          Gateways & Logistics
-        </button>
-
-        {hasPermission('adminManagement') && (
-          <button
-            onClick={() => setActiveTab('admins')}
-            className={`flex items-center gap-2 pb-3 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === 'admins'
-                ? 'border-accent-gold text-primary-950 font-semibold'
-                : 'border-transparent text-primary-600 hover:text-primary-900'
-            }`}
+              }`}
           >
             <Users size={16} />
             Admins & RBAC Matrix
-          </button>
-        )}
-
-        {(hasPermission('adminManagement') || role === 'SUPER_ADMIN') && (
-          <button
-            onClick={() => setActiveTab('security')}
-            className={`flex items-center gap-2 pb-3 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === 'security'
-                ? 'border-accent-gold text-primary-950 font-semibold'
-                : 'border-transparent text-primary-600 hover:text-primary-900'
-            }`}
-          >
-            <ShieldCheck size={16} />
-            Security & Maintenance
+            {isMatrixDirty && <span className="w-1.5 h-1.5 rounded-full bg-accent-gold" aria-hidden="true" />}
           </button>
         )}
 
         <button
-          onClick={() => setActiveTab('health')}
-          className={`flex items-center gap-2 pb-3 text-sm font-medium border-b-2 transition-colors ${
-            activeTab === 'health'
-              ? 'border-accent-gold text-primary-950 font-semibold'
-              : 'border-transparent text-primary-600 hover:text-primary-900'
-          }`}
+          type="button"
+          onClick={() => switchTab('health')}
+          className={`flex items-center gap-2 pb-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap shrink-0 ${activeTab === 'health'
+            ? 'border-accent-gold text-primary-950 font-semibold'
+            : 'border-transparent text-primary-600 hover:text-primary-900'
+            }`}
         >
           <Activity size={16} />
           System Health
@@ -240,331 +464,248 @@ export const AdminSettingsPage: React.FC = () => {
 
       {/* Tab 1: Store Settings */}
       {activeTab === 'store' && (
-        <form onSubmit={handleSaveStore} className="space-y-6">
-          <div className="bg-primary-50 rounded-xl border border-primary-200/80 p-6 shadow-sm space-y-6">
-            <h2 className="font-serif text-xl text-primary-900 flex items-center gap-2">
-              <Building2 className="text-accent-gold" size={20} />
-              General Boutique Information
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-primary-700 mb-1.5">
-                  Boutique Legal Name
-                </label>
-                <input
-                  type="text"
-                  value={storeSettings.storeName}
-                  onChange={(e) => setStoreSettings({ ...storeSettings, storeName: e.target.value })}
-                  className="w-full px-3.5 py-2 text-sm bg-white border border-primary-200 rounded-lg text-primary-900 focus:outline-none focus:border-accent-gold"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-primary-700 mb-1.5">
-                  Tagline / Brand Signature
-                </label>
-                <input
-                  type="text"
-                  value={storeSettings.tagline}
-                  onChange={(e) => setStoreSettings({ ...storeSettings, tagline: e.target.value })}
-                  className="w-full px-3.5 py-2 text-sm bg-white border border-primary-200 rounded-lg text-primary-900 focus:outline-none focus:border-accent-gold"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-primary-700 mb-1.5">
-                  WhatsApp Concierge Number
-                </label>
-                <input
-                  type="text"
-                  value={storeSettings.whatsapp}
-                  onChange={(e) => setStoreSettings({ ...storeSettings, whatsapp: e.target.value })}
-                  className="w-full px-3.5 py-2 text-sm bg-white border border-primary-200 rounded-lg text-primary-900 focus:outline-none focus:border-accent-gold"
-                  placeholder="9037991774"
-                />
-                <p className="text-[11px] text-primary-500 mt-1">Direct link for client consultations & order inquiries</p>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-primary-700 mb-1.5">
-                  Concierge Support Email
-                </label>
-                <input
-                  type="email"
-                  value={storeSettings.email}
-                  onChange={(e) => setStoreSettings({ ...storeSettings, email: e.target.value })}
-                  className="w-full px-3.5 py-2 text-sm bg-white border border-primary-200 rounded-lg text-primary-900 focus:outline-none focus:border-accent-gold"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-primary-700 mb-1.5">
-                  GSTIN / Tax Identification
-                </label>
-                <input
-                  type="text"
-                  value={storeSettings.gstin}
-                  onChange={(e) => setStoreSettings({ ...storeSettings, gstin: e.target.value })}
-                  className="w-full px-3.5 py-2 text-sm bg-white border border-primary-200 rounded-lg text-primary-900 focus:outline-none focus:border-accent-gold font-mono"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-primary-700 mb-1.5">
-                  Currency & Timezone
-                </label>
-                <div className="grid grid-cols-2 gap-3">
-                  <input
-                    type="text"
-                    value={storeSettings.currency}
-                    disabled
-                    className="px-3.5 py-2 text-sm bg-primary-100/60 border border-primary-200 rounded-lg text-primary-700 font-mono"
-                  />
-                  <input
-                    type="text"
-                    value={storeSettings.timezone}
-                    disabled
-                    className="px-3.5 py-2 text-sm bg-primary-100/60 border border-primary-200 rounded-lg text-primary-700 text-xs"
-                  />
-                </div>
-              </div>
-
-              <div className="md:col-span-2">
-                <label className="block text-xs font-semibold uppercase tracking-wider text-primary-700 mb-1.5">
-                  Kerala Physical Atelier & Dispatch Hub Address
-                </label>
-                <textarea
-                  rows={2}
-                  value={storeSettings.address}
-                  onChange={(e) => setStoreSettings({ ...storeSettings, address: e.target.value })}
-                  className="w-full px-3.5 py-2 text-sm bg-white border border-primary-200 rounded-lg text-primary-900 focus:outline-none focus:border-accent-gold"
-                />
-              </div>
-            </div>
+        isBoutiqueLoading || (!isBoutiqueLoaded && !boutiqueLoadError) ? (
+          <div className="p-12 flex flex-col items-center gap-3 text-primary-500">
+            <Loader2 size={24} className="animate-spin" />
+            <p className="text-xs font-sans uppercase tracking-widest">Loading boutique profile…</p>
           </div>
-
-          {/* Shipping Thresholds */}
-          <div className="bg-primary-50 rounded-xl border border-primary-200/80 p-6 shadow-sm space-y-6">
-            <h2 className="font-serif text-xl text-primary-900 flex items-center gap-2">
-              <Truck className="text-accent-gold" size={20} />
-              Shipping Tariffs & Complimentary Thresholds
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-primary-700 mb-1.5">
-                  Free Shipping Min. Order (₹)
-                </label>
-                <input
-                  type="number"
-                  value={storeSettings.freeShippingThreshold}
-                  onChange={(e) => setStoreSettings({ ...storeSettings, freeShippingThreshold: Number(e.target.value) })}
-                  className="w-full px-3.5 py-2 text-sm bg-white border border-primary-200 rounded-lg text-primary-900 focus:outline-none focus:border-accent-gold"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-primary-700 mb-1.5">
-                  Standard Surface Tariff (₹)
-                </label>
-                <input
-                  type="number"
-                  value={storeSettings.standardShippingFee}
-                  onChange={(e) => setStoreSettings({ ...storeSettings, standardShippingFee: Number(e.target.value) })}
-                  className="w-full px-3.5 py-2 text-sm bg-white border border-primary-200 rounded-lg text-primary-900 focus:outline-none focus:border-accent-gold"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-primary-700 mb-1.5">
-                  Express Air Courier (₹)
-                </label>
-                <input
-                  type="number"
-                  value={storeSettings.expressShippingFee}
-                  onChange={(e) => setStoreSettings({ ...storeSettings, expressShippingFee: Number(e.target.value) })}
-                  className="w-full px-3.5 py-2 text-sm bg-white border border-primary-200 rounded-lg text-primary-900 focus:outline-none focus:border-accent-gold"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="flex justify-end">
-            <button
-              type="submit"
-              className="flex items-center gap-2 px-6 py-2.5 bg-primary-900 text-white rounded-lg text-sm font-semibold hover:bg-accent-gold transition-colors shadow-sm"
-            >
-              <Save size={16} />
-              Save Boutique Profile
+        ) : boutiqueLoadError ? (
+          <div className="p-8 text-center space-y-3">
+            <p className="text-sm text-rose-600">{boutiqueLoadError}</p>
+            <button onClick={fetchBoutiqueSettings} className="text-xs font-sans text-primary-700 underline">
+              Retry
             </button>
           </div>
-        </form>
-      )}
-
-      {/* Tab 2: Gateways & Logistics */}
-      {activeTab === 'integrations' && (
-        <form onSubmit={handleSaveIntegrations} className="space-y-6">
-          {/* Razorpay */}
-          <div className="bg-primary-50 rounded-xl border border-primary-200/80 p-6 shadow-sm space-y-5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-700">
-                  <CreditCard size={20} />
-                </div>
+        ) : (
+          <form onSubmit={handleSaveStore} className="space-y-6">
+            <div className="bg-primary-50 rounded-xl border border-primary-200/80 p-6 shadow-sm space-y-6">
+              <h2 className="font-serif text-xl text-primary-900 flex items-center gap-2">
+                <Building2 className="text-accent-gold" size={20} />
+                General Boutique Information
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <h3 className="font-semibold text-primary-950 text-base">Razorpay Payment Gateway</h3>
-                  <p className="text-xs text-primary-600">Accept UPI, Credit/Debit Cards, NetBanking, and EMI seamlessly</p>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-primary-700 mb-1.5">
+                    Boutique Legal Name
+                  </label>
+                  <input
+                    type="text"
+                    value={boutiqueForm.storeName}
+                    onChange={(e) => setBoutiqueField('storeName', e.target.value)}
+                    onBlur={() => blurBoutiqueField('storeName')}
+                    disabled={!isEditable || isBoutiqueSaving}
+                    className={boutiqueInputClass('storeName')}
+                    aria-invalid={!!boutiqueErrors.storeName}
+                    aria-describedby={boutiqueErrors.storeName ? boutiqueErrorId('storeName') : undefined}
+                    required
+                  />
+                  <BoutiqueFieldError field="storeName" />
                 </div>
-              </div>
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full text-xs font-medium">
-                <CheckCircle2 size={13} /> Connected
-              </span>
-            </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-primary-700 mb-1">
-                  Razorpay Key ID
-                </label>
-                <input
-                  type="text"
-                  value={integrations.razorpayKey}
-                  onChange={(e) => setIntegrations({ ...integrations, razorpayKey: e.target.value })}
-                  className="w-full px-3 py-2 text-sm bg-white border border-primary-200 rounded-lg font-mono text-primary-900"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-primary-700 mb-1">
-                  Razorpay Key Secret
-                </label>
-                <input
-                  type="password"
-                  value={integrations.razorpaySecret}
-                  onChange={(e) => setIntegrations({ ...integrations, razorpaySecret: e.target.value })}
-                  className="w-full px-3 py-2 text-sm bg-white border border-primary-200 rounded-lg font-mono text-primary-900"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Delhivery */}
-          <div className="bg-primary-50 rounded-xl border border-primary-200/80 p-6 shadow-sm space-y-5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-700">
-                  <Truck size={20} />
-                </div>
                 <div>
-                  <h3 className="font-semibold text-primary-950 text-base">Delhivery Logistics Express API</h3>
-                  <p className="text-xs text-primary-600">Automated AWB generation, live dispatch tracking & reverse pickups</p>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-primary-700 mb-1.5">
+                    Tagline / Brand Signature
+                  </label>
+                  <input
+                    type="text"
+                    value={boutiqueForm.tagline}
+                    onChange={(e) => setBoutiqueField('tagline', e.target.value)}
+                    onBlur={() => blurBoutiqueField('tagline')}
+                    disabled={!isEditable || isBoutiqueSaving}
+                    className={boutiqueInputClass('tagline')}
+                    aria-invalid={!!boutiqueErrors.tagline}
+                    aria-describedby={boutiqueErrors.tagline ? boutiqueErrorId('tagline') : undefined}
+                  />
+                  <BoutiqueFieldError field="tagline" />
                 </div>
-              </div>
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full text-xs font-medium">
-                <CheckCircle2 size={13} /> Connected
-              </span>
-            </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-primary-700 mb-1">
-                  API Token
-                </label>
-                <input
-                  type="text"
-                  value={integrations.delhiveryToken}
-                  onChange={(e) => setIntegrations({ ...integrations, delhiveryToken: e.target.value })}
-                  className="w-full px-3 py-2 text-sm bg-white border border-primary-200 rounded-lg font-mono text-primary-900"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-primary-700 mb-1">
-                  Client ID
-                </label>
-                <input
-                  type="text"
-                  value={integrations.delhiveryClientId}
-                  onChange={(e) => setIntegrations({ ...integrations, delhiveryClientId: e.target.value })}
-                  className="w-full px-3 py-2 text-sm bg-white border border-primary-200 rounded-lg font-mono text-primary-900"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-primary-700 mb-1">
-                  Warehouse Location Code
-                </label>
-                <input
-                  type="text"
-                  value={integrations.delhiveryWarehouseCode}
-                  onChange={(e) => setIntegrations({ ...integrations, delhiveryWarehouseCode: e.target.value })}
-                  className="w-full px-3 py-2 text-sm bg-white border border-primary-200 rounded-lg font-mono text-primary-900"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* AI Stylist Engine */}
-          <div className="bg-primary-50 rounded-xl border border-primary-200/80 p-6 shadow-sm space-y-5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-purple-50 border border-purple-200 flex items-center justify-center text-purple-700">
-                  <Sparkles size={20} />
-                </div>
                 <div>
-                  <h3 className="font-semibold text-primary-950 text-base">Allura AI Assistant & Stylist Engine</h3>
-                  <p className="text-xs text-primary-600">Client stylist conversations, saree draping recommendations, catalog knowledge</p>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-primary-700 mb-1.5">
+                    WhatsApp Concierge Number
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={boutiqueForm.whatsapp}
+                    onChange={(e) => setBoutiqueField('whatsapp', e.target.value.replace(/[^\d+]/g, ''))}
+                    onBlur={() => blurBoutiqueField('whatsapp')}
+                    disabled={!isEditable || isBoutiqueSaving}
+                    className={boutiqueInputClass('whatsapp')}
+                    aria-invalid={!!boutiqueErrors.whatsapp}
+                    aria-describedby={boutiqueErrors.whatsapp ? boutiqueErrorId('whatsapp') : undefined}
+                    placeholder="9037991774"
+                  />
+                  <BoutiqueFieldError field="whatsapp" />
+                  <p className="text-[11px] text-primary-500 mt-1">Direct link for client consultations & order inquiries</p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-primary-700 mb-1.5">
+                    Concierge Support Email
+                  </label>
+                  <input
+                    type="email"
+                    value={boutiqueForm.email}
+                    onChange={(e) => setBoutiqueField('email', e.target.value)}
+                    onBlur={() => blurBoutiqueField('email')}
+                    disabled={!isEditable || isBoutiqueSaving}
+                    className={boutiqueInputClass('email')}
+                    aria-invalid={!!boutiqueErrors.email}
+                    aria-describedby={boutiqueErrors.email ? boutiqueErrorId('email') : undefined}
+                    required
+                  />
+                  <BoutiqueFieldError field="email" />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-primary-700 mb-1.5">
+                    GSTIN / Tax Identification
+                  </label>
+                  <input
+                    type="text"
+                    value={boutiqueForm.gstin}
+                    onChange={(e) => setBoutiqueField('gstin', e.target.value.toUpperCase())}
+                    onBlur={() => blurBoutiqueField('gstin')}
+                    disabled={!isEditable || isBoutiqueSaving}
+                    maxLength={15}
+                    className={boutiqueInputClass('gstin', 'font-mono')}
+                    aria-invalid={!!boutiqueErrors.gstin}
+                    aria-describedby={boutiqueErrors.gstin ? boutiqueErrorId('gstin') : undefined}
+                  />
+                  <BoutiqueFieldError field="gstin" />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-primary-700 mb-1.5">
+                    Currency & Timezone
+                  </label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <input
+                      type="text"
+                      value={boutiqueReadOnly.currency}
+                      disabled
+                      className="px-3.5 py-2 text-sm bg-primary-100/60 border border-primary-200 rounded-lg text-primary-700 font-mono"
+                    />
+                    <input
+                      type="text"
+                      value={boutiqueReadOnly.timezone}
+                      disabled
+                      className="px-3.5 py-2 text-sm bg-primary-100/60 border border-primary-200 rounded-lg text-primary-700 text-xs"
+                    />
+                  </div>
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-primary-700 mb-1.5">
+                    Kerala Physical Atelier & Dispatch Hub Address
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={boutiqueForm.address}
+                    onChange={(e) => setBoutiqueField('address', e.target.value)}
+                    onBlur={() => blurBoutiqueField('address')}
+                    disabled={!isEditable || isBoutiqueSaving}
+                    className={boutiqueInputClass('address')}
+                    aria-invalid={!!boutiqueErrors.address}
+                    aria-describedby={boutiqueErrors.address ? boutiqueErrorId('address') : undefined}
+                  />
+                  <BoutiqueFieldError field="address" />
                 </div>
               </div>
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-purple-100 text-purple-900 border border-purple-200 rounded-full text-xs font-medium">
-                Active: Gemini 1.5 Flash
-              </span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-primary-700 mb-1">
-                  Active Model
-                </label>
-                <select
-                  value={integrations.aiModel}
-                  onChange={(e) => setIntegrations({ ...integrations, aiModel: e.target.value })}
-                  className="w-full px-3 py-2 text-sm bg-white border border-primary-200 rounded-lg text-primary-900"
+            {/* Shipping Thresholds */}
+            <div className="bg-primary-50 rounded-xl border border-primary-200/80 p-6 shadow-sm space-y-6">
+              <h2 className="font-serif text-xl text-primary-900 flex items-center gap-2">
+                <Truck className="text-accent-gold" size={20} />
+                Shipping Tariffs & Complimentary Thresholds
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-primary-700 mb-1.5">
+                    Free Shipping Min. Order (₹)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={boutiqueForm.freeShippingThreshold}
+                    onChange={(e) => setBoutiqueField('freeShippingThreshold', e.target.value)}
+                    onBlur={() => blurBoutiqueField('freeShippingThreshold')}
+                    disabled={!isEditable || isBoutiqueSaving}
+                    className={boutiqueInputClass('freeShippingThreshold')}
+                    aria-invalid={!!boutiqueErrors.freeShippingThreshold}
+                    aria-describedby={boutiqueErrors.freeShippingThreshold ? boutiqueErrorId('freeShippingThreshold') : undefined}
+                  />
+                  <BoutiqueFieldError field="freeShippingThreshold" />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-primary-700 mb-1.5">
+                    Standard Surface Tariff (₹)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={boutiqueForm.standardShippingFee}
+                    onChange={(e) => setBoutiqueField('standardShippingFee', e.target.value)}
+                    onBlur={() => blurBoutiqueField('standardShippingFee')}
+                    disabled={!isEditable || isBoutiqueSaving}
+                    className={boutiqueInputClass('standardShippingFee')}
+                    aria-invalid={!!boutiqueErrors.standardShippingFee}
+                    aria-describedby={boutiqueErrors.standardShippingFee ? boutiqueErrorId('standardShippingFee') : undefined}
+                  />
+                  <BoutiqueFieldError field="standardShippingFee" />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-primary-700 mb-1.5">
+                    Express Air Courier (₹)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={boutiqueForm.expressShippingFee}
+                    onChange={(e) => setBoutiqueField('expressShippingFee', e.target.value)}
+                    onBlur={() => blurBoutiqueField('expressShippingFee')}
+                    disabled={!isEditable || isBoutiqueSaving}
+                    className={boutiqueInputClass('expressShippingFee')}
+                    aria-invalid={!!boutiqueErrors.expressShippingFee}
+                    aria-describedby={boutiqueErrors.expressShippingFee ? boutiqueErrorId('expressShippingFee') : undefined}
+                  />
+                  <BoutiqueFieldError field="expressShippingFee" />
+                </div>
+              </div>
+            </div>
+
+            {isEditable && (
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={handleResetBoutique}
+                  disabled={!isBoutiqueDirty || isBoutiqueSaving}
+                  className="flex items-center gap-2 px-5 py-2.5 border border-primary-300 text-primary-700 rounded-lg text-sm font-semibold hover:bg-primary-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  <option value="gemini-1.5-flash">Gemini 1.5 Flash (Ultra-Fast Stylist)</option>
-                  <option value="gemini-1.5-pro">Gemini 1.5 Pro (Deep Multimodal & Heritage Reasoning)</option>
-                  <option value="claude-3-5-sonnet">Claude 3.5 Sonnet</option>
-                </select>
+                  <RotateCcw size={15} />
+                  <span>Discard Changes</span>
+                </button>
+                <button
+                  type="submit"
+                  disabled={!isBoutiqueDirty || hasBoutiqueErrors || isBoutiqueSaving}
+                  className="flex items-center gap-2 px-5 py-2.5 border border-primary-300 text-primary-700 rounded-lg text-sm font-semibold hover:bg-primary-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {isBoutiqueSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                  <span className="text-black">{isBoutiqueSaving ? 'Saving...' : 'Save Boutique Profile'}</span>
+                </button>
               </div>
-
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-primary-700 mb-1">
-                  Stylist Temperature ({integrations.aiTemperature})
-                </label>
-                <input
-                  type="range"
-                  min="0.1"
-                  max="1.0"
-                  step="0.1"
-                  value={integrations.aiTemperature}
-                  onChange={(e) => setIntegrations({ ...integrations, aiTemperature: parseFloat(e.target.value) })}
-                  className="w-full accent-accent-gold mt-2"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="flex justify-end">
-            <button
-              type="submit"
-              className="flex items-center gap-2 px-6 py-2.5 bg-primary-900 text-white rounded-lg text-sm font-semibold hover:bg-accent-gold transition-colors shadow-sm"
-            >
-              <Save size={16} />
-              Save Integration Credentials
-            </button>
-          </div>
-        </form>
+            )}
+          </form>
+        )
       )}
 
-      {/* Tab 3: Admins & RBAC Matrix */}
+      {/* Tab 2: Admins & RBAC Matrix */}
       {activeTab === 'admins' && (
         <div className="space-y-8">
           {/* Admin Staff Table */}
@@ -577,202 +718,120 @@ export const AdminSettingsPage: React.FC = () => {
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead>
-                  <tr className="border-b border-primary-200/70 text-xs uppercase tracking-wider text-primary-600 font-semibold">
-                    <th className="pb-3">Staff Name</th>
-                    <th className="pb-3">Email Address</th>
-                    <th className="pb-3">Assigned Role</th>
-                    <th className="pb-3">Status</th>
-                    <th className="pb-3">Last Active</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-primary-100">
-                  {adminUsers.map((u) => (
-                    <tr key={u.id} className="hover:bg-white/50 transition-colors">
-                      <td className="py-3 font-medium text-primary-900 flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-full bg-accent-gold/20 text-accent-gold flex items-center justify-center font-bold text-xs">
-                          {u.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
-                        </div>
-                        {u.name}
-                      </td>
-                      <td className="py-3 text-primary-600 font-mono text-xs">{u.email}</td>
-                      <td className="py-3">
-                        <span className={`inline-block px-2.5 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider ${
-                          u.role === 'SUPER_ADMIN'
+              {isStaffLoading ? (
+                <table className="w-full text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-primary-200/70 text-xs uppercase tracking-wider text-primary-600 font-semibold">
+                      <th className="pb-3">Staff Name</th>
+                      <th className="pb-3">Email Address</th>
+                      <th className="pb-3">Assigned Role</th>
+                      <th className="pb-3">Status</th>
+                      <th className="pb-3">Last Active</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-primary-100">
+                    {Array.from({ length: 3 }).map((_, idx) => (
+                      <tr key={idx}>
+                        <td className="py-3">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-full bg-stone-200/80 animate-pulse" />
+                            <div className="h-3.5 w-32 bg-stone-200/80 rounded animate-pulse" />
+                          </div>
+                        </td>
+                        <td className="py-3"><div className="h-3 w-44 bg-stone-200/70 rounded animate-pulse" /></td>
+                        <td className="py-3"><div className="h-5 w-24 bg-stone-200/70 rounded animate-pulse" /></td>
+                        <td className="py-3"><div className="h-3 w-16 bg-stone-200/70 rounded animate-pulse" /></td>
+                        <td className="py-3"><div className="h-3 w-28 bg-stone-200/70 rounded animate-pulse" /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : staffError ? (
+                <div className="p-8 text-center space-y-3">
+                  <p className="text-sm text-rose-600">{staffError}</p>
+                  <button
+                    type="button"
+                    onClick={() => void fetchAdminStaff()}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-primary-300 text-xs font-sans text-primary-700 hover:bg-primary-100 transition-colors"
+                  >
+                    <RefreshCw size={12} />
+                    <span>Retry</span>
+                  </button>
+                </div>
+              ) : staffList.length === 0 ? (
+                <div className="p-8 text-center text-xs text-primary-500">
+                  No staff found
+                </div>
+              ) : (
+                <table className="w-full text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-primary-200/70 text-xs uppercase tracking-wider text-primary-600 font-semibold">
+                      <th className="pb-3">Staff Name</th>
+                      <th className="pb-3">Email Address</th>
+                      <th className="pb-3">Assigned Role</th>
+                      <th className="pb-3">Status</th>
+                      <th className="pb-3">Last Active</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-primary-100">
+                    {staffList.map((u) => (
+                      <tr key={u.id} className="hover:bg-white/50 transition-colors">
+                        <td className="py-3 font-medium text-primary-900 flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-full bg-accent-gold/20 text-accent-gold flex items-center justify-center font-bold text-xs">
+                            {getStaffInitials(u.name)}
+                          </div>
+                          {u.name}
+                        </td>
+                        <td className="py-3 text-primary-600 font-mono text-xs">{u.email}</td>
+                        <td className="py-3">
+                          <span className={`inline-block px-2.5 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider ${u.role === 'SUPER_ADMIN'
                             ? 'bg-amber-100 text-amber-900 border border-amber-300'
                             : u.role === 'ADMIN'
-                            ? 'bg-blue-100 text-blue-900 border border-blue-300'
-                            : 'bg-emerald-100 text-emerald-900 border border-emerald-300'
-                        }`}>
-                          {u.role.replace('_', ' ')}
-                        </span>
-                      </td>
-                      <td className="py-3">
-                        <span className="inline-flex items-center gap-1.5 text-xs text-emerald-700 font-medium">
-                          <span className="w-2 h-2 rounded-full bg-emerald-500"></span> Active
-                        </span>
-                      </td>
-                      <td className="py-3 text-xs text-primary-500">{u.lastLogin}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                              ? 'bg-blue-100 text-blue-900 border border-blue-300'
+                              : 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                            }`}>
+                            {u.role.replace(/_/g, ' ')}
+                          </span>
+                        </td>
+                        <td className="py-3">
+                          {u.status === 'Active' ? (
+                            <span className="inline-flex items-center gap-1.5 text-xs text-emerald-700 font-medium">
+                              <span className="w-2 h-2 rounded-full bg-emerald-500"></span> Active
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 text-xs text-amber-700 font-medium">
+                              <span className="w-2 h-2 rounded-full bg-amber-500"></span> {u.status}
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3 text-xs text-primary-500">{u.lastLogin}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
           </div>
 
           {/* Granular Permission Matrix Component */}
           <div className="bg-primary-50 rounded-xl border border-primary-200/80 p-6 shadow-sm">
-            <PermissionMatrix />
+            <PermissionMatrix onDirtyChange={setIsMatrixDirty} />
           </div>
         </div>
       )}
 
-      {/* Tab 4: Security & Maintenance */}
-      {activeTab === 'security' && (
-        <form onSubmit={handleSaveSecurity} className="space-y-6">
-          <div className="bg-primary-50 rounded-xl border border-primary-200/80 p-6 shadow-sm space-y-6">
-            <h2 className="font-serif text-xl text-primary-900 flex items-center gap-2">
-              <Lock className="text-accent-gold" size={20} />
-              Atelier Portal Security Policies
-            </h2>
-
-            <div className="space-y-4">
-              <div className="flex items-center justify-between p-4 bg-white rounded-lg border border-primary-200">
-                <div>
-                  <h4 className="text-sm font-semibold text-primary-900">Enforce Two-Factor Authentication (2FA)</h4>
-                  <p className="text-xs text-primary-600">Require OTP verification for all staff logging into admin portal</p>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={securitySettings.enforce2FA}
-                  onChange={(e) => setSecuritySettings({ ...securitySettings, enforce2FA: e.target.checked })}
-                  className="w-5 h-5 accent-accent-gold rounded cursor-pointer"
-                />
-              </div>
-
-              <div className="flex items-center justify-between p-4 bg-white rounded-lg border border-primary-200">
-                <div>
-                  <h4 className="text-sm font-semibold text-primary-900">Atelier VPN & IP Whitelisting</h4>
-                  <p className="text-xs text-primary-600">Restrict access to verified Perinthalmanna atelier IP subnets</p>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={securitySettings.ipWhitelisting}
-                  onChange={(e) => setSecuritySettings({ ...securitySettings, ipWhitelisting: e.target.checked })}
-                  className="w-5 h-5 accent-accent-gold rounded cursor-pointer"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-primary-700 mb-1">
-                    Staff Inactivity Session Timeout (Minutes)
-                  </label>
-                  <input
-                    type="number"
-                    value={securitySettings.sessionTimeoutMins}
-                    onChange={(e) => setSecuritySettings({ ...securitySettings, sessionTimeoutMins: Number(e.target.value) })}
-                    className="w-full px-3 py-2 text-sm bg-white border border-primary-200 rounded-lg text-primary-900"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-primary-700 mb-1">
-                    Audit Log Retention Period (Days)
-                  </label>
-                  <input
-                    type="number"
-                    value={securitySettings.auditRetentionDays}
-                    onChange={(e) => setSecuritySettings({ ...securitySettings, auditRetentionDays: Number(e.target.value) })}
-                    className="w-full px-3 py-2 text-sm bg-white border border-primary-200 rounded-lg text-primary-900"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Maintenance & Demo Snapshot */}
-          <div className="bg-primary-50 rounded-xl border border-primary-200/80 p-6 shadow-sm space-y-4">
-            <h2 className="font-serif text-xl text-primary-900 flex items-center gap-2">
-              <Database className="text-accent-gold" size={20} />
-              Database Snapshots & Data Reset
-            </h2>
-            <p className="text-xs text-primary-600">
-              Manage reactive localStorage state, download a full JSON backup of orders, products, and clients, or reset to fresh boutique mock data.
-            </p>
-
-            <div className="flex flex-wrap gap-4 pt-2">
-              <button
-                type="button"
-                onClick={() => {
-                  const state = {
-                    products: localStorage.getItem('allura_admin_products'),
-                    orders: localStorage.getItem('allura_orders'),
-                    returns: localStorage.getItem('allura_returns'),
-                    auditLogs: localStorage.getItem('allura_audit_logs'),
-                  };
-                  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement('a');
-                  a.href = url;
-                  a.download = `allura-atelier-backup-${Date.now()}.json`;
-                  a.click();
-                  showToast('Database backup JSON exported successfully', 'gold');
-                }}
-                className="px-4 py-2 bg-white border border-primary-300 text-primary-800 rounded-lg text-xs font-semibold hover:bg-primary-100 transition-colors shadow-sm"
-              >
-                Export Complete System Snapshot
-              </button>
-
-              <button
-                type="button"
-                onClick={async () => {
-                  const ok = await confirm({
-                    title: 'Reset demo data',
-                    message: 'Reset all demo orders, stock changes, and logs back to the original master data? You will also be signed out.',
-                    confirmLabel: 'Reset',
-                    isDestructive: true,
-                  });
-                  if (ok) {
-                    localStorage.clear();
-                    showToast('Demo state reset. Reloading boutique...', 'gold');
-                    setTimeout(() => window.location.reload(), 800);
-                  }
-                }}
-                className="flex items-center gap-1.5 px-4 py-2 bg-red-50 border border-red-200 text-red-700 rounded-lg text-xs font-semibold hover:bg-red-100 transition-colors"
-              >
-                <RotateCcw size={14} />
-                Reset Demo to Master Seed
-              </button>
-            </div>
-          </div>
-
-          <div className="flex justify-end">
-            <button
-              type="submit"
-              className="flex items-center gap-2 px-6 py-2.5 bg-primary-900 text-white rounded-lg text-sm font-semibold hover:bg-accent-gold transition-colors shadow-sm"
-            >
-              <Save size={16} />
-              Save Security Policies
-            </button>
-          </div>
-        </form>
-      )}
-
-      {/* Tab 5: System & Integrations Health */}
+      {/* Tab 3: System & Integrations Health */}
       {activeTab === 'health' && (
         <div className="space-y-6">
           {/* Health Overview Banner */}
           <div className="bg-white rounded-2xl border border-stone-200 p-6 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-4">
-              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${
-                systemHealth?.status === 'HEALTHY'
-                  ? 'bg-emerald-50 text-emerald-600'
-                  : systemHealth?.status === 'DEGRADED'
+              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${systemHealth?.status === 'HEALTHY'
+                ? 'bg-emerald-50 text-emerald-600'
+                : systemHealth?.status === 'DEGRADED'
                   ? 'bg-amber-50 text-amber-600'
                   : 'bg-rose-50 text-rose-600'
-              }`}>
+                }`}>
                 <Server size={24} />
               </div>
               <div>
@@ -780,13 +839,12 @@ export const AdminSettingsPage: React.FC = () => {
                   <h2 className="font-serif text-2xl font-normal text-stone-900">
                     System Status: {systemHealth?.status || 'HEALTHY'}
                   </h2>
-                  <span className={`w-2 h-2 rounded-full ${
-                    systemHealth?.status === 'HEALTHY'
-                      ? 'bg-emerald-500'
-                      : systemHealth?.status === 'DEGRADED'
+                  <span className={`w-2 h-2 rounded-full ${systemHealth?.status === 'HEALTHY'
+                    ? 'bg-emerald-500'
+                    : systemHealth?.status === 'DEGRADED'
                       ? 'bg-amber-500'
                       : 'bg-rose-500'
-                  } animate-pulse`} />
+                    } animate-pulse`} />
                 </div>
                 <p className="text-xs text-stone-500 font-sans mt-0.5">
                   Last verified: {systemHealth?.timestamp ? new Date(systemHealth.timestamp).toLocaleTimeString('en-IN') : 'Live now'}
@@ -813,11 +871,10 @@ export const AdminSettingsPage: React.FC = () => {
                 <span className="text-[10px] font-sans font-bold uppercase tracking-wider text-stone-400">
                   DATABASE ENGINE
                 </span>
-                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                  systemHealth?.services.mongodb.status === 'HEALTHY'
-                    ? 'bg-emerald-50 text-emerald-700'
-                    : 'bg-rose-50 text-rose-700'
-                }`}>
+                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${systemHealth?.services.mongodb.status === 'HEALTHY'
+                  ? 'bg-emerald-50 text-emerald-700'
+                  : 'bg-rose-50 text-rose-700'
+                  }`}>
                   {systemHealth?.services.mongodb.status || 'HEALTHY'}
                 </span>
               </div>
@@ -836,11 +893,10 @@ export const AdminSettingsPage: React.FC = () => {
                 <span className="text-[10px] font-sans font-bold uppercase tracking-wider text-stone-400">
                   CACHE & LOCKING
                 </span>
-                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                  systemHealth?.services.redis.status === 'HEALTHY'
-                    ? 'bg-emerald-50 text-emerald-700'
-                    : 'bg-amber-50 text-amber-700'
-                }`}>
+                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${systemHealth?.services.redis.status === 'HEALTHY'
+                  ? 'bg-emerald-50 text-emerald-700'
+                  : 'bg-amber-50 text-amber-700'
+                  }`}>
                   {systemHealth?.services.redis.status || 'HEALTHY'}
                 </span>
               </div>
@@ -863,7 +919,7 @@ export const AdminSettingsPage: React.FC = () => {
                 { name: 'Meta CAPI', key: 'meta' as const, label: 'Conversions API' },
                 { name: 'Email Gateway', key: 'email' as const, label: 'Transactional Dispatch' },
                 { name: 'Delhivery Logistics', key: 'delhivery' as const, label: 'Courier & Waybills' },
-                { name: 'DeepSeek AI', key: 'deepseek' as const, label: 'Stylist Chatbot' },
+                // { name: 'DeepSeek AI', key: 'deepseek' as const, label: 'Stylist Chatbot' },
                 { name: 'Firebase FCM', key: 'firebase' as const, label: 'Push Notifications' },
                 { name: 'Cloudflare R2', key: 'cloudflareR2' as const, label: 'Asset Storage' },
                 { name: 'Cloudinary CDN', key: 'cloudinary' as const, label: 'Media CDN' },
@@ -882,9 +938,8 @@ export const AdminSettingsPage: React.FC = () => {
                       )}
                     </div>
                     <p className="text-[10px] text-stone-400">{item.label}</p>
-                    <span className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
-                      isOk ? 'bg-emerald-100 text-emerald-800' : 'bg-stone-200 text-stone-600'
-                    }`}>
+                    <span className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${isOk ? 'bg-emerald-100 text-emerald-800' : 'bg-stone-200 text-stone-600'
+                      }`}>
                       {configStatus}
                     </span>
                   </div>

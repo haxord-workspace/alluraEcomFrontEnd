@@ -168,6 +168,46 @@ export const getBackendErrorMessage = (err: any, fallback: string = 'Request fai
 };
 
 /**
+ * Extracts a field -> message map from a backend validation error response (400/422),
+ * e.g. `{ errors: { email: "Already taken" } }` or `{ details: [{ path: "email", message: "..." }] }`.
+ * Used to put inline errors under the matching form field instead of (or alongside) a toast.
+ */
+export const getBackendFieldErrors = (err: any): Record<string, string> => {
+  const data = err?.response?.data;
+  const result: Record<string, string> = {};
+
+  const addFromArray = (arr: any[]) => {
+    arr.forEach((d: any) => {
+      if (!d) return;
+      const field = d?.path || d?.field || d?.param;
+      const msg = typeof d === 'string' ? d : d?.message || d?.msg || d?.error;
+      if (field && msg) {
+        const clean = String(field).replace(/^(body|query|params)\./, '');
+        result[clean] = String(msg);
+      }
+    });
+  };
+
+  const addFromObject = (obj: Record<string, any>) => {
+    Object.entries(obj).forEach(([key, val]) => {
+      if (!val) return;
+      if (typeof val === 'string') result[key] = val;
+      else if (Array.isArray(val)) result[key] = val.join(', ');
+      else if (typeof val === 'object' && val.message) result[key] = String(val.message);
+    });
+  };
+
+  const details = data?.error?.details || data?.details;
+  if (Array.isArray(details)) addFromArray(details);
+  else if (details && typeof details === 'object') addFromObject(details);
+
+  if (Array.isArray(data?.errors)) addFromArray(data.errors);
+  else if (data?.errors && typeof data.errors === 'object') addFromObject(data.errors);
+
+  return result;
+};
+
+/**
  * Extracts the exact success message returned by the backend API.
  * e.g. `{ "success": true, "message": "Product status changed successfully" }`
  */

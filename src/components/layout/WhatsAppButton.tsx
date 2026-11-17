@@ -34,7 +34,7 @@ export const WhatsAppButton: React.FC = () => {
       style={{
         bottom: 'calc(5.25rem + env(safe-area-inset-bottom, 0px))',
       }}
-      className="fixed right-4 sm:right-5 z-40 transition-all duration-300 lg:!bottom-8"
+      className="print:hidden fixed right-4 sm:right-5 z-40 transition-all duration-300 lg:!bottom-8"
     >
       {/* Popover Card */}
       {isOpen && (

@@ -85,6 +85,34 @@ const initialState: AdminAuthState = {
  * Stores access token in cookie; backend sets httpOnly refresh token cookie.
  */
 import { getBackendErrorMessage } from '../../utils/apiResponse';
+import { normalizeAdminRole } from '../../utils/rbac';
+
+const extractJwtRole = (token?: string | null): unknown => {
+  if (!token) return undefined;
+  try {
+    const parts = token.split('.');
+    if (parts.length < 2) return undefined;
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=');
+    const payload = JSON.parse(atob(padded));
+    return payload?.role ?? payload?.userRole ?? (Array.isArray(payload?.roles) ? payload.roles[0] : undefined);
+  } catch {
+    return undefined;
+  }
+};
+
+const extractUserAndRole = (body: any, accessToken?: string | null) => {
+  const data = body?.data ?? body;
+  const user = data?.admin || data?.user || data;
+  const rawRole =
+    user?.role ??
+    user?.adminRole ??
+    data?.role ??
+    body?.role ??
+    (Array.isArray(user?.roles) ? user.roles[0] : undefined) ??
+    extractJwtRole(accessToken);
+  return { user, rawRole };
+};
 
 export const loginAdmin = createAsyncThunk(
   'adminAuth/login',
@@ -96,11 +124,27 @@ export const loginAdmin = createAsyncThunk(
       // Lazy import to avoid circular dependency with adminApi
       const { default: adminApi } = await import('../../service/adminApi');
       const response = await adminApi.post('/auth/login', { email, password });
-      const data = response.data?.data || response.data;
-      storeAdminTokens(response.data);
+      const { accessToken } = storeAdminTokens(response.data);
 
-      return data?.admin || data?.user || data;
+      let { user, rawRole } = extractUserAndRole(response.data, accessToken);
+
+      // Many login endpoints return only tokens (or minimal user without role); fetch /auth/me to resolve role
+      if (!rawRole) {
+        const meResponse = await adminApi.get('/auth/me');
+        const me = extractUserAndRole(meResponse.data, accessToken || getAdminAccessToken());
+        user = me.user;
+        rawRole = me.rawRole;
+      }
+
+      const adminRole = normalizeAdminRole(rawRole);
+      if (!adminRole) {
+        clearAdminSession();
+        return rejectWithValue('Access denied: Admin privileges are required to sign in here.');
+      }
+
+      return { ...(typeof user === 'object' && user ? user : {}), role: adminRole };
     } catch (error: any) {
+      clearAdminSession();
       return rejectWithValue(
         getBackendErrorMessage(error, 'Login failed. Check your credentials.')
       );
@@ -122,8 +166,15 @@ export const fetchAdminProfile = createAsyncThunk(
     try {
       const { default: adminApi } = await import('../../service/adminApi');
       const response = await adminApi.get('/auth/me');
-      const data = response.data?.data || response.data;
-      return data?.admin || data?.user || data;
+      const { user, rawRole } = extractUserAndRole(response.data, getAdminAccessToken());
+      const adminRole = normalizeAdminRole(rawRole);
+
+      if (!adminRole) {
+        clearAdminSession();
+        return rejectWithValue('Access denied: Active session is not an admin account.');
+      }
+
+      return { ...(typeof user === 'object' && user ? user : {}), role: adminRole };
     } catch (error: any) {
       return rejectWithValue(
         getBackendErrorMessage(error, 'Session expired')

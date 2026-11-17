@@ -15,7 +15,8 @@ import type {
 import { login, register, logout, googleLogin } from '../service/auth';
 import type { LoginData, RegisterData, GoogleLoginData } from '../service/auth';
 import { getCustomerProfile, profileDisplayName, profilePhone } from '../service/customer';
-import { getStoreProducts, getStoreCategories, getStoreProduct, NO_COLOR } from '../service/store';
+import { getStoreProducts, getStoreCategories, getStoreProduct, getStoreSettings, NO_COLOR } from '../service/store';
+import type { StoreSettings } from '../service/store';
 import { getAddresses, addAddress, updateAddress, deleteAddress } from '../service/address';
 import { getWishlist, addWishlistItem, removeWishlistItem, clearWishlist as clearWishlistApi } from '../service/wishlist';
 import type { SavedAddress } from '../types';
@@ -32,6 +33,16 @@ import type { CartSnapshot, CartTotals, CartValidationResult } from '../service/
 import { validateCoupon } from '../service/coupons';
 import { newMetaEventId, metaHeaders, trackMetaEvent } from '../utils/metaPixel';
 import { getMyOrders, getMyOrder, cancelMyOrder, orderErrorMessage, enrichOrder } from '../service/orders';
+import {
+  getMyNotifications,
+  getUnreadCount,
+  markNotificationRead,
+  markAllNotificationsRead,
+  notificationErrorMessage,
+  registerDeviceToken,
+  removeDeviceToken,
+} from '../service/notifications';
+import { requestPushToken, onForegroundPush } from '../service/firebase';
 import { getBackendErrorMessage } from '../utils/apiResponse';
 
 interface ToastNotification {
@@ -45,6 +56,8 @@ interface ShopContextType {
   products: Product[];
   categories: Category[];
   isLoadingProducts: boolean;
+  storeSettings: StoreSettings | null;
+  refreshStoreSettings: () => Promise<void>;
 
   // Cart & Wishlist
   cart: CartItem[];
@@ -85,7 +98,8 @@ interface ShopContextType {
   couponDiscount: number;
   applyCoupon: (code: string) => Promise<{ success: boolean; message: string }>;
   isApplyingCoupon: boolean;
-  removeCoupon: () => void;
+  /** Pass a reason to show instead of the default "Coupon removed" toast */
+  removeCoupon: (reason?: string) => void;
   finalOrderTotal: number;
 
   // Customer Auth & Profile
@@ -122,8 +136,12 @@ interface ShopContextType {
   // Notifications
   notifications: CustomerNotification[];
   unreadNotificationCount: number;
+  isLoadingNotifications: boolean;
+  notificationsError: string | null;
+  refreshNotifications: () => Promise<void>;
   markNotificationAsRead: (id: string) => void;
   markAllNotificationsAsRead: () => void;
+  enablePushNotifications: () => Promise<{ success: boolean; status: string }>;
 
   // AI Assistant
   isAIAssistantOpen: boolean;
@@ -156,38 +174,8 @@ interface ShopContextType {
 
 const ShopContext = createContext<ShopContextType | undefined>(undefined);
 
-const FREE_SHIPPING_THRESHOLD = 2999;
-
-const INITIAL_NOTIFICATIONS: CustomerNotification[] = [
-  {
-    id: 'notif-1',
-    title: 'Order Dispatched',
-    message: 'Your order #ALR-ORD-849201 is in transit with Delhivery Express.',
-    category: 'Shipping',
-    timestamp: '2 hours ago',
-    isRead: false,
-    actionUrl: '/account/orders/ord-849201/tracking',
-    actionLabel: 'Track Shipment',
-  },
-  {
-    id: 'notif-2',
-    title: 'Festive Luxury Edit 2026',
-    message: 'Use code FESTIVE15 to unlock 15% savings across all handcrafted silk sets.',
-    category: 'Offers',
-    timestamp: '1 day ago',
-    isRead: false,
-    actionUrl: '/offers',
-    actionLabel: 'View Offer',
-  },
-  {
-    id: 'notif-3',
-    title: 'Allura Circle Member Reward',
-    message: 'You have earned Gold tier privileges. Enjoy priority atelier stitching.',
-    category: 'Account',
-    timestamp: '3 days ago',
-    isRead: true,
-  },
-];
+/** Last FCM token registered for this browser, so we don't re-register the same one. */
+const DEVICE_TOKEN_STORAGE_KEY = 'allura_fcm_token';
 
 const INITIAL_AI_MESSAGES: AIMessage[] = [
   {
@@ -215,6 +203,26 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [isLoadingProducts, setIsLoadingProducts] = useState(true);
+  const [storeSettings, setStoreSettings] = useState<StoreSettings | null>(null);
+
+  // Fetch the public boutique profile / shipping settings once per storefront visit.
+  // Never blocks rendering — callers keep their own defaults until this resolves.
+  const settingsRequested = useRef(false);
+  const refreshStoreSettings = useCallback(async () => {
+    try {
+      const data = await getStoreSettings();
+      setStoreSettings(data);
+    } catch (e) {
+      console.error('Failed to load store settings:', e);
+      settingsRequested.current = false;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isAdminRoute || settingsRequested.current) return;
+    settingsRequested.current = true;
+    refreshStoreSettings();
+  }, [isAdminRoute, refreshStoreSettings]);
 
   // Load the real storefront catalog the first time a storefront page is shown: categories first
   // so product category names can be resolved from the raw categoryId the list endpoint returns.
@@ -328,15 +336,11 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   });
 
-  // Notifications state
-  const [notifications, setNotifications] = useState<CustomerNotification[]>(() => {
-    try {
-      const saved = localStorage.getItem('allura_notifications');
-      return saved ? JSON.parse(saved) : INITIAL_NOTIFICATIONS;
-    } catch {
-      return INITIAL_NOTIFICATIONS;
-    }
-  });
+  // Notifications state (real API; was localStorage-mock, now server-backed)
+  const [notifications, setNotifications] = useState<CustomerNotification[]>([]);
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+  const [isLoadingNotifications, setIsLoadingNotifications] = useState(false);
+  const [notificationsError, setNotificationsError] = useState<string | null>(null);
 
   // Applied coupon state
   const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(() => {
@@ -436,13 +440,85 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [returns]);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem('allura_notifications', JSON.stringify(notifications));
-    } catch (e) {
-      console.error(e);
+  const refreshNotifications = useCallback(async () => {
+    if (!customer || !hasCustomerSession() || isAdminRoute) {
+      setNotifications([]);
+      return;
     }
-  }, [notifications]);
+    setIsLoadingNotifications(true);
+    setNotificationsError(null);
+    try {
+      setNotifications(await getMyNotifications({ limit: 20 }));
+    } catch (err) {
+      setNotificationsError(notificationErrorMessage(err, 'Could not load notifications'));
+    } finally {
+      setIsLoadingNotifications(false);
+    }
+  }, [customerId, isAdminRoute]);
+
+  const refreshUnreadNotificationCount = useCallback(async () => {
+    if (!customer || !hasCustomerSession() || isAdminRoute) {
+      setUnreadNotificationCount(0);
+      return;
+    }
+    try {
+      setUnreadNotificationCount(await getUnreadCount());
+    } catch {
+      // Silent — the badge just keeps its last known value until the next tick.
+    }
+  }, [customerId, isAdminRoute]);
+
+  // Load on login / app start, clear on logout
+  useEffect(() => {
+    refreshNotifications();
+  }, [refreshNotifications]);
+
+  // Unread badge: on load, on tab focus, and every 60s. Stops when logged out.
+  useEffect(() => {
+    refreshUnreadNotificationCount();
+    if (!customer || isAdminRoute) return;
+    const timer = setInterval(refreshUnreadNotificationCount, 60000);
+    const onFocus = () => refreshUnreadNotificationCount();
+    window.addEventListener('focus', onFocus);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [refreshUnreadNotificationCount, customer, isAdminRoute]);
+
+  // Push notifications: Re-register on app load when the user is logged in and permission
+  // is ALREADY 'granted'. No popup or unprompted permission dialog is triggered.
+  useEffect(() => {
+    if (!customer || isAdminRoute) return;
+    if (typeof window === 'undefined' || !('Notification' in window)) return;
+    if (Notification.permission !== 'granted') return;
+
+    let isMounted = true;
+    (async () => {
+      try {
+        const token = await requestPushToken();
+        if (!token || !isMounted) return;
+        await registerDeviceToken({ token, platform: 'WEB' });
+        localStorage.setItem(DEVICE_TOKEN_STORAGE_KEY, token);
+      } catch (err) {
+        console.warn('Could not register the push device token:', err);
+      }
+    })();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [customerId, isAdminRoute]);
+
+  // A push that arrives while the site is open: toast + refresh the bell.
+  useEffect(() => {
+    if (!customer || isAdminRoute) return;
+    return onForegroundPush(({ title, body }) => {
+      showToast(title ? (body ? `${title}: ${body}` : title) : 'New notification', 'gold');
+      refreshNotifications();
+      refreshUnreadNotificationCount();
+    });
+  }, [customerId, isAdminRoute, refreshNotifications, refreshUnreadNotificationCount]);
 
   useEffect(() => {
     try {
@@ -752,8 +828,14 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Pricing calculations
   const cartCount = cart.reduce((acc, item) => acc + item.quantity, 0);
   const cartSubtotal = cart.reduce((acc, item) => acc + (item.unitPrice ?? item.product.price) * item.quantity, 0);
-  const freeShippingRemaining = Math.max(0, FREE_SHIPPING_THRESHOLD - cartSubtotal);
-  const freeShippingProgress = Math.min(100, (cartSubtotal / FREE_SHIPPING_THRESHOLD) * 100);
+  const freeShippingThreshold =
+    typeof storeSettings?.shipping?.freeShippingMinOrder === 'number'
+      ? storeSettings.shipping.freeShippingMinOrder
+      : 0;
+  const freeShippingRemaining = Math.max(0, freeShippingThreshold - cartSubtotal);
+  const freeShippingProgress = freeShippingThreshold > 0
+    ? Math.min(100, (cartSubtotal / freeShippingThreshold) * 100)
+    : 100;
 
   // Coupon: the discount amount always comes from POST /coupons/validate
   const [couponDiscountAmount, setCouponDiscountAmount] = useState(0);
@@ -817,9 +899,9 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [customerId, cartId, cart.length, cartSubtotal, showToast, navigate]);
 
-  const removeCoupon = useCallback(() => {
+  const removeCoupon = useCallback((reason?: string) => {
     clearCoupon();
-    showToast('Coupon removed', 'info');
+    showToast(reason || 'Coupon removed', 'info');
   }, [clearCoupon, showToast]);
 
   // Re-check the applied coupon whenever the bag changes (the discount or eligibility may change)
@@ -943,6 +1025,17 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logoutCustomer = async () => {
+    // Remove the push device token before clearing the session (per Phase E) —
+    // if this fails, logout still proceeds.
+    const storedToken = localStorage.getItem(DEVICE_TOKEN_STORAGE_KEY);
+    if (storedToken) {
+      try {
+        await removeDeviceToken(storedToken);
+      } catch (e) {
+        console.warn('Could not remove the push device token on logout', e);
+      }
+      localStorage.removeItem(DEVICE_TOKEN_STORAGE_KEY);
+    }
     try {
       await logout();
     } catch (e) {
@@ -1068,6 +1161,7 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
       couponCode: appliedCoupon?.code,
       tax: Math.round(cartSubtotal * 0.05),
       total: finalOrderTotal + (freeShippingRemaining === 0 ? 0 : 150),
+      currency: 'INR',
       paymentMethod: orderData.paymentMethod || 'UPI',
       paymentStatus: 'Paid',
       orderStatus: 'Processing',
@@ -1195,17 +1289,74 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return newReturn;
   };
 
-  // Notifications
-  const unreadNotificationCount = notifications.filter(n => !n.isRead).length;
-
-  const markNotificationAsRead = (id: string) => {
-    setNotifications(prev => prev.map(n => (n.id === id ? { ...n, isRead: true } : n)));
+  // Notifications — optimistic, rolled back if the API call fails
+  const markNotificationAsRead = async (id: string) => {
+    let wasUnread = false;
+    setNotifications(prev =>
+      prev.map(n => {
+        if (n.id === id && !n.isRead) wasUnread = true;
+        return n.id === id ? { ...n, isRead: true } : n;
+      })
+    );
+    if (wasUnread) setUnreadNotificationCount(c => Math.max(0, c - 1));
+    try {
+      await markNotificationRead(id);
+    } catch {
+      setNotifications(prev => prev.map(n => (n.id === id ? { ...n, isRead: false } : n)));
+      if (wasUnread) setUnreadNotificationCount(c => c + 1);
+    }
   };
 
-  const markAllNotificationsAsRead = () => {
+  const markAllNotificationsAsRead = async () => {
+    const prevNotifications = notifications;
+    const prevCount = unreadNotificationCount;
     setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
-    showToast('All notifications marked as read', 'info');
+    setUnreadNotificationCount(0);
+    try {
+      await markAllNotificationsRead();
+      showToast('All notifications marked as read', 'info');
+    } catch (err) {
+      setNotifications(prevNotifications);
+      setUnreadNotificationCount(prevCount);
+      showToast(notificationErrorMessage(err, 'Could not mark notifications as read'), 'error');
+    }
   };
+
+  const enablePushNotifications = useCallback(async (): Promise<{ success: boolean; status: string }> => {
+    if (typeof window === 'undefined' || !('Notification' in window) || !('serviceWorker' in navigator)) {
+      return { success: false, status: 'unsupported' };
+    }
+
+    try {
+      let permission = Notification.permission;
+      if (permission === 'default') {
+        permission = await Notification.requestPermission();
+      }
+
+      if (permission !== 'granted') {
+        return { success: false, status: permission };
+      }
+
+      const token = await requestPushToken();
+      if (!token) {
+        return { success: false, status: 'token_failed' };
+      }
+
+      if (customer) {
+        try {
+          await registerDeviceToken({ token, platform: 'WEB' });
+        } catch (err) {
+          console.warn('Could not register device token on backend:', err);
+        }
+      }
+      localStorage.setItem(DEVICE_TOKEN_STORAGE_KEY, token);
+      showToast('Push notifications enabled', 'success');
+      return { success: true, status: 'granted' };
+    } catch (err: any) {
+      console.warn('Could not enable push notifications:', err);
+      return { success: false, status: err?.message || 'error' };
+    }
+  }, [customer]);
 
   // AI Assistant Engine
   const sendAIMessage = async (text: string) => {
@@ -1281,6 +1432,8 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
         products,
         categories,
         isLoadingProducts,
+        storeSettings,
+        refreshStoreSettings,
         cart,
         cartTotals,
         cartId,
@@ -1303,7 +1456,7 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
         addRecentlyViewed,
         cartCount,
         cartSubtotal,
-        freeShippingThreshold: FREE_SHIPPING_THRESHOLD,
+        freeShippingThreshold,
         freeShippingRemaining,
         freeShippingProgress,
         appliedCoupon,
@@ -1336,8 +1489,12 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
         submitReturnRequest,
         notifications,
         unreadNotificationCount,
+        isLoadingNotifications,
+        notificationsError,
+        refreshNotifications,
         markNotificationAsRead,
         markAllNotificationsAsRead,
+        enablePushNotifications,
         isAIAssistantOpen,
         setIsAIAssistantOpen,
         aiMessages,

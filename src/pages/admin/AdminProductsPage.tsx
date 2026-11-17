@@ -14,7 +14,7 @@ import {
   X,
   ArrowUpDown,
 } from 'lucide-react';
-import { useAdmin } from '../../context/AdminContext';
+import { usePermissions } from '../../hooks/usePermissions';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { ConfirmModal } from '../../components/common/ConfirmModal';
 import { CategorySelect } from '../../components/admin/CategorySelect';
@@ -34,7 +34,7 @@ import {
   getAdminVariants,
 } from '../../service/adminVariants';
 import type { VariantPayload } from '../../service/adminVariants';
-import { ProductVariantsEditor, buildVariantSku } from '../../components/admin/ProductVariantsEditor';
+import { ProductVariantsEditor, buildVariantSku, normalizeVariantImages } from '../../components/admin/ProductVariantsEditor';
 import { ProductImagesEditor } from '../../components/admin/ProductImagesEditor';
 import type { VariantRow } from '../../components/admin/ProductVariantsEditor';
 import { useShop } from '../../context/ShopContext';
@@ -73,7 +73,7 @@ const toVariantPayload = (v: VariantRow, productSku: string, pricing: ProductPri
       currency: pricing.currency,
     },
     // Match the Variants page payload (which the backend accepts): only send images when there are some
-    ...(v.images?.length ? { images: v.images } : {}),
+    ...(v.images?.length ? { images: normalizeVariantImages(v.images) } : {}),
   };
 };
 
@@ -136,8 +136,11 @@ const getStatusSelectStyle = (status: string) => {
 };
 
 export const AdminProductsPage: React.FC = () => {
-  const { hasPermission } = useAdmin();
+  const { can } = usePermissions();
   const { showToast } = useShop();
+  const canCreate = can('products_catalog', 'create');
+  const canEdit = can('products_catalog', 'edit');
+  const canDelete = can('products_catalog', 'delete');
 
   // ── API state ──────────────────────────────────────────────────────────────
   const [products, setProducts] = useState<AdminProduct[]>([]);
@@ -505,7 +508,7 @@ export const AdminProductsPage: React.FC = () => {
             <span>Scan / Print Barcodes</span>
           </Link>
 
-          {hasPermission('products', 'create') && (
+          {canCreate && (
             <button
               onClick={handleOpenAdd}
               className="px-4 py-2 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-xl text-xs font-sans font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 shadow-sm"
@@ -604,11 +607,11 @@ export const AdminProductsPage: React.FC = () => {
         </div>
 
         {/* Bulk Action Bar */}
-        {selectedIds.length > 0 && (
+        {selectedIds.length > 0 && (canEdit || canDelete) && (
           <div className="bg-stone-900 text-white p-3 rounded-xl flex items-center justify-between text-xs font-sans animate-slide-up">
             <span className="font-semibold">{selectedIds.length} item(s) selected</span>
             <div className="flex items-center gap-2">
-              {hasPermission('products', 'delete') && (
+              {canDelete && (
                 <button
                   onClick={handleBulkDelete}
                   className="px-3 py-1 bg-rose-700 hover:bg-rose-800 rounded-lg text-white font-medium transition-colors"
@@ -616,12 +619,14 @@ export const AdminProductsPage: React.FC = () => {
                   Delete Selected
                 </button>
               )}
-              <button
-                onClick={handleBulkArchive}
-                className="px-3 py-1 bg-stone-800 hover:bg-stone-700 rounded-lg text-stone-200 transition-colors"
-              >
-                Archive Selected
-              </button>
+              {canEdit && (
+                <button
+                  onClick={handleBulkArchive}
+                  className="px-3 py-1 bg-stone-800 hover:bg-stone-700 rounded-lg text-stone-200 transition-colors"
+                >
+                  Archive Selected
+                </button>
+              )}
               <button
                 onClick={() => setSelectedIds([])}
                 className="px-3 py-1 text-stone-400 hover:text-white"
@@ -727,6 +732,13 @@ export const AdminProductsPage: React.FC = () => {
                           if (different.length === 0) return null;
                           const min = Math.min(...different);
                           const max = Math.max(...different);
+                          if (!canEdit) {
+                            return (
+                              <p className="mt-1 text-left text-[10px] font-semibold text-amber-700">
+                                ⚠ Variants: ₹{min.toLocaleString('en-IN')}{max !== min ? `–₹${max.toLocaleString('en-IN')}` : ''}
+                              </p>
+                            );
+                          }
                           return (
                             <button
                               type="button"
@@ -746,7 +758,7 @@ export const AdminProductsPage: React.FC = () => {
                         </p>
                       </td>
                       <td className="p-4">
-                        {hasPermission('products', 'edit') ? (
+                        {canEdit ? (
                           <div className="relative inline-flex items-center">
                             <select
                               value={product.status || 'DRAFT'}
@@ -785,7 +797,7 @@ export const AdminProductsPage: React.FC = () => {
                       </td>
                       <td className="p-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
-                          {hasPermission('products', 'edit') && (
+                          {canEdit && (
                             <button
                               onClick={() => handleOpenEdit(product)}
                               title="Edit Product"
@@ -794,7 +806,7 @@ export const AdminProductsPage: React.FC = () => {
                               <Edit3 size={14} />
                             </button>
                           )}
-                          {hasPermission('products', 'delete') && (
+                          {canDelete && (
                             <button
                               onClick={() => setDeleteModal({ id: product.id, name: product.name })}
                               title="Delete Product"

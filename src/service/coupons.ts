@@ -169,4 +169,13 @@ export const setAdminCouponStatus = async (id: string, active: boolean): Promise
   throw lastError;
 };
 
+/** True when a (non-coupon) API error is actually about the applied coupon being/becoming invalid */
+export const isCouponError = (err: any): boolean => {
+  const body = err?.response?.data;
+  return (
+    body?.error?.code === 'COUPON_INVALID' ||
+    /coupon/i.test(body?.message || body?.error?.message || '')
+  );
+};
+
 export { errorMessage as couponErrorMessage };

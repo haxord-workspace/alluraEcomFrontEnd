@@ -21,6 +21,7 @@ import {
 import { getDashboardSeo, type SeoAnalyticsResponse } from '../../service/adminDashboard';
 import type { ProductSEO } from '../../types';
 import { getBackendErrorMessage, getBackendSuccessMessage } from '../../utils/apiResponse';
+import { API_BASE_URL } from '../../service/api';
 
 export const AdminSeoPage: React.FC = () => {
   const { showToast } = useShop();
@@ -184,7 +185,7 @@ export const AdminSeoPage: React.FC = () => {
         {/* Live Sitemap Links */}
         <div className="flex items-center gap-2">
           <a
-            href="https://alluraecombackend.onrender.com/api/v1/sitemap.xml"
+            href={`${API_BASE_URL}/sitemap.xml`}
             target="_blank"
             rel="noopener noreferrer"
             className="px-3.5 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl text-xs font-sans font-medium flex items-center gap-1.5 transition-colors border border-stone-200 shadow-xs"
@@ -194,7 +195,7 @@ export const AdminSeoPage: React.FC = () => {
             <ExternalLink size={12} className="text-stone-400" />
           </a>
           <a
-            href="https://alluraecombackend.onrender.com/api/v1/robots.txt"
+            href={`${API_BASE_URL}/robots.txt`}
             target="_blank"
             rel="noopener noreferrer"
             className="px-3.5 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl text-xs font-sans font-medium flex items-center gap-1.5 transition-colors border border-stone-200 shadow-xs"

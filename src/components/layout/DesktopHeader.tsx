@@ -3,10 +3,11 @@ import { Link, useLocation } from 'react-router-dom';
 import { Search, Heart, ShoppingBag, UserRound, ChevronDown } from 'lucide-react';
 import { AlluraLogo } from '../common/AlluraLogo';
 import { useShop } from '../../context/ShopContext';
+import { NotificationBell } from './NotificationBell';
 
 export const DesktopHeader: React.FC = () => {
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
-  const { cartCount, wishlist, setIsCartOpen, setIsSearchOpen } = useShop();
+  const { cartCount, wishlist, customer, setIsCartOpen, setIsSearchOpen } = useShop();
   const location = useLocation();
 
   const navLinks = [
@@ -40,7 +41,7 @@ export const DesktopHeader: React.FC = () => {
   ];
 
   return (
-    <header className="hidden lg:block sticky top-0 z-40 bg-[#FFFFFF] border-b border-[#561C08]/15 shadow-xs transition-all duration-200">
+    <header className="print:hidden hidden lg:block sticky top-0 z-40 bg-[#FFFFFF] border-b border-[#561C08]/15 shadow-xs transition-all duration-200">
       <div className="max-w-7xl mx-auto px-6 xl:px-8 h-20 grid grid-cols-[1fr_auto_1fr] items-center gap-4">
         {/* Left Navigation */}
         <nav className="h-full flex items-center gap-7 xl:gap-8 justify-start">
@@ -115,6 +116,9 @@ export const DesktopHeader: React.FC = () => {
           >
             <UserRound size={20} />
           </Link>
+
+          {/* Notifications */}
+          {customer && <NotificationBell />}
 
           {/* Wishlist */}
           <Link

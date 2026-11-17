@@ -31,6 +31,7 @@ const processQueue = (error: any, token: string | null = null) => {
 
 const adminApi = axios.create({
   baseURL: API_BASE_URL,
+  timeout: 45000,
   headers: { 'Content-Type': 'application/json' },
   // withCredentials ensures the browser sends httpOnly refresh-token cookie
   withCredentials: true,
