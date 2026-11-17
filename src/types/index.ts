@@ -327,8 +327,12 @@ export interface Order {
   couponCode?: string;
   tax: number;
   total: number;
+  currency: string;
+  invoiceNumber?: string;
+  invoiceIssuedAt?: string;
   paymentMethod: 'UPI' | 'Card' | 'COD' | 'NetBanking';
   paymentStatus: PaymentStatus;
+  transactionId?: string;
   orderStatus: OrderStatus;
   tracking?: OrderTrackingInfo;
   notes?: string;
@@ -338,6 +342,32 @@ export interface Order {
     action: string;
     note?: string;
   }[];
+}
+
+// Admin Payments Ledger (Razorpay)
+export type PaymentLedgerStatus = 'PAID' | 'PENDING' | 'FAILED' | 'REFUNDED';
+export type PaymentLedgerMethod = 'UPI' | 'CARD' | 'COD' | 'NETBANKING';
+
+export interface PaymentListItem {
+  paymentId: string;
+  orderId: string;
+  orderNumber: string;
+  customerName: string;
+  customerEmail: string;
+  method: PaymentLedgerMethod | null;
+  amount: number;
+  gatewayReference: string | null;
+  status: PaymentLedgerStatus;
+  createdAt: string;
+}
+
+export interface PaymentDetail extends PaymentListItem {
+  currency: string;
+  razorpayOrderId: string;
+  failureCode?: string;
+  failureReason?: string;
+  failureDescription?: string;
+  updatedAt: string;
 }
 
 // Returns & Exchanges
@@ -582,17 +612,6 @@ export interface StockReservation {
 }
 
 // CMS & FAQ
-export interface CMSPage {
-  id: string;
-  title: string;
-  slug: string;
-  content: string;
-  featuredImage?: string;
-  status: 'Published' | 'Draft';
-  updatedAt: string;
-  seo?: ProductSEO;
-}
-
 export interface FAQItem {
   id: string;
   question: string;

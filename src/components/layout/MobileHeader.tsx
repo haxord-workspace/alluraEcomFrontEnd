@@ -2,12 +2,13 @@ import React from 'react';
 import { Menu, Search, ShoppingBag } from 'lucide-react';
 import { AlluraLogo } from '../common/AlluraLogo';
 import { useShop } from '../../context/ShopContext';
+import { NotificationBell } from './NotificationBell';
 
 export const MobileHeader: React.FC = () => {
-  const { cartCount, setIsMobileMenuOpen, setIsSearchOpen, setIsCartOpen } = useShop();
+  const { cartCount, customer, setIsMobileMenuOpen, setIsSearchOpen, setIsCartOpen } = useShop();
 
   return (
-    <header className="lg:hidden sticky top-0 z-40 bg-[#FFFFFF] border-b border-[#561C08]/15 h-16 px-4 grid grid-cols-3 items-center safe-top">
+    <header className="print:hidden lg:hidden sticky top-0 z-40 bg-[#FFFFFF] border-b border-[#561C08]/15 h-16 px-4 grid grid-cols-3 items-center safe-top">
       {/* Left Menu Trigger */}
       <div className="flex items-center justify-start">
         <button
@@ -26,6 +27,7 @@ export const MobileHeader: React.FC = () => {
 
       {/* Right Action Icons */}
       <div className="flex items-center justify-end gap-3">
+        {customer && <NotificationBell />}
         <button
           onClick={() => setIsSearchOpen(true)}
           className="p-1.5 text-[#000000] hover:text-[#561C08] transition-colors"

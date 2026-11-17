@@ -34,15 +34,19 @@ import { useShop } from '../../context/ShopContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { ConfirmModal } from '../../components/common/ConfirmModal';
 import { ImageUploadDropzone } from '../../components/admin/ImageUploadDropzone';
-import { 
-  getAdminBanners, 
-  createAdminBanner, 
-  updateAdminBanner, 
-  deleteAdminBanner, 
-  reorderAdminBanners, 
+import {
+  getAdminBanners,
+  createAdminBanner,
+  updateAdminBanner,
+  deleteAdminBanner,
+  reorderAdminBanners,
+  publishAdminBanner,
+  scheduleAdminBanner,
+  unpublishAdminBanner,
   isValidObjectId,
   type BannerPlacement,
-  type BannerPayload
+  type BannerPayload,
+  type BannerWithMessage
 } from '../../service/adminBanners';
 import { getBackendErrorMessage, getBackendSuccessMessage } from '../../utils/apiResponse';
 import { AdminErrorBanner } from '../../components/admin/AdminErrorBanner';
@@ -335,35 +339,27 @@ export const AdminBannersPage: React.FC = () => {
       setBanners(next);
       setBannersList(next);
       showToast(`Duplicated "${banner.headline || banner.title}" as Draft!`, 'success');
-    } catch {
-      const fallback: Banner = {
-        id: `ban-copy-${Date.now()}`,
-        ...copyPayload,
-        title: newTitle,
-        headline: newTitle,
-        subtitle: copyPayload.subtitle || '',
-        description: copyPayload.description || '',
-        badge: copyPayload.badge,
-        eyebrow: copyPayload.eyebrow,
-        offerPill: copyPayload.offerPill,
-        ctaText: copyPayload.ctaText || 'SHOP NOW',
-        targetUrl: copyPayload.targetUrl || '/shop',
-        secondaryCtaText: copyPayload.secondaryCtaText,
-        secondaryTargetUrl: copyPayload.secondaryTargetUrl,
-        placement: copyPayload.placement,
-        position: copyPayload.position,
-        status: 'Draft',
-        desktopImage: copyPayload.desktopImage!,
-        mobileImage: copyPayload.mobileImage!,
-        image: { url: copyPayload.desktopImage!, alt: newTitle },
-      };
-      const next = [fallback, ...banners];
-      setBanners(next);
-      setBannersList(next);
-      showToast('Created draft copy locally!', 'gold');
+    } catch (err: any) {
+      showToast(getBackendErrorMessage(err, 'Could not duplicate this banner'), 'error');
     } finally {
       setActionBusyId(null);
     }
+  };
+
+  // Applies a lifecycle status transition through its dedicated endpoint
+  // (publish / schedule / unpublish are not equivalent to a metadata PATCH).
+  const applyLifecycleStatus = async (
+    id: string,
+    nextStatus: 'Active' | 'Scheduled' | 'Draft',
+    startAt: string,
+    endAt: string
+  ): Promise<BannerWithMessage> => {
+    if (nextStatus === 'Active') return publishAdminBanner(id);
+    if (nextStatus === 'Scheduled') {
+      if (!startAt) throw new Error('A go-live date & time is required to schedule a banner.');
+      return scheduleAdminBanner(id, { startAt, endAt: endAt || undefined });
+    }
+    return unpublishAdminBanner(id);
   };
 
   // Submit Handler with image compression & single-roundtrip request
@@ -406,6 +402,8 @@ export const AdminBannersPage: React.FC = () => {
     const cleanHeading = (headline || title).trim();
     const cleanSubtitle = subtitle.trim();
 
+    // Metadata only — status/startAt/endAt are lifecycle concerns handled separately
+    // via the dedicated publish/schedule/unpublish endpoints, not this metadata payload.
     const payload = {
       title: cleanHeading,
       headline: cleanHeading,
@@ -422,26 +420,36 @@ export const AdminBannersPage: React.FC = () => {
       mobileImage: optimizedMobile,
       placement,
       position,
-      status,
-      startAt: formStartAt ? new Date(formStartAt).toISOString() : undefined,
-      endAt: formEndAt ? new Date(formEndAt).toISOString() : undefined,
     };
 
     try {
       const isRealDbBanner = editingBanner && isValidObjectId(editingBanner.id);
+      let saved: BannerWithMessage;
 
       if (isRealDbBanner) {
-        // 1. UPDATE real database record with status and payload in ONE single request
-        const updated = await updateAdminBanner(editingBanner.id, payload);
+        // 1. UPDATE metadata on the existing database record
+        saved = await updateAdminBanner(editingBanner.id, payload);
 
-        const nextBanners = banners.map(b => (b.id === editingBanner.id ? { ...b, ...payload, ...updated } : b));
+        // 2. Only call the lifecycle endpoint if the status actually changed
+        if (status !== editingBanner.status) {
+          saved = await applyLifecycleStatus(editingBanner.id, status, formStartAt, formEndAt);
+        }
+
+        const nextBanners = banners.map(b => (b.id === editingBanner.id ? { ...b, ...payload, ...saved } : b));
         setBanners(nextBanners);
         setBannersList(nextBanners);
-        showToast(updated._message || 'Banner updated successfully in database!', 'success');
+        showToast(saved._message || 'Banner updated successfully in database!', 'success');
       } else {
-        // 2. CREATE on backend database
+        // 1. CREATE on backend database (always starts as draft per the API contract)
         const created = await createAdminBanner(payload);
-        const mergedCreated = { ...payload, ...created };
+        saved = created;
+
+        // 2. Publish / schedule it immediately if the form requested a non-draft status
+        if (status !== 'Draft') {
+          saved = await applyLifecycleStatus(created.id, status, formStartAt, formEndAt);
+        }
+
+        const mergedCreated = { ...payload, ...saved };
         let nextBanners: Banner[];
         if (editingBanner) {
           nextBanners = banners.map(b => (b.id === editingBanner.id ? { ...b, ...mergedCreated } : b));
@@ -450,7 +458,7 @@ export const AdminBannersPage: React.FC = () => {
         }
         setBanners(nextBanners);
         setBannersList(nextBanners);
-        showToast((created as any)?._message || (editingBanner ? 'Banner updated successfully!' : 'Banner created successfully!'), 'success');
+        showToast(saved._message || (editingBanner ? 'Banner updated successfully!' : 'Banner created successfully!'), 'success');
       }
       setIsModalOpen(false);
     } catch (err: any) {
@@ -463,10 +471,17 @@ export const AdminBannersPage: React.FC = () => {
     }
   };
 
-  // Toggle Publish / Unpublish directly from card with instant optimistic UI
+  // Toggle Publish / Unpublish directly from card with instant optimistic UI,
+  // using the dedicated publish/unpublish endpoints (not a metadata status PATCH).
   const handleTogglePublish = async (banner: Banner) => {
+    if (!isValidObjectId(banner.id)) {
+      showToast('This banner has not been saved to the database yet.', 'error');
+      return;
+    }
+
     setActionBusyId(banner.id);
-    const targetStatus: 'Active' | 'Draft' = banner.status === 'Active' ? 'Draft' : 'Active';
+    const goingLive = banner.status !== 'Active';
+    const targetStatus: 'Active' | 'Draft' = goingLive ? 'Active' : 'Draft';
     const previousBanners = banners;
 
     // Optimistic UI update: flip state immediately for 0ms delay in UI
@@ -475,21 +490,10 @@ export const AdminBannersPage: React.FC = () => {
     setBannersList(optimisticBanners);
 
     try {
-      const isRealDbBanner = isValidObjectId(banner.id);
-
-      if (!isRealDbBanner) {
-        const created = await createAdminBanner({
-          ...banner,
-          desktopImage: banner.desktopImage,
-          mobileImage: banner.mobileImage || banner.desktopImage,
-          status: targetStatus,
-        });
-        const next = banners.map(b => (b.id === banner.id ? created : b));
-        setBanners(next);
-        setBannersList(next);
-      } else {
-        await updateAdminBanner(banner.id, { status: targetStatus });
-      }
+      const updated = goingLive ? await publishAdminBanner(banner.id) : await unpublishAdminBanner(banner.id);
+      const next = banners.map(b => (b.id === banner.id ? { ...b, ...updated } : b));
+      setBanners(next);
+      setBannersList(next);
 
       showToast(
         `Banner "${banner.headline || banner.title}" is now ${targetStatus === 'Active' ? 'LIVE' : 'Draft'}!`,
@@ -515,42 +519,23 @@ export const AdminBannersPage: React.FC = () => {
 
   const handleConfirmSchedule = async () => {
     if (!scheduleModalBanner || !scheduleStartAt) return;
+    if (!isValidObjectId(scheduleModalBanner.id)) {
+      showToast('This banner has not been saved to the database yet.', 'error');
+      return;
+    }
+
     setIsScheduling(true);
     const targetBanner = scheduleModalBanner;
     try {
-      const isRealDbBanner = isValidObjectId(targetBanner.id);
+      // POST /admin/banners/{id}/schedule — registers the BullMQ delayed job
+      const updated = await scheduleAdminBanner(targetBanner.id, {
+        startAt: scheduleStartAt,
+        endAt: scheduleEndAt || undefined,
+      });
+      const next = banners.map(b => (b.id === targetBanner.id ? { ...b, ...updated } : b));
+      setBanners(next);
+      setBannersList(next);
 
-      if (!isRealDbBanner) {
-        const created = await createAdminBanner({
-          ...targetBanner,
-          desktopImage: targetBanner.desktopImage,
-          mobileImage: targetBanner.mobileImage || targetBanner.desktopImage,
-          status: 'Scheduled',
-          startAt: scheduleStartAt,
-          endAt: scheduleEndAt || undefined,
-        });
-        const next = banners.map(b => (b.id === targetBanner.id ? created : b));
-        setBanners(next);
-        setBannersList(next);
-      } else {
-        await updateAdminBanner(targetBanner.id, {
-          status: 'Scheduled',
-          startAt: scheduleStartAt,
-          endAt: scheduleEndAt || undefined,
-        });
-        const next = banners.map(b =>
-          b.id === targetBanner.id
-            ? {
-                ...b,
-                status: 'Scheduled' as const,
-                startsAt: scheduleStartAt,
-                endsAt: scheduleEndAt,
-              }
-            : b
-        );
-        setBanners(next);
-        setBannersList(next);
-      }
       showToast(getBackendSuccessMessage(null, 'Banner successfully scheduled for automated publication!'), 'success');
       setScheduleModalBanner(null);
     } catch (err: any) {

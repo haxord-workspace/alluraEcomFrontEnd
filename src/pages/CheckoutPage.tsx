@@ -15,15 +15,18 @@ import {
 import { useShop } from '../context/ShopContext';
 import { AlluraLogo } from '../components/common/AlluraLogo';
 import { CartSkeleton } from '../components/ui/CartSkeleton';
+import { CouponInput } from '../components/common/CouponInput';
 import {
-  previewCheckout,
   createCheckout,
   newIdempotencyKey,
   checkoutErrorMessage,
 } from '../service/checkout';
-import type { CheckoutRequest, CheckoutSummary, CheckoutSession } from '../service/checkout';
+import { isCouponError } from '../service/coupons';
+import { computeOrderTotal } from '../utils/pricing';
+import type { CheckoutRequest, CheckoutSession } from '../service/checkout';
 import type { CartItem, SavedAddress } from '../types';
 import { useOrderPayment } from '../hooks/useOrderPayment';
+import { useCartShippingPreview } from '../hooks/useCartShippingPreview';
 import { newMetaEventId, metaHeaders, trackMetaEvent } from '../utils/metaPixel';
 import { normalizeMobile, normalizePincode, mobileError, pincodeError } from '../utils/addressValidation';
 
@@ -54,8 +57,6 @@ const formatAddress = (a: SavedAddress) =>
 const inputClass =
   'w-full bg-allura-bg border border-allura-border rounded p-3 text-xs text-allura-text focus:outline-none focus:border-allura-gold';
 
-const FREE_SHIPPING_THRESHOLD = 2999;
-
 const linePrice = (i: CartItem) => (i.unitPrice ?? i.product.price) * i.quantity;
 
 export const CheckoutPage: React.FC = () => {
@@ -65,10 +66,11 @@ export const CheckoutPage: React.FC = () => {
     isCartLoading,
     cartId,
     cartSubtotal,
-    freeShippingRemaining,
     formatPrice,
     appliedCoupon,
     couponDiscount,
+    isApplyingCoupon,
+    removeCoupon,
     fetchCustomerAddresses,
     addCustomerAddress,
     clearCart,
@@ -138,60 +140,23 @@ export const CheckoutPage: React.FC = () => {
   const selectedAddress = addresses.find(a => a.id === selectedAddressId);
 
   // ── Server-side preview ──────────────────────────────────────────────────
-  const [summary, setSummary] = useState<CheckoutSummary | null>(null);
-  const [isPreviewing, setIsPreviewing] = useState(false);
-  const [previewError, setPreviewError] = useState<string | null>(null);
-
-  const request: CheckoutRequest | null = useMemo(
-    () =>
-      cartId && selectedAddressId && !isAddingAddress
-        ? {
-            cartId,
-            addressId: selectedAddressId,
-            couponCode: appliedCoupon?.code,
-            shippingMethod: deliveryMethod,
-            cartItemIds: selectedIdsKey ? selectedIdsKey.split(',') : undefined,
-          }
-        : null,
-    [cartId, selectedAddressId, isAddingAddress, appliedCoupon?.code, deliveryMethod, selectedIdsKey]
+  const cartItemIds = useMemo(
+    () => (selectedIdsKey ? selectedIdsKey.split(',') : undefined),
+    [selectedIdsKey]
   );
-
-  // Re-preview when the request or the bag contents change
-  const cartSignature = cart.map(i => `${i.id}:${i.quantity}`).join(',');
-  useEffect(() => {
-    if (!request || orderItems.length === 0) {
-      setSummary(null);
-      setPreviewError(null);
-      return;
+  const { summary, previewError, resolvedShipping, isShippingLoading } = useCartShippingPreview(
+    Boolean(selectedAddressId) && !isAddingAddress && orderItems.length > 0,
+    {
+      addressId: selectedAddressId || undefined,
+      shippingMethod: deliveryMethod,
+      cartItemIds,
+      skipWhenFreeShipping: false,
+      debounceMs: 350,
+      skipAddressFetch: true,
+      preserveSummaryOnError: true,
     }
-    let cancelled = false;
-    const timer = setTimeout(async () => {
-      setIsPreviewing(true);
-      try {
-        const result = await previewCheckout(request);
-        if (!cancelled) {
-          setSummary(result);
-          setPreviewError(null);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setSummary(null);
-          const message = checkoutErrorMessage(err, 'Could not calculate your order total.');
-          setPreviewError(
-            request.cartItemIds && /cartItemIds/i.test(message)
-              ? "Removing items from checkout isn't available yet. Please add the items back, or remove them from your bag instead."
-              : message
-          );
-        }
-      } finally {
-        if (!cancelled) setIsPreviewing(false);
-      }
-    }, 350);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [request, cartSignature, orderItems.length]);
+  );
+  const cartSignature = cart.map(i => `${i.id}:${i.quantity}`).join(',');
 
   // ── Create checkout ──────────────────────────────────────────────────────
   const [isPlacing, setIsPlacing] = useState(false);
@@ -335,46 +300,66 @@ export const CheckoutPage: React.FC = () => {
       }
     } catch (err: any) {
       const status = err?.response?.status;
-      setPlaceError(
-        status === 409
-          ? checkoutErrorMessage(err, 'Some items were just reserved by another shopper or this order is already being processed. Please review your bag and try again.')
-          : checkoutErrorMessage(err, 'Could not place your order. Please try again.')
-      );
+      if (req.couponCode && isCouponError(err)) {
+        // Rejected at order time (e.g. someone else used up the last redemption): nothing was
+        // charged — drop the coupon and let the totals recalculate without it.
+        const message = checkoutErrorMessage(err, 'Your coupon could not be applied');
+        removeCoupon(`${message}. The coupon was removed — please review your total and place the order again.`);
+        setPlaceError(null);
+      } else {
+        setPlaceError(
+          status === 409
+            ? checkoutErrorMessage(err, 'Some items were just reserved by another shopper or this order is already being processed. Please review your bag and try again.')
+            : checkoutErrorMessage(err, 'Could not place your order. Please try again.')
+        );
+      }
     } finally {
       setIsPlacing(false);
     }
   };
 
-  // ── Fallback totals (before the server preview is available) ─────────────
-  const freeShipping = isPartial ? orderSubtotal >= FREE_SHIPPING_THRESHOLD : freeShippingRemaining === 0;
-  const estimatedCoupon = isPartial ? 0 : couponDiscount; // the preview calculates it for the selected items
-  const estimatedShipping = deliveryMethod === 'STORE_PICKUP' || freeShipping ? 0 : 150;
+  // ── Totals ────────────────────────────────────────────────────────────────
+  // The coupon's own discount (from the cart's /coupons/validate call, via ShopContext)
+  // updates in the same tick as `appliedCoupon` — instantly, no network round trip. The
+  // server preview (/checkout/preview) is more authoritative (it also knows tax, shipping
+  // and per-item promotions) but runs on a debounce and lags a beat behind. Rather than
+  // block the UI on that lag, trust the instant coupon discount until the preview catches
+  // up to the SAME coupon state, then prefer the server's full numbers.
+  const estimatedShipping = resolvedShipping ?? 0;
+  const effectiveCoupon = isPartial ? 0 : couponDiscount; // the preview prices the selected items only
+  const summaryMatchesCoupon = !!summary && (summary.couponCode || undefined) === (appliedCoupon?.code || undefined);
+
   const display = summary
     ? {
-        subtotal: summary.subtotal,
-        productDiscount: summary.productDiscount,
-        promotionDiscount: summary.promotionDiscount,
-        couponDiscount: summary.couponDiscount,
-        shipping: summary.shippingAmount,
-        tax: summary.taxAmount,
-        total: summary.total,
-      }
+      subtotal: summary.subtotal,
+      productDiscount: summary.productDiscount,
+      promotionDiscount: summary.promotionDiscount,
+      couponDiscount: summaryMatchesCoupon ? summary.couponDiscount : effectiveCoupon,
+      shipping: summary.shippingAmount,
+      tax: summary.taxAmount,
+      total: summaryMatchesCoupon
+        ? summary.total
+        : computeOrderTotal(
+          summary.subtotal - summary.productDiscount - summary.promotionDiscount,
+          effectiveCoupon,
+          summary.shippingAmount + summary.taxAmount
+        ),
+    }
     : {
-        subtotal: orderSubtotal,
-        productDiscount: 0,
-        promotionDiscount: 0,
-        couponDiscount: estimatedCoupon,
-        shipping: estimatedShipping,
-        tax: 0,
-        total: Math.max(0, orderSubtotal - estimatedCoupon) + estimatedShipping,
-      };
+      subtotal: orderSubtotal,
+      productDiscount: 0,
+      promotionDiscount: 0,
+      couponDiscount: effectiveCoupon,
+      shipping: estimatedShipping,
+      tax: 0,
+      total: computeOrderTotal(orderSubtotal, effectiveCoupon, estimatedShipping),
+    };
   const isEstimate = !summary;
-
   // Until the backend supports cartItemIds it prices the whole bag: never let that be ordered
   const orderIdSet = new Set(orderItems.map(i => i.id));
   const selectionError =
     summary && isPartial &&
-    (summary.items.some(l => l.cartItemId && !orderIdSet.has(l.cartItemId)) || summary.items.length > orderItems.length)
+      (summary.items.some(l => l.cartItemId && !orderIdSet.has(l.cartItemId)) || summary.items.length > orderItems.length)
       ? "Removing items from checkout isn't available yet. Please add the items back, or remove them from your bag instead."
       : null;
 
@@ -382,9 +367,8 @@ export const CheckoutPage: React.FC = () => {
   const unpricedLines = summary ? summary.items.filter(l => l.quantity > 0 && l.unitPrice <= 0) : [];
   const pricingError =
     summary && cart.length > 0 && (summary.subtotal <= 0 || unpricedLines.length > 0)
-      ? `We couldn't get the price for ${
-          unpricedLines.length > 0 ? unpricedLines.map(l => l.sku || 'an item').join(', ') : 'your items'
-        }. Please try again shortly or contact us on WhatsApp.`
+      ? `We couldn't get the price for ${unpricedLines.length > 0 ? unpricedLines.map(l => l.sku || 'an item').join(', ') : 'your items'
+      }. Please try again shortly or contact us on WhatsApp.`
       : null;
 
   // ── Confirmation ─────────────────────────────────────────────────────────
@@ -407,9 +391,8 @@ export const CheckoutPage: React.FC = () => {
     return (
       <div className="max-w-2xl mx-auto px-6 py-16 text-center space-y-6 animate-slide-up">
         <div
-          className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto ${
-            isPending ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
-          }`}
+          className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto ${isPending ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
+            }`}
         >
           {isPending ? <AlertTriangle size={38} /> : <CheckCircle2 size={40} />}
         </div>
@@ -433,9 +416,8 @@ export const CheckoutPage: React.FC = () => {
               <p className="font-mono text-sm font-bold text-allura-darkBrown break-all">{reference}</p>
             </div>
             <span
-              className={`text-xs font-semibold px-2.5 py-1 rounded uppercase ${
-                paymentState === 'paid' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
-              }`}
+              className={`text-xs font-semibold px-2.5 py-1 rounded uppercase ${paymentState === 'paid' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                }`}
             >
               {paymentState === 'paid' ? 'Paid' : paymentState === 'cod' ? 'Pay on delivery' : 'Awaiting payment'}
             </span>
@@ -456,8 +438,8 @@ export const CheckoutPage: React.FC = () => {
               {paymentState === 'paid'
                 ? "Payment received. We'll confirm and dispatch your order shortly."
                 : paymentState === 'cod'
-                ? 'Please keep the amount ready. You can pay in cash or UPI when your order arrives.'
-                : 'Your items are reserved for a limited time. Complete the payment to confirm your order.'}
+                  ? 'Please keep the amount ready. You can pay in cash or UPI when your order arrives.'
+                  : 'Your items are reserved for a limited time. Complete the payment to confirm your order.'}
             </span>
           </div>
         </div>
@@ -558,9 +540,8 @@ export const CheckoutPage: React.FC = () => {
                   return (
                     <label
                       key={addr.id}
-                      className={`flex items-start gap-3 p-4 rounded-xl border cursor-pointer transition-all ${
-                        active ? 'border-allura-gold bg-allura-bgSecondary/40 ring-1 ring-allura-gold' : 'border-allura-border bg-allura-bg'
-                      }`}
+                      className={`flex items-start gap-3 p-4 rounded-xl border cursor-pointer transition-all ${active ? 'border-allura-gold bg-allura-bgSecondary/40 ring-1 ring-allura-gold' : 'border-allura-border bg-allura-bg'
+                        }`}
                     >
                       <input
                         type="radio"
@@ -620,9 +601,8 @@ export const CheckoutPage: React.FC = () => {
                       key={l}
                       type="button"
                       onClick={() => setNewAddress({ ...newAddress, label: l })}
-                      className={`px-3 py-1.5 rounded-full border text-[11px] font-semibold ${
-                        newAddress.label === l ? 'border-allura-goldDark bg-allura-gold/15 text-allura-goldDark' : 'border-allura-border text-allura-muted'
-                      }`}
+                      className={`px-3 py-1.5 rounded-full border text-[11px] font-semibold ${newAddress.label === l ? 'border-allura-goldDark bg-allura-gold/15 text-allura-goldDark' : 'border-allura-border text-allura-muted'
+                        }`}
                     >
                       {l}
                     </button>
@@ -728,11 +708,10 @@ export const CheckoutPage: React.FC = () => {
               ] as const).map(([value, Icon, title, subtitle]) => (
                 <label
                   key={value}
-                  className={`flex items-center justify-between p-4 rounded-xl border cursor-pointer transition-all ${
-                    paymentMethod === value
-                      ? 'border-allura-gold bg-allura-bgSecondary/40 ring-1 ring-allura-gold'
-                      : 'border-allura-border bg-allura-bg'
-                  }`}
+                  className={`flex items-center justify-between p-4 rounded-xl border cursor-pointer transition-all ${paymentMethod === value
+                    ? 'border-allura-gold bg-allura-bgSecondary/40 ring-1 ring-allura-gold'
+                    : 'border-allura-border bg-allura-bg'
+                    }`}
                 >
                   <div className="flex items-center gap-3">
                     <input
@@ -859,17 +838,20 @@ export const CheckoutPage: React.FC = () => {
                 <span>-{formatPrice(display.couponDiscount)}</span>
               </div>
             )}
-            <div className="flex justify-between">
+            <div className="flex justify-between items-center">
               <span>Shipping</span>
               <span className="font-semibold text-allura-text">
-                {display.shipping === 0 ? <strong className="text-emerald-700 uppercase">FREE</strong> : formatPrice(display.shipping)}
+                {isShippingLoading
+                  ? <Loader2 size={14} className="animate-spin text-allura-muted" aria-label="Calculating shipping" />
+                  : resolvedShipping === undefined
+                    ? <span className="text-allura-muted">—</span>
+                    : resolvedShipping === 0
+                      ? <strong className="text-emerald-700 uppercase">FREE</strong>
+                      : formatPrice(resolvedShipping)}
               </span>
             </div>
             <div className="flex justify-between items-center text-base font-serif font-semibold text-allura-text pt-2 border-t border-allura-border">
-              <span className="flex items-center gap-2">
-                {isEstimate ? 'Estimated Total' : 'Total Payable'}
-                {isPreviewing && <Loader2 size={13} className="animate-spin text-allura-muted" />}
-              </span>
+              <span>{isEstimate ? 'Estimated Total' : 'Total Payable'}</span>
               <span className="text-xl text-allura-goldDark">{formatPrice(display.total)}</span>
             </div>
             {isEstimate && !previewError && (
@@ -878,6 +860,9 @@ export const CheckoutPage: React.FC = () => {
               </p>
             )}
           </div>
+
+          {/* Coupon Code */}
+          <CouponInput />
 
           {(previewError || placeError || pricingError || selectionError) && (
             <div className="p-3 bg-rose-50 border border-rose-200 rounded-sm text-xs font-sans text-rose-800 space-y-1">
@@ -889,7 +874,7 @@ export const CheckoutPage: React.FC = () => {
 
           <button
             type="submit"
-            disabled={busy || isPreviewing || (!!previewError && !isAddingAddress) || !!pricingError || !!selectionError}
+            disabled={busy || isApplyingCoupon || (!!previewError && !isAddingAddress) || !!pricingError || !!selectionError}
             className="w-full bg-allura-goldDark hover:bg-allura-darkBrown text-allura-card text-xs font-sans font-bold tracking-[0.25em] uppercase py-4 px-6 rounded-sm transition-all duration-300 flex items-center justify-center gap-2 shadow-luxury disabled:opacity-60"
           >
             {busy ? <Loader2 size={14} className="animate-spin" /> : <Lock size={14} />}
@@ -897,10 +882,10 @@ export const CheckoutPage: React.FC = () => {
               {isSavingAddress
                 ? 'SAVING ADDRESS…'
                 : isPlacing
-                ? 'PLACING ORDER…'
-                : paymentMethod === 'cod'
-                ? `PLACE ORDER · ${formatPrice(display.total)}`
-                : `PLACE ORDER & PAY · ${formatPrice(display.total)}`}
+                  ? 'PLACING ORDER…'
+                  : paymentMethod === 'cod'
+                    ? `PLACE ORDER · ${formatPrice(display.total)}`
+                    : `PLACE ORDER & PAY · ${formatPrice(display.total)}`}
             </span>
           </button>
         </div>

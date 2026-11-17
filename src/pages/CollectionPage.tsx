@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { collectionsData } from '../data/collections';
 import { useShop } from '../context/ShopContext';
@@ -17,8 +17,9 @@ import {
 } from 'lucide-react';
 import { 
   getStoreCollections, 
-  searchProducts, 
-  type StoreCollection, 
+  searchProducts,
+  isRequestCanceled,
+  type StoreCollection,
   type ProductSearchPagination 
 } from '../service/store';
 import type { Product } from '../types';
@@ -52,9 +53,15 @@ export const CollectionPage: React.FC = () => {
   });
   const [isLoading, setIsLoading] = useState(false);
 
+  // True once we know which collection (if any) the slug maps to; products are only fetched after
+  // this, so we don't fire an unfiltered request first and a collection request second.
+  const [collectionResolved, setCollectionResolved] = useState(false);
+
   // 1. Fetch store collections to resolve current collection
   useEffect(() => {
     let active = true;
+    setCollectionResolved(false);
+    setActiveCollection(null);
     const fetchCols = async () => {
       try {
         const cols = await getStoreCollections();
@@ -65,6 +72,8 @@ export const CollectionPage: React.FC = () => {
         }
       } catch (err) {
         console.warn('Failed to fetch store collections in CollectionPage:', err);
+      } finally {
+        if (active) setCollectionResolved(true);
       }
     };
     fetchCols();
@@ -100,9 +109,14 @@ export const CollectionPage: React.FC = () => {
     const timer = setTimeout(() => {
       setDebouncedQuery(searchQuery.trim());
       setCurrentPage(1);
-    }, 300);
+    }, 400);
     return () => clearTimeout(timer);
   }, [searchQuery]);
+
+  // Local catalogue is only an offline fallback on request failure; kept in a ref so the
+  // catalogue finishing loading doesn't trigger another /products/search request.
+  const localFallbackRef = useRef(localFallbackProducts);
+  localFallbackRef.current = localFallbackProducts;
 
   // Reset page when filters change
   useEffect(() => {
@@ -111,7 +125,8 @@ export const CollectionPage: React.FC = () => {
 
   // 2. Fetch products using GET /products/search with search, filter, sort & pagination
   useEffect(() => {
-    let active = true;
+    if (!collectionResolved) return;
+    const controller = new AbortController();
     const loadProducts = async () => {
       setIsLoading(true);
 
@@ -128,37 +143,31 @@ export const CollectionPage: React.FC = () => {
 
       try {
         // Query /products/search with collectionId, query, sort, price, page, limit
-        let res = await searchProducts({
-          collectionId: activeCollection?.id,
-          q: debouncedQuery || undefined,
-          sort: sortBy,
-          minPrice,
-          maxPrice,
-          page: currentPage,
-          limit: PAGE_LIMIT,
-        });
-
-        // If collection has 0 tagged products in backend DB, fall back to global /products/search
-        if ((!res.products || res.products.length === 0) && !debouncedQuery && priceFilter === 'all') {
-          const fallbackRes = await searchProducts({
+        // An empty collection now shows the empty state instead of silently showing all store products
+        const res = await searchProducts(
+          {
+            collectionId: activeCollection?.id,
+            q: debouncedQuery || undefined,
             sort: sortBy,
+            minPrice,
+            maxPrice,
             page: currentPage,
             limit: PAGE_LIMIT,
-          });
-          if (fallbackRes.products && fallbackRes.products.length > 0) {
-            res = fallbackRes;
-          }
-        }
+          },
+          undefined,
+          controller.signal
+        );
 
-        if (active) {
+        if (!controller.signal.aborted) {
           setCollectionProducts(res.products || []);
           setPagination(res.pagination);
         }
       } catch (err) {
+        if (controller.signal.aborted || isRequestCanceled(err)) return;
         console.warn('Failed to load products from /products/search in CollectionPage:', err);
-        // Fallback to local products
-        if (active) {
-          const local = localFallbackProducts.filter(p => {
+        // Fallback to local products (only when the request itself failed)
+        if (!controller.signal.aborted) {
+          const local = localFallbackRef.current.filter(p => {
             if (debouncedQuery && !p.name.toLowerCase().includes(debouncedQuery.toLowerCase())) return false;
             return true;
           });
@@ -173,13 +182,13 @@ export const CollectionPage: React.FC = () => {
           });
         }
       } finally {
-        if (active) setIsLoading(false);
+        if (!controller.signal.aborted) setIsLoading(false);
       }
     };
 
     loadProducts();
-    return () => { active = false; };
-  }, [activeCollection, debouncedQuery, sortBy, priceFilter, currentPage, localFallbackProducts, slug]);
+    return () => controller.abort();
+  }, [collectionResolved, activeCollection, debouncedQuery, sortBy, priceFilter, currentPage]);
 
   // Check for live collection banner configured in Admin Studio
   const liveCollectionBanner = (banners || []).find(

@@ -30,6 +30,13 @@ export interface VariantRow {
   status?: string;
 }
 
+export const normalizeVariantImages = (images: VariantRow['images']): VariantRow['images'] => {
+  if (images.length === 0) return [];
+  const primaryIndex = images.findIndex(image => image.isPrimary);
+  const selectedPrimaryIndex = primaryIndex === -1 ? 0 : primaryIndex;
+  return images.map((image, index) => ({ ...image, isPrimary: index === selectedPrimaryIndex }));
+};
+
 interface ProductVariantsEditorProps {
   variants: VariantRow[];
   onChange: (variants: VariantRow[]) => void;
@@ -349,6 +356,7 @@ export const ProductVariantsEditor: React.FC<ProductVariantsEditorProps> = ({
   const updateRow = (index: number, patch: Partial<VariantRow>) => {
     const next = [...variants];
     const row = { ...next[index], ...patch };
+    if (patch.images) row.images = normalizeVariantImages(patch.images);
     // Keep an auto-generated SKU in sync when colour / size change
     const prev = next[index];
     if (('color' in patch || 'size' in patch) && (!prev.sku || prev.sku === buildVariantSku(productSku, prev.color, prev.size))) {
@@ -391,7 +399,7 @@ export const ProductVariantsEditor: React.FC<ProductVariantsEditorProps> = ({
     const next = variants.map(v => {
       const vColor = (v.color || '').trim().toLowerCase();
       if (vColor === normalized) {
-        return { ...v, images: [...images] };
+        return { ...v, images: normalizeVariantImages(images) };
       }
       return v;
     });
@@ -418,7 +426,7 @@ export const ProductVariantsEditor: React.FC<ProductVariantsEditorProps> = ({
     if (!productImages.length) return;
     const next = variants.map(v => {
       if (!v.images || v.images.length === 0) {
-        return { ...v, images: [productImages[0]] };
+        return { ...v, images: normalizeVariantImages([productImages[0]]) };
       }
       return v;
     });

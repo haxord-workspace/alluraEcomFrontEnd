@@ -9,17 +9,45 @@ import {
   ChevronRight,
   AlertCircle,
   Clock,
-  CheckCircle2
+  CheckCircle2,
+  Bell,
+  BellOff,
 } from 'lucide-react';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { getAdminOrders, toBackendStatus, orderErrorMessage } from '../../service/orders';
 import { getDashboardOrders, type OrdersSummaryResponse } from '../../service/adminDashboard';
 import type { Order, OrderStatus } from '../../types';
 import { useAdminOrderCatalog } from '../../hooks/useAdminOrderCatalog';
+import { usePermissions } from '../../hooks/usePermissions';
+import { OrderQuickStatusMenu } from '../../components/admin/OrderQuickStatusMenu';
+import { OrderStatusBadgeMenu, ORDER_STATUS_PILL_SIZE } from '../../components/admin/OrderStatusBadgeMenu';
+import { ENABLE_ORDER_ROW_ACTIONS, ENABLE_STATUS_BADGE_MENU } from '../../config/orderStatusFlags';
+import { PaymentReminderModal } from '../../components/admin/PaymentReminderModal';
+
+const CLOSED_ORDER_STATUSES: OrderStatus[] = ['Cancelled', 'Returned', 'Refunded'];
+/** Pending-payment orders (Phase B) show "Remind" instead of "Manage". */
+const needsPaymentReminder = (order: Order) =>
+  order.paymentStatus === 'Pending' && !CLOSED_ORDER_STATUSES.includes(order.orderStatus);
 
 const PAGE_SIZE = 20;
 
+// Frontend-only cooldown: the backend doesn't enforce a reminder rate limit
+// (no 429 documented for /admin/notifications/send), so this is purely a UX
+// guard against accidental repeat clicks, not a server-side rule.
+const REMINDER_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+const reminderStorageKey = (orderId: string) => `allura_payment_reminder_${orderId}`;
+const getStoredReminderAt = (orderId: string): string | null => {
+  try {
+    return localStorage.getItem(reminderStorageKey(orderId));
+  } catch {
+    return null;
+  }
+};
+
 export const AdminOrdersPage: React.FC = () => {
+  const { can } = usePermissions();
+  const canViewOrders = can('order_processing', 'view');
+  const canEditOrders = can('order_processing', 'edit');
   const [rawOrders, setOrders] = useState<Order[]>([]);
   const withCatalog = useAdminOrderCatalog();
   const orders = React.useMemo(() => rawOrders.map(withCatalog), [rawOrders, withCatalog]);
@@ -32,6 +60,44 @@ export const AdminOrdersPage: React.FC = () => {
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('All');
+
+  // Phase B: Remind button + modal. Keyed by order id; the backend doesn't
+  // return a lastReminderAt on the order object, so the 24h cooldown below is
+  // tracked client-side only, in localStorage (survives refresh, per-browser).
+  const [reminderOrder, setReminderOrder] = useState<Order | null>(null);
+  const [remindersSent, setRemindersSent] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    setRemindersSent(prev => {
+      let changed = false;
+      const next = { ...prev };
+      orders.forEach(o => {
+        if (next[o.id]) return;
+        const stored = getStoredReminderAt(o.id);
+        if (stored) {
+          next[o.id] = stored;
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [orders]);
+
+  const handleReminderSent = (orderId: string, lastReminderAt: string) => {
+    try {
+      localStorage.setItem(reminderStorageKey(orderId), lastReminderAt);
+    } catch {
+      // localStorage unavailable (private mode, etc.) — cooldown just won't persist.
+    }
+    setRemindersSent(prev => ({ ...prev, [orderId]: lastReminderAt }));
+    setReminderOrder(null);
+  };
+
+  const isReminderOnCooldown = (orderId: string): boolean => {
+    const sentAt = remindersSent[orderId];
+    if (!sentAt) return false;
+    return Date.now() - new Date(sentAt).getTime() < REMINDER_COOLDOWN_MS;
+  };
 
   const statuses: ('All' | OrderStatus)[] = [
     'All',
@@ -107,13 +173,15 @@ export const AdminOrdersPage: React.FC = () => {
           >
             <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
           </button>
-          <Link
-            to="/admin/shipping"
-            className="px-4 py-2 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-xl text-xs font-sans font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 shadow-sm"
-          >
-            <Truck size={14} />
-            <span>Shipping Dispatch Hub</span>
-          </Link>
+          {canViewOrders && (
+            <Link
+              to="/admin/shipping"
+              className="px-4 py-2 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-xl text-xs font-sans font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 shadow-sm"
+            >
+              <Truck size={14} />
+              <span>Shipping Dispatch Hub</span>
+            </Link>
+          )}
         </div>
       </div>
 
@@ -225,7 +293,7 @@ export const AdminOrdersPage: React.FC = () => {
                 <th className="p-4">Items / SKU</th>
                 <th className="p-4">Amount</th>
                 <th className="p-4">Payment</th>
-                <th className="p-4">Order Status</th>
+                <th className="p-4 w-[150px]">Order Status</th>
                 <th className="p-4">Shipment</th>
                 <th className="p-4 text-right">Actions</th>
               </tr>
@@ -245,7 +313,13 @@ export const AdminOrdersPage: React.FC = () => {
                 orders.map(order => (
                   <tr key={order.id} className="hover:bg-stone-50/70 transition-colors">
                     <td className="p-4">
-                      <p className="font-serif text-sm font-bold text-stone-900">{order.orderNumber}</p>
+                      {needsPaymentReminder(order) ? (
+                        <Link to={`/admin/orders/${order.id}`} className="font-serif text-sm font-bold text-stone-900 hover:text-[#561C08] hover:underline">
+                          {order.orderNumber}
+                        </Link>
+                      ) : (
+                        <p className="font-serif text-sm font-bold text-stone-900">{order.orderNumber}</p>
+                      )}
                       <p className="text-[10px] text-stone-400">{order.date}</p>
                     </td>
                     <td className="p-4">
@@ -276,21 +350,63 @@ export const AdminOrdersPage: React.FC = () => {
                         {order.paymentStatus}
                       </p>
                     </td>
-                    <td className="p-4">
-                      <StatusBadge status={order.orderStatus} size="sm" />
+                    <td className="p-4 w-[150px]">
+                      {canEditOrders && ENABLE_ORDER_ROW_ACTIONS && ENABLE_STATUS_BADGE_MENU ? (
+                        <OrderStatusBadgeMenu order={order} onChanged={fetchOrders} />
+                      ) : (
+                        <StatusBadge status={order.orderStatus} size="sm" fixedSize={ORDER_STATUS_PILL_SIZE} />
+                      )}
                     </td>
                     <td className="p-4">
                       <p className="text-stone-700 font-medium">{order.tracking?.courier || '—'}</p>
                       <p className="font-mono text-[10px] text-stone-400">{order.tracking?.awb || 'Not shipped'}</p>
                     </td>
                     <td className="p-4 text-right">
-                      <Link
-                        to={`/admin/orders/${order.id}`}
-                        className="px-3 py-1.5 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-lg font-bold text-xs uppercase tracking-wider inline-flex items-center gap-1 shadow-xs"
-                      >
-                        <Eye size={12} />
-                        <span>Manage</span>
-                      </Link>
+                      <div className="flex items-center justify-end gap-1.5">
+                        {needsPaymentReminder(order) ? (
+                          canEditOrders ? (
+                            isReminderOnCooldown(order.id) ? (
+                              <button
+                                type="button"
+                                disabled
+                                title={`Reminder sent at ${new Date(remindersSent[order.id]).toLocaleString('en-IN')}`}
+                                className="px-3 py-1.5 bg-stone-200 text-stone-500 rounded-lg font-bold text-xs uppercase tracking-wider inline-flex items-center gap-1 cursor-not-allowed"
+                              >
+                                <BellOff size={12} />
+                                <span>Reminder sent</span>
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setReminderOrder(order)}
+                                className="px-3 py-1.5 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-lg font-bold text-xs uppercase tracking-wider inline-flex items-center gap-1 shadow-xs"
+                              >
+                                <Bell size={12} />
+                                <span>Remind</span>
+                              </button>
+                            )
+                          ) : canViewOrders ? (
+                            <Link
+                              to={`/admin/orders/${order.id}`}
+                              className="px-3 py-1.5 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-lg font-bold text-xs uppercase tracking-wider inline-flex items-center gap-1 shadow-xs"
+                            >
+                              <Eye size={12} />
+                              <span>View</span>
+                            </Link>
+                          ) : null
+                        ) : canViewOrders ? (
+                          <Link
+                            to={`/admin/orders/${order.id}`}
+                            className="px-3 py-1.5 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-lg font-bold text-xs uppercase tracking-wider inline-flex items-center gap-1 shadow-xs"
+                          >
+                            <Eye size={12} />
+                            <span>Manage</span>
+                          </Link>
+                        ) : null}
+                        {canEditOrders && ENABLE_ORDER_ROW_ACTIONS && !ENABLE_STATUS_BADGE_MENU && (
+                          <OrderQuickStatusMenu order={order} onChanged={fetchOrders} />
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -325,6 +441,13 @@ export const AdminOrdersPage: React.FC = () => {
           </div>
         )}
       </div>
+
+      <PaymentReminderModal
+        order={reminderOrder}
+        onClose={() => setReminderOrder(null)}
+        onSent={handleReminderSent}
+        onError={fetchOrders}
+      />
     </div>
   );
 };

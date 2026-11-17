@@ -22,20 +22,23 @@ import {
   Banknote,
   ExternalLink,
 } from 'lucide-react';
-import { useAdmin } from '../../context/AdminContext';
+import { usePermissions } from '../../hooks/usePermissions';
 import { useShop } from '../../context/ShopContext';
 import { useConfirm } from '../../context/ConfirmContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
+import { InvoiceModal } from '../../components/common/InvoiceModal';
 import {
   getAdminOrder,
   updateAdminOrderStatus,
   cancelAdminOrder,
+  downloadAdminOrderInvoice,
   toBackendStatus,
   orderErrorMessage,
 } from '../../service/orders';
 import type { Order, OrderStatus } from '../../types';
 import { useAdminOrderCatalog } from '../../hooks/useAdminOrderCatalog';
 import { AdminErrorBanner } from '../../components/admin/AdminErrorBanner';
+import { ENABLE_MANUAL_ORDER_STATUS } from '../../config/orderStatusFlags';
 
 // Backend order statuses: PENDING | CONFIRMED | PROCESSING | SHIPPED | DELIVERED | CANCELLED | RETURNED.
 // Steps can't be skipped (INVALID_ORDER_TRANSITION); cancelling uses its own endpoint.
@@ -91,11 +94,11 @@ const inr = (n: number) => `₹ ${n.toLocaleString('en-IN')}`;
 
 export const AdminOrderDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const { hasPermission } = useAdmin();
+  const { can } = usePermissions();
   const { showToast } = useShop();
   const confirm = useConfirm();
-  const canEdit = hasPermission('orders', 'edit');
-  const canCancel = hasPermission('orders', 'cancel');
+  const canEdit = can('order_processing', 'edit');
+  const canCancel = can('order_processing', 'cancel');
 
   const [rawOrder, setOrder] = useState<Order | null>(null);
   const withCatalog = useAdminOrderCatalog();
@@ -113,6 +116,7 @@ export const AdminOrderDetailPage: React.FC = () => {
 
   // Cancel dialog
   const [isCancelOpen, setIsCancelOpen] = useState(false);
+  const [isInvoiceOpen, setIsInvoiceOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState(CANCEL_REASONS[0]);
   const [cancelNote, setCancelNote] = useState('');
   const [cancelError, setCancelError] = useState<string | null>(null);
@@ -141,8 +145,28 @@ export const AdminOrderDetailPage: React.FC = () => {
     else await fetchOrder();
   };
 
+  // Soft concurrency check (Part A3): re-fetches the order and bails out if someone else
+  // already moved it, so two admins can't double-apply a transition. Gated by the flag.
+  const ensureStillCurrent = async (): Promise<boolean> => {
+    if (!ENABLE_MANUAL_ORDER_STATUS || !order) return true;
+    try {
+      const latest = await getAdminOrder(order.id);
+      const latestStatus = (latest.rawStatus || toBackendStatus(latest.orderStatus)).toUpperCase();
+      const shownStatus = (order.rawStatus || toBackendStatus(order.orderStatus)).toUpperCase();
+      if (latestStatus !== shownStatus) {
+        setOrder(latest);
+        showToast('This order was updated by someone else. Latest status loaded.', 'info');
+        return false;
+      }
+      return true;
+    } catch {
+      return true;
+    }
+  };
+
   const changeStatus = async (to: OrderStatus, extra: { trackingNumber?: string; shippingCarrier?: string } = {}) => {
     if (!order) return false;
+    if (!(await ensureStillCurrent())) return false;
     setIsUpdating(true);
     setActionError(null);
     try {
@@ -193,6 +217,7 @@ export const AdminOrderDetailPage: React.FC = () => {
 
   const handleMarkReturned = async () => {
     if (!order) return;
+    if (!(await ensureStillCurrent())) return;
     const ok = await confirm({
       title: 'Mark as returned',
       message: `Record that ${order.orderNumber} has been returned by the customer?`,
@@ -203,6 +228,10 @@ export const AdminOrderDetailPage: React.FC = () => {
 
   const handleCancel = async () => {
     if (!order) return;
+    if (!(await ensureStillCurrent())) {
+      setIsCancelOpen(false);
+      return;
+    }
     const reason = cancelReason === 'Other' ? cancelNote.trim() || 'Other' : cancelReason;
     setIsUpdating(true);
     setCancelError(null);
@@ -267,11 +296,12 @@ export const AdminOrderDetailPage: React.FC = () => {
   const paymentBadge = isPaid
     ? { label: 'Paid', className: 'bg-emerald-50 text-emerald-800 border-emerald-200' }
     : isCod
-    ? { label: 'Cash on delivery', className: 'bg-stone-100 text-stone-700 border-stone-200' }
-    : { label: `Payment ${order.paymentStatus.toLowerCase()}`, className: 'bg-amber-50 text-amber-800 border-amber-200' };
+      ? { label: 'Cash on delivery', className: 'bg-stone-100 text-stone-700 border-stone-200' }
+      : { label: `Payment ${order.paymentStatus.toLowerCase()}`, className: 'bg-amber-50 text-amber-800 border-amber-200' };
 
   return (
-    <div className="space-y-6 pb-16">
+    <>
+    <div className="space-y-6 pb-16 print:hidden">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-stone-200 pb-6">
         <div>
@@ -305,13 +335,13 @@ export const AdminOrderDetailPage: React.FC = () => {
             <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
           </button>
           <button
-            onClick={() => window.print()}
+            onClick={() => setIsInvoiceOpen(true)}
             className="px-3.5 py-2 border border-stone-200 bg-white hover:bg-stone-50 text-stone-700 rounded-xl text-xs font-sans font-semibold flex items-center gap-1.5"
           >
             <Printer size={14} />
             <span>Packing Slip</span>
           </button>
-          {canCancel && !isClosed && (
+          {canCancel && !isClosed && !(ENABLE_MANUAL_ORDER_STATUS && status === 'Shipped') && (
             <button
               onClick={() => {
                 setCancelError(null);
@@ -361,13 +391,12 @@ export const AdminOrderDetailPage: React.FC = () => {
                     />
                   )}
                   <span
-                    className={`relative z-10 w-10 h-10 rounded-full flex items-center justify-center border-2 transition-colors ${
-                      done
-                        ? 'bg-emerald-600 border-emerald-600 text-white'
-                        : current
+                    className={`relative z-10 w-10 h-10 rounded-full flex items-center justify-center border-2 transition-colors ${done
+                      ? 'bg-emerald-600 border-emerald-600 text-white'
+                      : current
                         ? 'bg-white border-stone-900 text-stone-900 ring-4 ring-stone-100'
                         : 'bg-white border-stone-200 text-stone-300'
-                    }`}
+                      }`}
                   >
                     {done ? <Check size={18} /> : <Icon size={17} />}
                   </span>
@@ -454,6 +483,16 @@ export const AdminOrderDetailPage: React.FC = () => {
                       {isUpdating ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
                       {next.label}
                     </button>
+                    {ENABLE_MANUAL_ORDER_STATUS && status === 'Shipped' && (
+                      <button
+                        onClick={handleMarkReturned}
+                        disabled={isUpdating}
+                        className="px-5 py-2.5 border border-white/30 text-white hover:bg-white/10 rounded-xl font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 disabled:opacity-50"
+                      >
+                        <RotateCcw size={14} />
+                        Mark as Returned
+                      </button>
+                    )}
                   </div>
                   {next.to === 'Shipped' && !shipFormValid && (
                     <p className="text-[11px] text-amber-200">
@@ -718,5 +757,12 @@ export const AdminOrderDetailPage: React.FC = () => {
         </div>
       )}
     </div>
+
+    <InvoiceModal
+      order={isInvoiceOpen ? order : null}
+      onClose={() => setIsInvoiceOpen(false)}
+      onDownload={downloadAdminOrderInvoice}
+    />
+    </>
   );
 };

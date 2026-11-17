@@ -1,4 +1,5 @@
 import adminApi from './adminApi';
+import type { NotificationAnalytics } from '../types/notification';
 
 // ─── Query Parameters Interfaces ──────────────────────────────────────────────
 
@@ -248,16 +249,8 @@ export interface SeoAnalyticsResponse {
   };
 }
 
-export interface NotificationAnalyticsResponse {
-  queueStatus: string;
-  counts: {
-    waiting: number;
-    active: number;
-    failed: number;
-    completed: number;
-  };
-  channelsSupported: string[];
-}
+/** @deprecated use `NotificationAnalytics` from `types/notification` instead */
+export type NotificationAnalyticsResponse = NotificationAnalytics;
 
 export interface AiAnalyticsResponse {
   provider: string;
@@ -404,10 +397,10 @@ export const getDashboardNotifications = async (): Promise<NotificationAnalytics
 /**
  * 10. GET /admin/dashboard/ai - DeepSeek AI Chatbot Dashboard
  */
-export const getDashboardAi = async (): Promise<AiAnalyticsResponse> => {
-  const res = await adminApi.get('/admin/dashboard/ai');
-  return res.data?.data;
-};
+// export const getDashboardAi = async (): Promise<AiAnalyticsResponse> => {
+//   const res = await adminApi.get('/admin/dashboard/ai');
+//   return res.data?.data;
+// };
 
 /**
  * 11. GET /admin/dashboard/analytics - Web & Meta Tracking Analytics

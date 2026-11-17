@@ -7,6 +7,7 @@ import {
   Plus
 } from 'lucide-react';
 import { useAdmin } from '../../context/AdminContext';
+import { usePermissions } from '../../hooks/usePermissions';
 import { mockAnalyticsData } from '../../data/mockAnalytics';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { getLowStockInventory } from '../../service/adminInventory';
@@ -25,6 +26,7 @@ import type { Order } from '../../types';
 
 export const AdminDashboardPage: React.FC = () => {
   const { currentAdmin, products } = useAdmin();
+  const { can } = usePermissions();
   const [timeRange, setTimeRange] = useState<'7D' | '30D' | '90D' | '1Y'>('30D');
 
   const { overview: mockOverview, salesChart: mockSalesChart, funnel } = mockAnalyticsData;
@@ -148,13 +150,15 @@ export const AdminDashboardPage: React.FC = () => {
             ))}
           </div>
 
-          <Link
-            to="/admin/products/new"
-            className="px-4 py-2 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-xl text-xs font-sans font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 shadow-sm"
-          >
-            <Plus size={14} />
-            <span className="hidden sm:inline">Add Product</span>
-          </Link>
+          {can('products_catalog', 'create') && (
+            <Link
+              to="/admin/products/new"
+              className="px-4 py-2 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-xl text-xs font-sans font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 shadow-sm"
+            >
+              <Plus size={14} />
+              <span className="hidden sm:inline">Add Product</span>
+            </Link>
+          )}
         </div>
       </div>
 
@@ -379,12 +383,16 @@ export const AdminDashboardPage: React.FC = () => {
                       <StatusBadge status={order.orderStatus} size="sm" />
                     </td>
                     <td className="py-3 text-right">
-                      <Link
-                        to={`/admin/orders/${order.id}`}
-                        className="text-xs font-bold text-allura-goldDark hover:underline"
-                      >
-                        Manage
-                      </Link>
+                      {can('order_processing', 'view') ? (
+                        <Link
+                          to={`/admin/orders/${order.id}`}
+                          className="text-xs font-bold text-allura-goldDark hover:underline"
+                        >
+                          Manage
+                        </Link>
+                      ) : (
+                        <span className="text-stone-300 text-xs">—</span>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -403,9 +411,11 @@ export const AdminDashboardPage: React.FC = () => {
                 <AlertTriangle size={18} className="text-rose-600" />
                 <span>Low Stock Atelier Items</span>
               </h3>
-              <Link to="/admin/inventory" className="text-xs text-stone-500 hover:underline">
-                Adjust
-              </Link>
+              {can('inventory_stock', 'edit') && (
+                <Link to="/admin/inventory" className="text-xs text-stone-500 hover:underline">
+                  Adjust
+                </Link>
+              )}
             </div>
 
             <div className="space-y-3">
@@ -437,21 +447,25 @@ export const AdminDashboardPage: React.FC = () => {
           <div className="bg-white border border-stone-200 rounded-2xl p-6 shadow-xs space-y-3">
             <div className="flex justify-between items-center">
               <h3 className="font-serif text-xl font-normal text-stone-900">Abandoned Carts</h3>
-              <Link to="/admin/marketing/abandoned-carts" className="text-xs text-stone-500 hover:underline">
-                View ({abandonedTotal})
-              </Link>
+              {can('coupons_banners', 'view') && (
+                <Link to="/admin/marketing/abandoned-carts" className="text-xs text-stone-500 hover:underline">
+                  View ({abandonedTotal})
+                </Link>
+              )}
             </div>
             <p className="text-xs text-stone-500 font-sans">
               {abandonedTotal === 0
                 ? 'No abandoned bags right now.'
                 : `₹ ${Math.round(abandonedValue).toLocaleString('en-IN')} in bags customers left behind, recoverable via WhatsApp & email reminders.`}
             </p>
-            <Link
-              to="/admin/marketing/abandoned-carts"
-              className="block text-center py-2 bg-stone-100 hover:bg-stone-200 text-stone-900 rounded-xl text-xs font-sans font-bold uppercase transition-colors"
-            >
-              Open Recovery Hub
-            </Link>
+            {can('coupons_banners', 'view') && (
+              <Link
+                to="/admin/marketing/abandoned-carts"
+                className="block text-center py-2 bg-stone-100 hover:bg-stone-200 text-stone-900 rounded-xl text-xs font-sans font-bold uppercase transition-colors"
+              >
+                Open Recovery Hub
+              </Link>
+            )}
           </div>
 
         </div>

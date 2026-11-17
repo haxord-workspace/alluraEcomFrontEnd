@@ -17,7 +17,10 @@ import { useShop } from '../context/ShopContext';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { RecentlyViewed } from '../components/customer/RecentlyViewed';
 import { InvoiceModal } from '../components/common/InvoiceModal';
+import { downloadOrderInvoice } from '../service/orders';
 import { OrderCardSkeleton } from '../components/ui/OrderCardSkeleton';
+import { MyReviewsAccountTab } from '../components/reviews/MyReviewsAccountTab';
+import { OrderCardReviewSwap } from '../components/reviews/OrderCardReviewSwap';
 
 export const AccountPage: React.FC = () => {
   const {
@@ -82,7 +85,8 @@ export const AccountPage: React.FC = () => {
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-16 space-y-10">
+    <>
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-16 space-y-10 print:hidden">
       {/* Account Profile Header */}
       <div className="bg-allura-card p-6 sm:p-8 rounded-2xl border border-allura-border shadow-subtle flex flex-col sm:flex-row items-center justify-between gap-6">
         <div className="flex items-center gap-4 text-center sm:text-left">
@@ -172,6 +176,7 @@ export const AccountPage: React.FC = () => {
             )}
           </button>
         ))}
+        <MyReviewsAccountTab />
       </div>
 
       {/* TAB 1: OVERVIEW */}
@@ -237,6 +242,7 @@ export const AccountPage: React.FC = () => {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
+                  <OrderCardReviewSwap order={recentOrder} iconSize={14} buttonClassName="px-4 py-2 bg-allura-gold/15 text-allura-goldDark border border-allura-gold/30 rounded-xl text-xs font-sans font-bold hover:bg-allura-gold/25 transition-colors flex items-center gap-1.5">
                   <Link
                     to={`/account/orders/${recentOrder.id}/tracking`}
                     className="px-4 py-2 bg-allura-gold/15 text-allura-goldDark border border-allura-gold/30 rounded-xl text-xs font-sans font-bold hover:bg-allura-gold/25 transition-colors flex items-center gap-1.5"
@@ -244,6 +250,7 @@ export const AccountPage: React.FC = () => {
                     <Truck size={14} />
                     <span>Track Shipment</span>
                   </Link>
+                  </OrderCardReviewSwap>
 
                   <button
                     onClick={() => setInvoiceOrder(recentOrder)}
@@ -318,12 +325,14 @@ export const AccountPage: React.FC = () => {
                     >
                       Details
                     </Link>
+                    <OrderCardReviewSwap order={order} buttonClassName="px-3 py-1.5 bg-allura-gold/15 text-allura-goldDark border border-allura-gold/30 text-xs font-sans font-bold rounded-lg hover:bg-allura-gold/25">
                     <Link
                       to={`/account/orders/${order.id}/tracking`}
                       className="px-3 py-1.5 bg-allura-gold/15 text-allura-goldDark border border-allura-gold/30 text-xs font-sans font-bold rounded-lg hover:bg-allura-gold/25"
                     >
                       Track
                     </Link>
+                    </OrderCardReviewSwap>
                   </div>
                 </div>
               </div>
@@ -540,7 +549,9 @@ export const AccountPage: React.FC = () => {
         </div>
       )}
 
-      <InvoiceModal order={invoiceOrder} onClose={() => setInvoiceOrder(null)} />
     </div>
+
+    <InvoiceModal order={invoiceOrder} onClose={() => setInvoiceOrder(null)} onDownload={downloadOrderInvoice} />
+    </>
   );
 };
