@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Eye, Flag, Gavel, RefreshCw } from 'lucide-react';
 import { useShop } from '../../context/ShopContext';
@@ -8,7 +8,8 @@ import { StarRatingDisplay } from '../../components/reviews/StarRating';
 import { ReportStatusBadge } from '../../components/admin/reviews/ReportStatusBadge';
 import { ReportDecisionModal } from '../../components/admin/reviews/ReportDecisionModal';
 import { useAdminReviewReports } from '../../hooks/useAdminReviewReports';
-import { useReviewEntityStore } from '../../hooks/useReviewEntityStore';
+import { nextReviewSeq, useReviewEntityStore } from '../../hooks/useReviewEntityStore';
+import { getAdminReview } from '../../service/adminReviews';
 import { useReviewModeration } from '../../hooks/useReviewModeration';
 import { useAdminReviewLookups } from '../../hooks/useAdminReviewLookups';
 import { ASSUMED_REPORT_DECISION_STATUS } from '../../service/reviewMappers';
@@ -50,6 +51,10 @@ const readFilters = (params: URLSearchParams): Filters => {
 
 const forbiddenMessage = "You don't have permission to manage reports.";
 
+/** State of a review the reports list referenced by id only */
+type ReviewLoadState = 'loading' | 'error';
+const NO_IDS: ReadonlySet<string> = new Set();
+
 const reasonLabel = (report: ReviewReport) =>
   report.reason ? REPORT_REASON_LABELS[report.reason] : report.reasonRaw ? report.reasonRaw.replace(/_/g, ' ').toLowerCase() : undefined;
 
@@ -64,19 +69,65 @@ const AdminReviewReportsPage: React.FC = () => {
   // Embedded reviews carry bare product / customer ids: fill names from existing admin services
   const lookups = useAdminReviewLookups();
   const { enrich, request } = lookups;
-  const rows = useMemo(
-    () => list.reports.map(report => (report.review ? { ...report, review: enrich(report.review) } : report)),
-    [list.reports, enrich]
-  );
-  useEffect(() => {
-    request(list.reports.map(report => report.review));
-  }, [list.reports, request]);
 
   // Reviews opened from a report use the same drawer + moderation as the Reviews page
   const reviewStore = useReviewEntityStore();
   const moderation = useReviewModeration({ store: reviewStore, lookups });
   const { openDrawer, refreshOpen } = moderation;
-  const { invalidate } = reviewStore;
+  const { invalidate, resolve, recordDetail } = reviewStore;
+
+  // The reports list only sends `reviewId`: load each review once (GET /admin/product-reviews/:id)
+  // into the shared review store, so the row, the drawer and later moderation share one copy.
+  const missingReviewIds = useMemo(
+    () => [
+      ...new Set(
+        list.reports
+          .filter(r => !r.review && r.reviewId && !resolve(r.reviewId))
+          .map(r => r.reviewId as string)
+      ),
+    ],
+    [list.reports, resolve]
+  );
+  const reviewRequests = useRef(new Set<string>());
+  // Failures belong to the report list they were loaded for, so a reload / refresh retries them
+  const [failedReviews, setFailedReviews] = useState<{ source: unknown; ids: Set<string> }>({ source: null, ids: new Set() });
+  const failedReviewIds = failedReviews.source === list.reports ? failedReviews.ids : NO_IDS;
+
+  useEffect(() => {
+    const source = list.reports;
+    missingReviewIds.forEach(id => {
+      if (reviewRequests.current.has(id) || failedReviewIds.has(id)) return;
+      reviewRequests.current.add(id);
+      const at = nextReviewSeq();
+      getAdminReview(id)
+        .then(review => {
+          recordDetail(review, at);
+          request([review]);
+        })
+        .catch(() =>
+          setFailedReviews(prev => ({ source, ids: new Set(prev.source === source ? prev.ids : []).add(id) }))
+        )
+        .finally(() => reviewRequests.current.delete(id));
+    });
+  }, [missingReviewIds, failedReviewIds, list.reports, recordDetail, request]);
+
+  const rows = useMemo(
+    () =>
+      list.reports.map(report => {
+        const review = report.review ?? (report.reviewId ? resolve(report.reviewId) : undefined);
+        return review ? { ...report, review: enrich(review) } : report;
+      }),
+    [list.reports, enrich, resolve]
+  );
+  useEffect(() => {
+    request(list.reports.map(report => report.review));
+  }, [list.reports, request]);
+
+  const reviewLoadState = useCallback(
+    (report: ReviewReport): ReviewLoadState | undefined =>
+      report.review || !report.reviewId ? undefined : failedReviewIds.has(report.reviewId) ? 'error' : 'loading',
+    [failedReviewIds]
+  );
 
   const [decidingId, setDecidingId] = useState<string | null>(null);
   const decidingReport = decidingId ? findReport(decidingId) : undefined;
@@ -188,9 +239,8 @@ const AdminReviewReportsPage: React.FC = () => {
                 type="button"
                 onClick={() => setStatus(status)}
                 aria-pressed={active}
-                className={`min-h-11 px-4 rounded-full text-xs font-sans font-semibold whitespace-nowrap transition-colors ${
-                  active ? 'bg-[#561C08] text-white shadow-xs' : 'bg-white text-stone-600 hover:text-stone-900 border border-stone-200'
-                }`}
+                className={`min-h-11 px-4 rounded-full text-xs font-sans font-semibold whitespace-nowrap transition-colors ${active ? 'bg-[#561C08] text-white shadow-xs' : 'bg-white text-stone-600 hover:text-stone-900 border border-stone-200'
+                  }`}
               >
                 {status ? REPORT_STATUS_LABELS[status] : 'All'}
               </button>
@@ -257,6 +307,7 @@ const AdminReviewReportsPage: React.FC = () => {
                       <ReportRow
                         key={report.id}
                         report={report}
+                        reviewLoad={reviewLoadState(report)}
                         showReporter={showReporter}
                         showDate={showDate}
                         onViewReview={onViewReview}
@@ -270,7 +321,13 @@ const AdminReviewReportsPage: React.FC = () => {
               {/* Mobile cards */}
               <ul className="md:hidden divide-y divide-stone-100">
                 {rows.map(report => (
-                  <ReportCard key={report.id} report={report} onViewReview={onViewReview} onDecide={onDecide} />
+                  <ReportCard
+                    key={report.id}
+                    report={report}
+                    reviewLoad={reviewLoadState(report)}
+                    onViewReview={onViewReview}
+                    onDecide={onDecide}
+                  />
                 ))}
               </ul>
             </>
@@ -321,13 +378,24 @@ const AdminReviewReportsPage: React.FC = () => {
 
 // ── Cells & rows ─────────────────────────────────────────────────────────────
 
-const ReviewCell: React.FC<{ report: ReviewReport }> = ({ report }) => {
+const ReviewCell: React.FC<{ report: ReviewReport; reviewLoad?: ReviewLoadState }> = ({ report, reviewLoad }) => {
   const review = report.review;
   if (!review) {
-    // Minimal row: the response did not embed the review
+    if (report.reviewId && reviewLoad === 'loading') {
+      // Fetching the review the report points to
+      return (
+        <div className="space-y-1.5 animate-pulse" role="status" aria-label="Loading review">
+          <div className="h-2.5 w-24 bg-stone-200/80 rounded" />
+          <div className="h-3 w-20 bg-stone-200/70 rounded" />
+          <div className="h-3 w-40 bg-stone-200/70 rounded" />
+        </div>
+      );
+    }
     return (
       <p className="text-stone-400 italic">
-        {report.reviewId ? `Review details not included (#${report.reviewId.slice(-6)})` : 'No review linked'}
+        {report.reviewId
+          ? 'Review could not be loaded (it may have been deleted).'
+          : 'No review linked'}
       </p>
     );
   }
@@ -372,6 +440,8 @@ const StatusCell: React.FC<{ report: ReviewReport }> = ({ report }) => (
 
 interface RowProps {
   report: ReviewReport;
+  /** Set while the referenced review is being fetched, or when that fetch failed */
+  reviewLoad?: ReviewLoadState;
   onViewReview: (report: ReviewReport) => void;
   onDecide: (report: ReviewReport) => void;
 }
@@ -405,10 +475,10 @@ const ActionButtons: React.FC<RowProps & { size: 'sm' | 'lg' }> = ({ report, onV
 };
 
 const ReportRow: React.FC<RowProps & { showReporter: boolean; showDate: boolean }> = memo(
-  ({ report, showReporter, showDate, onViewReview, onDecide }) => (
+  ({ report, reviewLoad, showReporter, showDate, onViewReview, onDecide }) => (
     <tr className="hover:bg-stone-50/70 transition-colors align-top">
       <td className="p-4">
-        <ReviewCell report={report} />
+        <ReviewCell report={report} reviewLoad={reviewLoad} />
       </td>
       <td className="p-4 max-w-[240px]">
         <ReasonCell report={report} />
@@ -434,7 +504,7 @@ const ReportRow: React.FC<RowProps & { showReporter: boolean; showDate: boolean 
 );
 ReportRow.displayName = 'ReportRow';
 
-const ReportCard: React.FC<RowProps> = memo(({ report, onViewReview, onDecide }) => (
+const ReportCard: React.FC<RowProps> = memo(({ report, reviewLoad, onViewReview, onDecide }) => (
   <li className="p-4 space-y-3 text-xs font-sans">
     <div className="flex items-start justify-between gap-3">
       <ReasonCell report={report} />
@@ -443,7 +513,7 @@ const ReportCard: React.FC<RowProps> = memo(({ report, onViewReview, onDecide })
       </div>
     </div>
     <div className="p-3 rounded-xl bg-stone-50 border border-stone-100">
-      <ReviewCell report={report} />
+      <ReviewCell report={report} reviewLoad={reviewLoad} />
     </div>
     {(report.reporter.name || report.createdAt) && (
       <p className="text-[11px] text-stone-500">

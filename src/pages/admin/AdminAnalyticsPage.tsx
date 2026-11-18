@@ -33,7 +33,7 @@ const PRODUCTS_SORT_OPTIONS: { value: ProductsSort; label: string }[] = [
 ];
 
 const PRODUCTS_FILTER_OPTIONS: { value: ProductsFilter; label: string }[] = [
-  { value: 'all', label: 'All categories' },
+  { value: 'all', label: 'All products' },
   { value: 'hasViews', label: 'Has views' },
   { value: 'noViews', label: 'No views' },
   { value: 'highConversion', label: 'High conversion (≥ 20%)' },
@@ -80,6 +80,125 @@ const matchesProductsFilter = (item: ProductAnalyticsItem, filter: ProductsFilte
 const formatRate = (rate: number, hasTrackingData: boolean): string =>
   hasTrackingData ? `${rate.toFixed(2).replace(/\.00$/, '')}%` : '—';
 
+const roundRate = (n: number) => Math.round(n * 100) / 100;
+
+interface CategoryGroup {
+  categoryId: string;
+  categoryName: string;
+  /** Category totals, shaped like a product row so the same cells / sort can render it */
+  summary: ProductAnalyticsItem;
+  products: ProductAnalyticsItem[];
+}
+
+/** Groups the flat product list by categoryId and sums each category's metrics */
+const groupProductsByCategory = (items: ProductAnalyticsItem[], sort: ProductsSort): CategoryGroup[] => {
+  const groups = new Map<string, CategoryGroup>();
+  for (const p of items) {
+    let group = groups.get(p.categoryId);
+    if (!group) {
+      group = {
+        categoryId: p.categoryId,
+        categoryName: p.categoryName,
+        products: [],
+        summary: {
+          productId: p.categoryId,
+          name: p.categoryName,
+          categoryId: p.categoryId,
+          categoryName: p.categoryName,
+          unitsSold: 0,
+          grossRevenue: 0,
+          views: 0,
+          addToCartCount: 0,
+          purchaseCount: 0,
+          conversionRate: 0,
+          cartToPurchaseRate: 0,
+        },
+      };
+      groups.set(p.categoryId, group);
+    }
+    group.products.push(p);
+    group.summary.unitsSold += p.unitsSold;
+    group.summary.grossRevenue += p.grossRevenue;
+    group.summary.views += p.views;
+    group.summary.addToCartCount += p.addToCartCount;
+    group.summary.purchaseCount += p.purchaseCount;
+  }
+
+  const list = [...groups.values()];
+  for (const g of list) {
+    const s = g.summary;
+    s.conversionRate = s.views > 0 ? roundRate((s.purchaseCount / s.views) * 100) : 0;
+    s.cartToPurchaseRate = s.addToCartCount > 0 ? roundRate((s.purchaseCount / s.addToCartCount) * 100) : 0;
+    g.products = sortProducts(g.products, sort);
+  }
+  const order = sortProducts(list.map(g => g.summary), sort).map(s => s.categoryId);
+  return order.map(id => groups.get(id)!);
+};
+
+/** Units sold → cart-to-purchase cells, shared by the category rows and the product tables */
+const MetricCells: React.FC<{ item: ProductAnalyticsItem }> = ({ item: p }) => {
+  const hasConversionData = p.views > 0;
+  const hasCartToPurchaseData = p.addToCartCount > 0;
+  return (
+    <>
+      <td className="p-4 font-bold text-[#561C08]">{p.unitsSold} unit{p.unitsSold === 1 ? '' : 's'}</td>
+      <td className="p-4 text-right font-serif font-bold text-[#561C08] text-sm">
+        ₹ {p.grossRevenue.toLocaleString('en-IN')}
+      </td>
+      <td className="p-4 text-right text-stone-700">{p.views.toLocaleString('en-IN')}</td>
+      <td className="p-4 text-right text-stone-700">{p.addToCartCount.toLocaleString('en-IN')}</td>
+      <td className="p-4 text-right text-stone-700">{p.purchaseCount.toLocaleString('en-IN')}</td>
+      <td className="p-4 text-right text-stone-700">{formatRate(p.conversionRate, hasConversionData)}</td>
+      <td className="p-4 text-right text-stone-700">
+        <span
+          className="inline-flex items-center gap-1"
+          title={
+            hasCartToPurchaseData && p.cartToPurchaseRate > 100
+              ? 'Above 100% means purchases happened without an add-to-cart event.'
+              : undefined
+          }
+        >
+          {formatRate(p.cartToPurchaseRate, hasCartToPurchaseData)}
+          {hasCartToPurchaseData && p.cartToPurchaseRate > 100 && <Info size={11} className="text-amber-600" />}
+        </span>
+      </td>
+    </>
+  );
+};
+
+/** Product-level table: used inside an expanded category and for the "All products" view */
+const ProductsTable: React.FC<{ products: ProductAnalyticsItem[]; showCategory?: boolean }> = ({
+  products,
+  showCategory = false,
+}) => (
+  <div className="overflow-x-auto">
+    <table className="w-full text-left text-xs font-sans border-collapse">
+      <thead>
+        <tr className="bg-stone-50 border-b border-stone-200 text-stone-500 uppercase tracking-wider text-[10px]">
+          <th className="p-4 sticky left-0 bg-stone-50 z-10">Product Name</th>
+          {showCategory && <th className="p-4">Category</th>}
+          <th className="p-4">Units Sold</th>
+          <th className="p-4 text-right">Gross Revenue</th>
+          <th className="p-4 text-right">Views</th>
+          <th className="p-4 text-right">Add to Cart</th>
+          <th className="p-4 text-right">Purchases</th>
+          <th className="p-4 text-right">Conversion Rate</th>
+          <th className="p-4 text-right">Cart to Purchase Rate</th>
+        </tr>
+      </thead>
+      <tbody className="divide-y divide-stone-100 bg-white">
+        {products.map(p => (
+          <tr key={p.productId} className="hover:bg-stone-50/70 transition-colors">
+            <td className="p-4 font-medium text-stone-900 sticky left-0 bg-white">{p.name}</td>
+            {showCategory && <td className="p-4 text-stone-600">{p.categoryName}</td>}
+            <MetricCells item={p} />
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+);
+
 export const AdminAnalyticsPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'sales' | 'funnel' | 'meta'>('sales');
 
@@ -107,11 +226,10 @@ export const AdminAnalyticsPage: React.FC = () => {
   }, [activeTab, isSalesLoaded, fetchSales]);
 
   // ── Category Sales table (GET /admin/analytics/products) ──────────────────────
-  // Despite the `productId`/`rankBy` naming, these rows are category-level
-  // aggregates (confirmed against the admin Categories list — see final report).
-  // Server supports page/limit/rankBy (no search param) — see final report for
-  // which of the 3 search/filter modes this is (partial: server pagination +
-  // sort where rankBy covers it, client-side search/filter/purchases-sort).
+  // data.products is a flat product list; each product carries categoryId /
+  // categoryName and is grouped into category rows on the client.
+  // Server supports page/limit/rankBy (no search param): server pagination +
+  // sort where rankBy covers it, client-side search/filter/purchases-sort.
   const [salesViewMode, setSalesViewMode] = useState<'categories' | 'allProducts'>('categories');
   const [expandedCategoryId, setExpandedCategoryId] = useState<string | null>(null);
   const [productsSearchInput, setProductsSearchInput] = useState('');
@@ -122,7 +240,7 @@ export const AdminAnalyticsPage: React.FC = () => {
   const [productsLimit, setProductsLimit] = useState(DEFAULT_PRODUCTS_LIMIT);
 
   const [productsItems, setProductsItems] = useState<ProductAnalyticsItem[]>([]);
-  const [productsPagination, setProductsPagination] = useState<ProductAnalyticsResponse['pagination'] | null>(null);
+  const [productsPagination, setProductsPagination] = useState<NonNullable<ProductAnalyticsResponse['pagination']> | null>(null);
   const [isProductsLoading, setIsProductsLoading] = useState(false);
   const [isProductsLoaded, setIsProductsLoaded] = useState(false);
   const [productsError, setProductsError] = useState<string | null>(null);
@@ -144,7 +262,7 @@ export const AdminAnalyticsPage: React.FC = () => {
       getProductAnalytics({ page: productsPage, limit: productsLimit, rankBy: RANK_BY_MAP[productsSort] }, signal)
         .then(result => {
           setProductsItems(result.products);
-          setProductsPagination(result.pagination);
+          setProductsPagination(result.pagination ?? null);
           setIsProductsLoaded(true);
         })
         .catch(err => {
@@ -176,13 +294,19 @@ export const AdminAnalyticsPage: React.FC = () => {
     let list = productsSort === 'purchases' ? sortProducts(productsItems, 'purchases') : productsItems;
     if (productsSearch) {
       const q = productsSearch.toLowerCase();
-      list = list.filter(p => p.name.toLowerCase().includes(q));
+      list = list.filter(p => p.name.toLowerCase().includes(q) || p.categoryName.toLowerCase().includes(q));
     }
     if (productsFilter !== 'all') {
       list = list.filter(p => matchesProductsFilter(p, productsFilter));
     }
     return list;
   }, [productsItems, productsSort, productsSearch, productsFilter]);
+
+  // Category rows built from the (searched / filtered) products — recomputed only when those change
+  const categoryGroups = useMemo(
+    () => groupProductsByCategory(displayedProducts, productsSort),
+    [displayedProducts, productsSort]
+  );
 
   const hasActiveProductsFilters =
     Boolean(productsSearch) || productsFilter !== DEFAULT_PRODUCTS_FILTER || productsSort !== DEFAULT_PRODUCTS_SORT;
@@ -396,24 +520,13 @@ export const AdminAnalyticsPage: React.FC = () => {
             </div>
             <p className="px-4 pt-3 text-[10px] font-sans text-stone-400 italic">Revenue excludes shipping and tax.</p>
 
-            {salesViewMode === 'allProducts' ? (
-              <div className="p-10 text-center text-stone-400 text-xs font-sans space-y-2">
-                <p className="font-semibold text-stone-600">Product-level sales not available yet</p>
-                <p className="max-w-md mx-auto">
-                  The analytics API only returns category-level rows today — there's no per-product sales
-                  endpoint to list every product across categories. See the final report for the backend
-                  request needed to add this view.
-                </p>
-              </div>
-            ) : (
-              <>
-            {/* Toolbar: search, sort, filter, page size, clear */}
+            {/* Toolbar: search, sort, filter, page size, clear (shared by both views) */}
             <div className="p-4 border-b border-stone-100 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs font-sans">
               <div className="relative">
                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
                 <input
                   type="text"
-                  placeholder="Search category name…"
+                  placeholder="Search product or category…"
                   value={productsSearchInput}
                   onChange={e => setProductsSearchInput(e.target.value)}
                   className="w-full pl-8 pr-8 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-stone-900 focus:outline-none focus:border-stone-800"
@@ -485,15 +598,23 @@ export const AdminAnalyticsPage: React.FC = () => {
             <div className="px-4 pt-3 text-[11px] font-sans text-stone-500 flex flex-wrap items-center gap-x-2 gap-y-1">
               {isClientSideNarrowed ? (
                 <span>
-                  Showing {displayedProducts.length} of {productsPagination?.total ?? 0} categories on this page
+                  Showing {displayedProducts.length} of {productsItems.length} products on this page
                 </span>
               ) : (
                 <span>
-                  Showing {productsRangeStart}–{productsRangeEnd} of {productsPagination?.total ?? 0} categories
+                  Showing {productsRangeStart}–{productsRangeEnd} of {productsPagination?.total ?? productsItems.length} products
+                </span>
+              )}
+              {salesViewMode === 'categories' && displayedProducts.length > 0 && (
+                <span>
+                  · {categoryGroups.length} categor{categoryGroups.length === 1 ? 'y' : 'ies'}
                 </span>
               )}
               {showSearchingWithinPageNote && (
                 <span className="italic text-stone-400">Searching within this page</span>
+              )}
+              {salesViewMode === 'categories' && (productsPagination?.totalPages ?? 1) > 1 && (
+                <span className="italic text-stone-400">Category totals cover the products on this page</span>
               )}
             </div>
 
@@ -504,6 +625,29 @@ export const AdminAnalyticsPage: React.FC = () => {
               </div>
             )}
 
+            {salesViewMode === 'allProducts' ? (
+              isProductsLoading && !isProductsLoaded ? (
+                <div className="p-10 text-center text-stone-400">
+                  <Loader2 size={20} className="animate-spin inline-block" />
+                </div>
+              ) : productsError && productsItems.length === 0 ? null : productsItems.length === 0 ? (
+                <div className="p-10 text-center text-stone-400 text-xs font-sans">No product data available.</div>
+              ) : displayedProducts.length === 0 ? (
+                <div className="p-10 text-center text-stone-400 text-xs font-sans flex flex-col items-center gap-3">
+                  <span>No products or categories match your search.</span>
+                  <button
+                    onClick={clearProductsFilters}
+                    className="px-3 py-1.5 border border-stone-200 rounded-xl text-stone-600 hover:border-stone-400"
+                  >
+                    Clear filters
+                  </button>
+                </div>
+              ) : (
+                <div className={`mt-3 transition-opacity ${isProductsLoading ? 'opacity-50' : ''}`}>
+                  <ProductsTable products={displayedProducts} showCategory />
+                </div>
+              )
+            ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs font-sans border-collapse">
                 <thead>
@@ -539,13 +683,13 @@ export const AdminAnalyticsPage: React.FC = () => {
                     </tr>
                   ) : !productsError && productsItems.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="p-10 text-center text-stone-400">No category sales analytics yet.</td>
+                      <td colSpan={8} className="p-10 text-center text-stone-400">No product data available.</td>
                     </tr>
                   ) : !productsError && displayedProducts.length === 0 ? (
                     <tr>
                       <td colSpan={8} className="p-10 text-center text-stone-400">
                         <div className="flex flex-col items-center gap-3">
-                          <span>No categories match your search.</span>
+                          <span>No products or categories match your search.</span>
                           <button
                             onClick={clearProductsFilters}
                             className="px-3 py-1.5 border border-stone-200 rounded-xl text-stone-600 hover:border-stone-400"
@@ -556,50 +700,27 @@ export const AdminAnalyticsPage: React.FC = () => {
                       </td>
                     </tr>
                   ) : (
-                    displayedProducts.map(p => {
-                      const hasConversionData = p.views > 0;
-                      const hasCartToPurchaseData = p.addToCartCount > 0;
-                      const isExpanded = expandedCategoryId === p.productId;
+                    categoryGroups.map(group => {
+                      const isExpanded = expandedCategoryId === group.categoryId;
                       return (
-                        <React.Fragment key={p.productId}>
+                        <React.Fragment key={group.categoryId}>
                           <tr className="hover:bg-stone-50/70 transition-colors">
                             <td className="p-4 font-serif text-sm font-medium text-stone-900 sticky left-0 bg-white hover:bg-stone-50/70">
                               <button
                                 type="button"
-                                onClick={() => setExpandedCategoryId(isExpanded ? null : p.productId)}
+                                onClick={() => setExpandedCategoryId(isExpanded ? null : group.categoryId)}
                                 className="flex items-center gap-1.5 text-left"
                                 aria-expanded={isExpanded}
                                 aria-label={isExpanded ? 'Collapse category' : 'Expand category'}
                               >
                                 {isExpanded ? <ChevronUp size={13} className="text-stone-400 shrink-0" /> : <ChevronDown size={13} className="text-stone-400 shrink-0" />}
-                                <span>{p.name}</span>
+                                <span>{group.categoryName}</span>
+                                <span className="font-sans text-[10px] font-normal text-stone-400">
+                                  ({group.products.length} product{group.products.length === 1 ? '' : 's'})
+                                </span>
                               </button>
                             </td>
-                            <td className="p-4 font-bold text-[#561C08]">{p.unitsSold} unit{p.unitsSold === 1 ? '' : 's'}</td>
-                            <td className="p-4 text-right font-serif font-bold text-[#561C08] text-sm">
-                              ₹ {p.grossRevenue.toLocaleString('en-IN')}
-                            </td>
-                            <td className="p-4 text-right text-stone-700">{p.views.toLocaleString('en-IN')}</td>
-                            <td className="p-4 text-right text-stone-700">{p.addToCartCount.toLocaleString('en-IN')}</td>
-                            <td className="p-4 text-right text-stone-700">{p.purchaseCount.toLocaleString('en-IN')}</td>
-                            <td className="p-4 text-right text-stone-700">
-                              {formatRate(p.conversionRate, hasConversionData)}
-                            </td>
-                            <td className="p-4 text-right text-stone-700">
-                              <span
-                                className="inline-flex items-center gap-1"
-                                title={
-                                  hasCartToPurchaseData && p.cartToPurchaseRate > 100
-                                    ? 'Above 100% means purchases happened without an add-to-cart event.'
-                                    : undefined
-                                }
-                              >
-                                {formatRate(p.cartToPurchaseRate, hasCartToPurchaseData)}
-                                {hasCartToPurchaseData && p.cartToPurchaseRate > 100 && (
-                                  <Info size={11} className="text-amber-600" />
-                                )}
-                              </span>
-                            </td>
+                            <MetricCells item={group.summary} />
                           </tr>
                           {isExpanded && (
                             <tr>
@@ -607,7 +728,7 @@ export const AdminAnalyticsPage: React.FC = () => {
                                 <div className="p-4 space-y-3">
                                   <div className="flex items-center gap-2">
                                     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-stone-900 text-white text-[11px] font-sans font-semibold">
-                                      Category: {p.name}
+                                      Category: {group.categoryName}
                                       <button
                                         type="button"
                                         onClick={() => setExpandedCategoryId(null)}
@@ -618,13 +739,15 @@ export const AdminAnalyticsPage: React.FC = () => {
                                       </button>
                                     </span>
                                   </div>
-                                  <div className="p-5 text-center text-xs font-sans text-stone-400 bg-white border border-stone-200 rounded-xl space-y-1.5">
-                                    <p className="font-semibold text-stone-600">No products sold in this category</p>
-                                    <p className="max-w-sm mx-auto">
-                                      Product-level sales for this category aren't available from the backend yet —
-                                      see the final report for the endpoint needed to break this down by product.
-                                    </p>
-                                  </div>
+                                  {group.products.length === 0 ? (
+                                    <div className="p-5 text-center text-xs font-sans text-stone-400 bg-white border border-stone-200 rounded-xl">
+                                      No products in this category.
+                                    </div>
+                                  ) : (
+                                    <div className="bg-white border border-stone-200 rounded-xl overflow-hidden">
+                                      <ProductsTable products={group.products} />
+                                    </div>
+                                  )}
                                 </div>
                               </td>
                             </tr>
@@ -636,6 +759,7 @@ export const AdminAnalyticsPage: React.FC = () => {
                 </tbody>
               </table>
             </div>
+            )}
 
             {/* Pagination controls */}
             {productsPagination && productsPagination.totalPages > 1 && (
@@ -672,8 +796,6 @@ export const AdminAnalyticsPage: React.FC = () => {
                   </button>
                 </div>
               </div>
-            )}
-              </>
             )}
           </div>
         </div>

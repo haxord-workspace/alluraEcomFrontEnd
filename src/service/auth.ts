@@ -85,6 +85,25 @@ export const logout = async (): Promise<void> => {
 };
 
 /**
+ * Request password reset instructions. Public endpoint.
+ * The backend answers the same way whether or not the account exists.
+ * POST /auth/forgot-password
+ */
+export const forgotPassword = async (email: string): Promise<AuthResponse> => {
+  const response = await api.post<AuthResponse>('/auth/forgot-password', { email });
+  return response.data;
+};
+
+/**
+ * Set a new password using the single-use token from the reset email link. Public endpoint.
+ * POST /auth/reset-password
+ */
+export const resetPassword = async (token: string, newPassword: string): Promise<AuthResponse> => {
+  const response = await api.post<AuthResponse>('/auth/reset-password', { token, newPassword });
+  return response.data;
+};
+
+/**
  * Fetch the currently authenticated user's profile information.
  * GET /auth/me
  */

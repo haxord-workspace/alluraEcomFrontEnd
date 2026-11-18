@@ -176,9 +176,8 @@ const AdminReviewsPage: React.FC = () => {
                 type="button"
                 onClick={() => update({ status })}
                 aria-pressed={active}
-                className={`min-h-10 px-4 rounded-full text-xs font-sans font-semibold whitespace-nowrap transition-colors ${
-                  active ? 'bg-[#561C08] text-white shadow-xs' : 'bg-white text-stone-600 hover:text-stone-900 border border-stone-200'
-                }`}
+                className={`min-h-10 px-4 rounded-full text-xs font-sans font-semibold whitespace-nowrap transition-colors ${active ? 'bg-[#561C08] text-white shadow-xs' : 'bg-white text-stone-600 hover:text-stone-900 border border-stone-200'
+                  }`}
               >
                 {status ? REVIEW_STATUS_LABELS[status] : 'All'}
               </button>
@@ -308,21 +307,57 @@ const AdminReviewsPage: React.FC = () => {
   );
 };
 
-const ModerateButton: React.FC<{ review: AdminReview; onModerate: (review: AdminReview) => void }> = ({ review, onModerate }) =>
-  canModerate(review) ? (
-    <button
-      type="button"
-      onClick={e => {
-        e.stopPropagation();
-        onModerate(review);
-      }}
-      className="inline-flex items-center gap-1.5 min-h-9 px-3 rounded-lg bg-[#561C08] hover:bg-[#561C08]/90 text-white font-semibold"
-      aria-label={`Moderate review${review.title ? ` "${review.title}"` : ''}`}
-    >
-      <ShieldCheck size={13} />
-      <span>Moderate</span>
-    </button>
-  ) : null;
+// ── Row actions (View / Moderate) ────────────────────────────────────────────
+// 'table': compact, one line, icon-only on medium screens (labels from xl up).
+// 'card':  mobile, full-width buttons with large tap targets.
+type ActionLayout = 'table' | 'card';
+
+const ACTION_BASE =
+  'inline-flex items-center justify-center gap-1.5 rounded-lg font-semibold whitespace-nowrap transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#561C08]/40 focus-visible:ring-offset-1';
+const ACTION_SIZE: Record<ActionLayout, string> = {
+  table: 'h-8 min-w-8 px-2 xl:px-3 text-[11px]',
+  card: 'flex-1 min-h-11 px-4 text-xs',
+};
+const ACTION_LABEL: Record<ActionLayout, string> = {
+  table: 'hidden xl:inline',
+  card: '',
+};
+
+const ReviewActions: React.FC<RowProps & { layout: ActionLayout }> = ({ review, onOpen, onModerate, layout }) => {
+  const titleSuffix = review.title ? ` "${review.title}"` : '';
+  return (
+    <div className={layout === 'table' ? 'inline-flex flex-nowrap items-center justify-end gap-1.5' : 'flex items-stretch gap-2'}>
+      <button
+        type="button"
+        onClick={e => {
+          e.stopPropagation();
+          onOpen(review);
+        }}
+        className={`${ACTION_BASE} ${ACTION_SIZE[layout]} border border-stone-200 bg-white text-stone-700 hover:border-[#561C08]/40 hover:bg-[#561C08]/5 hover:text-[#561C08]`}
+        aria-label={`View review${titleSuffix}`}
+        title="View review"
+      >
+        <Eye size={14} className="shrink-0" />
+        <span className={ACTION_LABEL[layout]}>View</span>
+      </button>
+      {canModerate(review) && (
+        <button
+          type="button"
+          onClick={e => {
+            e.stopPropagation();
+            onModerate(review);
+          }}
+          className={`${ACTION_BASE} ${ACTION_SIZE[layout]} bg-[#561C08] text-white shadow-xs hover:bg-[#561C08]/90 active:bg-[#561C08]/80`}
+          aria-label={`Moderate review${titleSuffix}`}
+          title="Moderate review"
+        >
+          <ShieldCheck size={14} className="shrink-0" />
+          <span className={ACTION_LABEL[layout]}>Moderate</span>
+        </button>
+      )}
+    </div>
+  );
+};
 
 // ── Rows ─────────────────────────────────────────────────────────────────────
 
@@ -416,22 +451,8 @@ const ReviewRow: React.FC<RowProps & { showReported: boolean }> = memo(
         </td>
       )}
       <td className="p-4 whitespace-nowrap text-stone-500">{formatReviewDate(review.createdAt) || '—'}</td>
-      <td className="p-4 text-right">
-        <div className="inline-flex flex-wrap justify-end gap-1.5">
-          <button
-            type="button"
-            onClick={e => {
-              e.stopPropagation();
-              onOpen(review);
-            }}
-            className="inline-flex items-center gap-1.5 min-h-9 px-3 rounded-lg border border-stone-200 bg-white text-stone-700 font-semibold hover:bg-stone-100"
-            aria-label={`View review${review.title ? ` "${review.title}"` : ''}`}
-          >
-            <Eye size={13} />
-            <span>View</span>
-          </button>
-          <ModerateButton review={review} onModerate={onModerate} />
-        </div>
+      <td className="p-4 text-right whitespace-nowrap">
+        <ReviewActions review={review} onOpen={onOpen} onModerate={onModerate} layout="table" />
       </td>
     </tr>
   )
@@ -457,11 +478,9 @@ const ReviewMobileCard: React.FC<RowProps> = memo(({ review, onOpen, onModerate 
       {review.comment && <p className="text-stone-500 line-clamp-2 break-words">{review.comment}</p>}
       <ReviewThumbs review={review} />
     </button>
-    {canModerate(review) && (
-      <div className="px-4 pb-4 flex justify-end">
-        <ModerateButton review={review} onModerate={onModerate} />
-      </div>
-    )}
+    <div className="px-4 pb-4 pt-1">
+      <ReviewActions review={review} onOpen={onOpen} onModerate={onModerate} layout="card" />
+    </div>
   </li>
 ));
 ReviewMobileCard.displayName = 'ReviewMobileCard';

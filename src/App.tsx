@@ -38,6 +38,8 @@ import { ShippingReturnsPage } from './pages/ShippingReturnsPage';
 
 // Customer Flow Pages
 import { AuthPage } from './pages/customer/AuthPage';
+import { ForgotPasswordPage } from './pages/customer/ForgotPasswordPage';
+import { ResetPasswordPage } from './pages/customer/ResetPasswordPage';
 import { AccountAddressesPage } from './pages/customer/AccountAddressesPage';
 import { AccountOrdersPage } from './pages/customer/AccountOrdersPage';
 import { OrderDetailPage } from './pages/customer/OrderDetailPage';
@@ -205,6 +207,8 @@ export const AppContent: React.FC = () => {
           <Route path="/auth" element={<AuthPage />} />
           <Route path="/auth/login" element={<AuthPage />} />
           <Route path="/auth/complete-profile" element={<AuthPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/account/addresses" element={<ProtectedRoute><AccountAddressesPage /></ProtectedRoute>} />
           <Route path="/account/orders" element={<ProtectedRoute><AccountOrdersPage /></ProtectedRoute>} />
           <Route path="/account/orders/:orderId" element={<ProtectedRoute><OrderDetailPage /></ProtectedRoute>} />

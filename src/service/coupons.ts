@@ -18,6 +18,11 @@ export interface CouponInput {
     value: number;
     maxDiscountAmount?: number;
   };
+  /**
+   * Minimum cart subtotal (₹) for the coupon to apply; >= 0, optional. Checkout rejects the
+   * coupon below it (COUPON_MINIMUM_ORDER_NOT_MET). 0 means no minimum.
+   */
+  minimumOrderValue?: number;
   startsAt?: string;
   expiresAt?: string;
   /** Not in the documented schema, but the backend stores it and defaults to DRAFT */
@@ -63,7 +68,8 @@ export const mapCoupon = (raw: any): Coupon => {
     discountType: type === 'FIXED' ? 'Fixed' : 'Percentage',
     discountValue: num(discount.value, raw?.discountValue) ?? 0,
     maxDiscount: num(discount.maxDiscountAmount, raw?.maxDiscount),
-    minOrderValue: num(raw?.minOrderValue, raw?.minCartValue, raw?.conditions?.minCartValue, raw?.minimumAmount) ?? 0,
+    minOrderValue:
+      num(raw?.minimumOrderValue, raw?.minOrderValue, raw?.minCartValue, raw?.conditions?.minCartValue, raw?.minimumAmount) ?? 0,
     usageLimit: num(raw?.usageLimit, raw?.limits?.total),
     usageCount: num(raw?.usageCount, raw?.usedCount, raw?.timesUsed) ?? 0,
     perCustomerLimit: num(raw?.perCustomerLimit, raw?.limits?.perCustomer),

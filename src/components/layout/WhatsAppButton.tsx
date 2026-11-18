@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { MessageCircle, X, Sparkles, Send, MapPin, Scissors } from 'lucide-react';
+import { useStoreAddress } from '../../hooks/useStoreAddress';
 
 export const WhatsAppButton: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
+  const { address } = useStoreAddress();
   const phoneNumber = '919037991774';
 
   const quickOptions = [
@@ -18,7 +20,7 @@ export const WhatsAppButton: React.FC = () => {
     },
     {
       title: 'Store Visit (Perinthalmanna)',
-      message: 'Hello Allura, I would like to visit your boutique at Ooty Road, Perinthalmanna.',
+      message: `Hello Allura, I would like to visit your boutique${address ? ` at ${address}` : ''}.`,
       icon: MapPin,
     },
   ];

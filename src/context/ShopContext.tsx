@@ -1218,13 +1218,20 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return newOrder;
   };
 
-  // Order lines only carry ids, so fill in names / images from the storefront catalog
+  // Order lines only carry ids, so fill in names / images / size / colour from the storefront catalog
   const enrichedOrders = React.useMemo(
     () =>
       orders.map(o =>
-        enrichOrder(o, productId => {
+        enrichOrder(o, (productId, variantId) => {
           const p = products.find(pr => pr.id === productId);
-          return p ? { name: p.name, image: p.images.primary } : undefined;
+          if (!p) return undefined;
+          const v = variantId ? p.variants?.find(pv => pv.id === variantId) : undefined;
+          return {
+            name: p.name,
+            image: v?.images?.find(i => i.isPrimary)?.url || v?.images?.[0]?.url || p.images.primary,
+            size: v?.size || undefined,
+            color: v?.color?.name || undefined,
+          };
         })
       ),
     [orders, products]

@@ -290,7 +290,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                   <ImageIcon size={15} />
                   {!isCollapsed && <span>Store Banners</span>}
                 </NavLink>
-                <NavLink to="/admin/content" className={navLinkClass}>
+                <NavLink to="/admin/content" end className={navLinkClass}>
                   <FileText size={15} />
                   {!isCollapsed && <span>Pages & Policies</span>}
                 </NavLink>

@@ -3,7 +3,26 @@ import type { AxiosRequestConfig } from 'axios';
 import { attachRequestGuards } from './requestGuards';
 
 // Base URL for the backend API, loaded from environment variables
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+const CONFIGURED_API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL;
+
+// Dev server only: opened from another device (e.g. a phone on the same Wi-Fi via the
+// "Network" URL), the backend's CORS allowlist rejects that origin. So the API is called
+// through the Vite dev proxy instead (/__api → backend, see vite.config.ts), which is
+// same-origin. Localhost and production builds use the configured URL unchanged.
+const DEV_API_PROXY_PREFIX = '/__api';
+const isLocalhost = typeof window !== 'undefined' && ['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname);
+const toDevProxyUrl = (url: string): string => {
+  try {
+    return `${DEV_API_PROXY_PREFIX}${new URL(url).pathname.replace(/\/$/, '')}`;
+  } catch {
+    return url; // already relative
+  }
+};
+
+export const API_BASE_URL =
+  import.meta.env.DEV && !isLocalhost && CONFIGURED_API_BASE_URL
+    ? toDevProxyUrl(CONFIGURED_API_BASE_URL)
+    : CONFIGURED_API_BASE_URL;
 
 // ─── Customer session cookies ────────────────────────────────────────────────
 // POST /auth/refresh and /auth/logout take the refresh token in the request body,
@@ -97,7 +116,7 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const original = error.config as (AxiosRequestConfig & { _retry?: boolean }) | undefined;
-    const isAuthEndpoint = /\/auth\/(login|register|refresh|logout|google)$/.test(original?.url || '');
+    const isAuthEndpoint = /\/auth\/(login|register|refresh|logout|google|forgot-password|reset-password)$/.test(original?.url || '');
 
     if (error.response?.status === 401 && original && !original._retry && !isAuthEndpoint) {
       original._retry = true;

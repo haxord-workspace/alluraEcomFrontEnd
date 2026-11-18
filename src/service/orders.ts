@@ -158,11 +158,49 @@ export const mapAddress = (raw: any): SavedAddress => {
   };
 };
 
+/** Normalises variant attributes given as an object ({ size, color }) or a list ([{ name, value }]) */
+const toAttrMap = (value: any): Record<string, string> => {
+  if (!value) return {};
+  if (Array.isArray(value)) {
+    return Object.fromEntries(
+      value
+        .map(a => [String(a?.name ?? a?.key ?? a?.type ?? '').toLowerCase(), a?.value ?? a?.label])
+        .filter(([k, v]) => k && v !== undefined && v !== null && v !== '')
+        .map(([k, v]) => [k, String(v)])
+    );
+  }
+  if (typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([, v]) => v !== undefined && v !== null && v !== '')
+        .map(([k, v]) => [k.toLowerCase(), typeof v === 'object' ? String((v as any)?.name ?? (v as any)?.value ?? '') : String(v)])
+    );
+  }
+  return {};
+};
+
+/** First non-empty text value, reading `{ name }` objects (e.g. colour objects) too */
+const firstText = (...values: any[]): string => {
+  for (const v of values) {
+    const text = typeof v === 'object' && v !== null ? v.name ?? v.value ?? v.label : v;
+    if (text !== undefined && text !== null && String(text).trim()) return String(text).trim();
+  }
+  return '';
+};
+
 const mapItem = (raw: any): OrderItem => {
   const productRaw = (typeof raw?.productId === 'object' && raw.productId) || raw?.product || null;
   const variant = (typeof raw?.variantId === 'object' && raw.variantId) || raw?.variant || null;
   const snapshot = raw?.productSnapshot || raw?.snapshot || {};
-  const attrs = raw?.attributes || raw?.variantAttributes || variant?.attributes || snapshot?.attributes || {};
+  const variantSnapshot = raw?.variantSnapshot || snapshot?.variant || {};
+  // Merge every place the backend may put variant attributes (later sources win)
+  const attrs: Record<string, string> = {
+    ...toAttrMap(variant?.attributes),
+    ...toAttrMap(snapshot?.attributes),
+    ...toAttrMap(variantSnapshot?.attributes),
+    ...toAttrMap(raw?.variantAttributes),
+    ...toAttrMap(raw?.attributes),
+  };
   const unitPrice = num(raw?.unitPrice, raw?.price, raw?.pricing?.sellingPrice, snapshot?.price);
   const imageUrl =
     (typeof raw?.image === 'string' ? raw.image : raw?.image?.url) ||
@@ -178,13 +216,30 @@ const mapItem = (raw: any): OrderItem => {
     pricing: productRaw?.pricing || { sellingPrice: unitPrice, mrp: num(raw?.mrp, unitPrice) },
   });
 
-  const colorName = attrs.color ? String(attrs.color) : '';
+  const colorName = firstText(
+    raw?.selectedColor,
+    raw?.color,
+    raw?.colour,
+    attrs.color,
+    attrs.colour,
+    variantSnapshot?.color,
+    snapshot?.color,
+    variant?.color
+  );
+  const size = firstText(
+    raw?.selectedSize,
+    raw?.size,
+    attrs.size,
+    variantSnapshot?.size,
+    snapshot?.size,
+    variant?.size
+  );
   const variantId = variant ? variant._id || variant.id : typeof raw?.variantId === 'string' ? raw.variantId : undefined;
   return {
     product,
     variantId,
     hasImage: !!(productRaw?.images?.length || imageUrl),
-    selectedSize: attrs.size ? String(attrs.size) : '',
+    selectedSize: size,
     selectedColor: colorName ? { name: colorName, hex: colorHex(colorName) || '#D9C9B4' } : NO_COLOR,
     quantity: num(raw?.quantity, raw?.qty) || 1,
     unitPrice,

@@ -3,9 +3,11 @@ import { Link } from 'react-router-dom';
 import { X, MessageCircle, Phone, MapPin, ChevronRight } from 'lucide-react';
 import { AlluraLogo } from '../common/AlluraLogo';
 import { useShop } from '../../context/ShopContext';
+import { useStoreAddress } from '../../hooks/useStoreAddress';
 
 export const MobileMenuDrawer: React.FC = () => {
   const { isMobileMenuOpen, setIsMobileMenuOpen } = useShop();
+  const { address } = useStoreAddress();
 
   if (!isMobileMenuOpen) return null;
 
@@ -121,10 +123,12 @@ export const MobileMenuDrawer: React.FC = () => {
 
         {/* Quick Contact Bar in Menu */}
         <div className="p-6 bg-allura-card border-t border-allura-border space-y-3">
-          <div className="flex items-center gap-2 text-xs text-allura-muted">
-            <MapPin size={14} className="text-allura-gold flex-shrink-0" />
-            <span>Ooty Road, Perinthalmanna, Kerala</span>
-          </div>
+          {address && (
+            <div className="flex items-center gap-2 text-xs text-allura-muted">
+              <MapPin size={14} className="text-allura-gold flex-shrink-0" />
+              <span>{address}</span>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-2 pt-2">
             <a
