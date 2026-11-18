@@ -14,6 +14,61 @@ export type ProductCategory =
   | 'Bottoms'
   | 'Accessories';
 
+export interface Category {
+  id: string;
+  name: string;
+  slug: string;
+  status: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED' | string;
+  image?: { url: string } | string; // backend sends object {url}, keep string fallback for local presets
+  order?: number;
+}
+
+/** Backend-schema collection type used exclusively in the Admin portal */
+export interface AdminCollection {
+  id: string;
+  name: string;
+  slug?: string;
+  status: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED' | string;
+  createdAt?: string;
+  updatedAt?: string;
+  [key: string]: any;
+}
+
+/** Backend-schema product variant type used exclusively in the Admin portal */
+export interface AdminProductVariant {
+  id: string;
+  productId: string;
+  sku: string;
+  barcode?: { value: string; type: string } | null;
+  attributes: { color?: string; size?: string; [key: string]: any };
+  pricing: { mrp: number; sellingPrice: number; currency: string };
+  status: 'ACTIVE' | 'INACTIVE' | string;
+  images?: { url: string; isPrimary?: boolean; alt?: string }[];
+  createdAt?: string;
+  updatedAt?: string;
+  [key: string]: any;
+}
+
+/** Backend-schema product type used exclusively in the Admin portal */
+export interface AdminProduct {
+  id: string;
+  name: string;
+  sku: string;
+  description?: string;
+  shortDescription?: string;
+  categoryId?: string;
+  pricing: {
+    mrp: number;
+    sellingPrice: number;
+    currency: string;
+  };
+  status: 'ACTIVE' | 'DRAFT' | 'ARCHIVED';
+  images?: { url: string; isPrimary?: boolean }[];
+  createdAt?: string;
+  updatedAt?: string;
+  [key: string]: any;
+}
+
 export type OccasionType = 'Bridal' | 'Festive' | 'Party Wear' | 'Modest Wear' | 'Ethnic' | 'Contemporary' | 'Reception';
 
 export interface ProductColor {
@@ -36,6 +91,7 @@ export interface ProductVariant {
   stockReserved: number;
   stockAvailable: number;
   lowStockThreshold?: number;
+  images?: { url: string; isPrimary?: boolean; alt?: string }[];
 }
 
 export interface ProductSEO {
@@ -60,6 +116,7 @@ export interface Product {
   originalPrice?: number;
   costPrice?: number;
   category: ProductCategory | string;
+  categoryId?: string;
   subcategory?: string;
   occasion: OccasionType | string;
   gender?: 'Women' | 'Unisex' | 'Girls';
@@ -75,6 +132,8 @@ export interface Product {
   colors: ProductColor[];
   sizes: string[];
   variants?: ProductVariant[];
+  /** Backend flag: the product is sold per variant (size / colour), so the cart needs a variantId */
+  hasVariants?: boolean;
   inStock: boolean;
   stockCount?: number;
   images: {
@@ -122,6 +181,11 @@ export interface CollectionItem {
 }
 
 export interface CartItem {
+  /** Server cart line id (used for PATCH / DELETE /cart/items/{itemId}) */
+  id?: string;
+  variantId?: string;
+  /** Price the server charges per unit; falls back to product.price */
+  unitPrice?: number;
   product: Product;
   selectedSize: string;
   selectedColor: ProductColor;
@@ -176,17 +240,21 @@ export interface CustomerProfile {
 
 export interface SavedAddress {
   id: string;
-  name: string;
-  phone: string;
+  label: string; // was type
+  fullName: string; // was name
+  phone: {
+    countryCode: string;
+    number: string;
+  };
   addressLine1: string;
   addressLine2?: string;
   landmark?: string;
   city: string;
-  district: string;
   state: string;
-  pincode: string;
-  isDefault?: boolean;
-  type: 'Home' | 'Work' | 'Boutique Pickup';
+  postalCode: string; // was pincode
+  country: string;
+  isDefaultShipping: boolean;
+  isDefaultBilling: boolean;
 }
 
 // Order & Shipment Management
@@ -206,6 +274,9 @@ export type PaymentStatus = 'Pending' | 'Authorized' | 'Captured' | 'Paid' | 'Fa
 
 export interface OrderItem {
   product: Product;
+  variantId?: string;
+  /** False when the order didn't include an image (a placeholder is shown until the catalog fills it in) */
+  hasImage?: boolean;
   selectedSize: string;
   selectedColor: ProductColor;
   quantity: number;
@@ -237,6 +308,10 @@ export interface Order {
   id: string;
   orderNumber: string;
   date: string;
+  /** ISO timestamp from the backend */
+  placedAt?: string;
+  /** Backend status value (e.g. OUT_FOR_DELIVERY), used when sending status updates */
+  rawStatus?: string;
   customer: {
     id: string;
     name: string;
@@ -252,8 +327,12 @@ export interface Order {
   couponCode?: string;
   tax: number;
   total: number;
+  currency: string;
+  invoiceNumber?: string;
+  invoiceIssuedAt?: string;
   paymentMethod: 'UPI' | 'Card' | 'COD' | 'NetBanking';
   paymentStatus: PaymentStatus;
+  transactionId?: string;
   orderStatus: OrderStatus;
   tracking?: OrderTrackingInfo;
   notes?: string;
@@ -263,6 +342,32 @@ export interface Order {
     action: string;
     note?: string;
   }[];
+}
+
+// Admin Payments Ledger (Razorpay)
+export type PaymentLedgerStatus = 'PAID' | 'PENDING' | 'FAILED' | 'REFUNDED';
+export type PaymentLedgerMethod = 'UPI' | 'CARD' | 'COD' | 'NETBANKING';
+
+export interface PaymentListItem {
+  paymentId: string;
+  orderId: string;
+  orderNumber: string;
+  customerName: string;
+  customerEmail: string;
+  method: PaymentLedgerMethod | null;
+  amount: number;
+  gatewayReference: string | null;
+  status: PaymentLedgerStatus;
+  createdAt: string;
+}
+
+export interface PaymentDetail extends PaymentListItem {
+  currency: string;
+  razorpayOrderId: string;
+  failureCode?: string;
+  failureReason?: string;
+  failureDescription?: string;
+  updatedAt: string;
 }
 
 // Returns & Exchanges
@@ -320,6 +425,7 @@ export interface Coupon {
   description: string;
   discountType: 'Percentage' | 'Fixed';
   discountValue: number;
+  /** From the API's minimumOrderValue; 0 = no minimum */
   minOrderValue: number;
   maxDiscount?: number;
   usageLimit?: number;
@@ -363,7 +469,16 @@ export interface Banner {
   startDate?: string;
   endDate?: string;
   status: 'Active' | 'Scheduled' | 'Draft';
-  position: 'Hero' | 'Editorial' | 'Secondary' | 'Announcement';
+  position?: 'Hero' | 'Editorial' | 'Secondary' | 'Announcement' | string;
+  placement?: 'HOME_HERO' | 'HOME_PROMOTION' | 'CATEGORY' | 'COLLECTION' | string;
+  image?: { url: string; alt?: string };
+  images?: {
+    desktop?: { url: string; alt?: string; width?: number; height?: number };
+    mobile?: { url: string; alt?: string; width?: number; height?: number };
+  };
+  sortOrder?: number;
+  startsAt?: string;
+  endsAt?: string;
   displayOrder?: number;
 }
 
@@ -498,17 +613,6 @@ export interface StockReservation {
 }
 
 // CMS & FAQ
-export interface CMSPage {
-  id: string;
-  title: string;
-  slug: string;
-  content: string;
-  featuredImage?: string;
-  status: 'Published' | 'Draft';
-  updatedAt: string;
-  seo?: ProductSEO;
-}
-
 export interface FAQItem {
   id: string;
   question: string;

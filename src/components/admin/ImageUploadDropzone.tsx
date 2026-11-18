@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Upload, Link as LinkIcon, Sparkles, X, Check, RefreshCw } from 'lucide-react';
 
 interface PresetOption {
@@ -14,6 +14,8 @@ interface ImageUploadDropzoneProps {
   presets?: PresetOption[];
   required?: boolean;
   helperText?: string;
+  showUrlTab?: boolean;
+  showPresetsTab?: boolean;
   className?: string;
 }
 
@@ -26,32 +28,119 @@ export const ImageUploadDropzone: React.FC<ImageUploadDropzoneProps> = ({
   required = false,
   helperText,
   className = '',
+  showUrlTab = true,
+  showPresetsTab = true,
 }) => {
   const [activeTab, setActiveTab] = useState<'upload' | 'url' | 'presets'>('upload');
   const [isDragging, setIsDragging] = useState(false);
   const [urlInput, setUrlInput] = useState(value && !value.startsWith('data:') ? value : '');
   const [fileName, setFileName] = useState<string>('');
   const [fileSize, setFileSize] = useState<string>('');
+  const [fileError, setFileError] = useState<string>('');
+  const [isCompressing, setIsCompressing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFile = (file: File) => {
-    if (!file.type.startsWith('image/')) {
-      alert('Please select a valid image file (JPEG, PNG, WebP, SVG, AVIF).');
-      return;
+  useEffect(() => {
+    if (!value) {
+      setUrlInput('');
+      setFileName('');
+      setFileSize('');
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    } else if (!value.startsWith('data:')) {
+      setUrlInput(value);
+    }
+  }, [value]);
+
+  const compressImageFile = async (
+    file: File,
+    maxDimension = 1440,
+    quality = 0.78
+  ): Promise<{ dataUrl: string; sizeKb: number }> => {
+    if (/image\/(svg\+xml|gif)/.test(file.type)) {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const res = (reader.result as string) || '';
+          resolve({ dataUrl: res, sizeKb: Math.round(file.size / 1024) });
+        };
+        reader.onerror = () => resolve({ dataUrl: '', sizeKb: 0 });
+        reader.readAsDataURL(file);
+      });
     }
 
-    setFileName(file.name);
-    const sizeInKb = Math.round(file.size / 1024);
-    setFileSize(sizeInKb > 1024 ? `${(sizeInKb / 1024).toFixed(1)} MB` : `${sizeInKb} KB`);
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const rawDataUrl = e.target?.result as string;
+        if (!rawDataUrl) return resolve({ dataUrl: '', sizeKb: 0 });
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const result = e.target?.result as string;
-      if (result) {
-        onChange(result);
+        const img = new Image();
+        img.onload = () => {
+          let { width, height } = img;
+          const maxDim = Math.max(width, height);
+          const scale = maxDim > maxDimension ? maxDimension / maxDim : 1;
+          const targetWidth = Math.max(1, Math.round(width * scale));
+          const targetHeight = Math.max(1, Math.round(height * scale));
+
+          const canvas = document.createElement('canvas');
+          canvas.width = targetWidth;
+          canvas.height = targetHeight;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            return resolve({ dataUrl: rawDataUrl, sizeKb: Math.round(file.size / 1024) });
+          }
+
+          // Fill white background for transparent images converting to JPEG
+          ctx.fillStyle = '#FFFFFF';
+          ctx.fillRect(0, 0, targetWidth, targetHeight);
+          ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+
+          let compressed = '';
+          try {
+            compressed = canvas.toDataURL('image/jpeg', quality);
+          } catch {
+            compressed = rawDataUrl;
+          }
+
+          const finalUrl = compressed && (compressed.length < rawDataUrl.length || scale < 1) ? compressed : rawDataUrl;
+          const approxBytes = Math.round((finalUrl.length * 3) / 4);
+          resolve({ dataUrl: finalUrl, sizeKb: Math.round(approxBytes / 1024) });
+        };
+        img.onerror = () => resolve({ dataUrl: rawDataUrl, sizeKb: Math.round(file.size / 1024) });
+        img.src = rawDataUrl;
+      };
+      reader.onerror = () => resolve({ dataUrl: '', sizeKb: 0 });
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleFile = async (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      setFileError(`"${file.name}" isn't an image. Please choose a JPEG, PNG, WebP, SVG or AVIF file.`);
+      return;
+    }
+    setFileError('');
+    setFileName(file.name);
+    setIsCompressing(true);
+
+    try {
+      const { dataUrl, sizeKb } = await compressImageFile(file, 1920, 0.82);
+      if (dataUrl) {
+        onChange(dataUrl);
+        const originalKb = Math.round(file.size / 1024);
+        if (originalKb > sizeKb) {
+          setFileSize(`${sizeKb} KB (optimized from ${originalKb > 1024 ? (originalKb / 1024).toFixed(1) + ' MB' : originalKb + ' KB'})`);
+        } else {
+          setFileSize(`${sizeKb} KB`);
+        }
       }
-    };
-    reader.readAsDataURL(file);
+    } catch {
+      setFileError('Failed to process image file. Please try another file.');
+    } finally {
+      setIsCompressing(false);
+    }
   };
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
@@ -119,20 +208,22 @@ export const ImageUploadDropzone: React.FC<ImageUploadDropzoneProps> = ({
           <span>Upload File</span>
         </button>
 
-        <button
-          type="button"
-          onClick={() => setActiveTab('url')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition-all ${
-            activeTab === 'url'
-              ? 'bg-white text-[#561C08] shadow-xs font-bold'
-              : 'text-stone-600 hover:text-stone-900'
-          }`}
-        >
-          <LinkIcon size={12} />
-          <span>Image URL</span>
-        </button>
+        {showUrlTab && (
+          <button
+            type="button"
+            onClick={() => setActiveTab('url')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition-all ${
+              activeTab === 'url'
+                ? 'bg-white text-[#561C08] shadow-xs font-bold'
+                : 'text-stone-600 hover:text-stone-900'
+            }`}
+          >
+            <LinkIcon size={12} />
+            <span>Image URL</span>
+          </button>
+        )}
 
-        {presets.length > 0 && (
+        {showPresetsTab && presets.length > 0 && (
           <button
             type="button"
             onClick={() => setActiveTab('presets')}
@@ -175,14 +266,14 @@ export const ImageUploadDropzone: React.FC<ImageUploadDropzoneProps> = ({
 
           <div className="flex flex-col items-center justify-center gap-2">
             <div className="w-10 h-10 rounded-full bg-[#561C08]/10 text-[#561C08] flex items-center justify-center">
-              <Upload size={18} />
+              {isCompressing ? <RefreshCw size={18} className="animate-spin" /> : <Upload size={18} />}
             </div>
             <div>
               <p className="text-xs font-bold text-stone-800">
-                Click to browse or drag & drop banner image
+                {isCompressing ? 'Optimizing & compressing image for fast live updates...' : 'Click to browse or drag & drop banner image'}
               </p>
               <p className="text-[10px] text-stone-500 mt-0.5">
-                Supports PNG, JPG, WEBP, SVG, AVIF (Max 15MB)
+                {isCompressing ? 'Downscaling resolution to web standards...' : 'Supports PNG, JPG, WEBP, SVG, AVIF (Max 15MB, auto-optimized)'}
               </p>
             </div>
           </div>
@@ -304,6 +395,10 @@ export const ImageUploadDropzone: React.FC<ImageUploadDropzoneProps> = ({
             </button>
           </div>
         </div>
+      )}
+
+      {fileError && (
+        <p role="alert" className="text-[11px] font-sans text-rose-700 mt-1.5">{fileError}</p>
       )}
 
       {helperText && (

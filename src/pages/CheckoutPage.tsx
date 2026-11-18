@@ -1,131 +1,460 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import {
   CheckCircle2,
-  CreditCard,
   QrCode,
-  Banknote,
-  Sparkles,
   ArrowLeft,
   Lock,
+  MapPin,
+  Plus,
+  Loader2,
+  Clock,
+  AlertTriangle,
+  X,
 } from 'lucide-react';
 import { useShop } from '../context/ShopContext';
 import { AlluraLogo } from '../components/common/AlluraLogo';
-import type { CartItem } from '../types';
+import { CartSkeleton } from '../components/ui/CartSkeleton';
+import { CouponInput } from '../components/common/CouponInput';
+import {
+  createCheckout,
+  newIdempotencyKey,
+  checkoutErrorMessage,
+} from '../service/checkout';
+import { isCouponError } from '../service/coupons';
+import { computeOrderTotal } from '../utils/pricing';
+import type { CheckoutRequest, CheckoutSession } from '../service/checkout';
+import type { CartItem, SavedAddress } from '../types';
+import { useOrderPayment } from '../hooks/useOrderPayment';
+import { useCartShippingPreview } from '../hooks/useCartShippingPreview';
+import { newMetaEventId, metaHeaders, trackMetaEvent } from '../utils/metaPixel';
+import { normalizeMobile, normalizePincode, mobileError, pincodeError } from '../utils/addressValidation';
+
+type DeliveryMethod = 'STANDARD' | 'STORE_PICKUP';
+type PaymentMethod = 'upi' | 'card' | 'cod';
+
+const PAYMENT_LABELS: Record<PaymentMethod, string> = {
+  upi: 'UPI',
+  card: 'Card',
+  cod: 'Cash on Delivery',
+};
+
+const EMPTY_ADDRESS = {
+  label: 'Home',
+  fullName: '',
+  phone: '',
+  addressLine1: '',
+  addressLine2: '',
+  landmark: '',
+  city: '',
+  state: '',
+  postalCode: '',
+};
+
+const formatAddress = (a: SavedAddress) =>
+  [a.addressLine1, a.addressLine2, a.landmark, a.city, a.state].filter(Boolean).join(', ') + (a.postalCode ? ` - ${a.postalCode}` : '');
+
+const inputClass =
+  'w-full bg-allura-bg border border-allura-border rounded p-3 text-xs text-allura-text focus:outline-none focus:border-allura-gold';
+
+const linePrice = (i: CartItem) => (i.unitPrice ?? i.product.price) * i.quantity;
 
 export const CheckoutPage: React.FC = () => {
-  const { cart, cartSubtotal, freeShippingRemaining, formatPrice, placeOrder } = useShop();
+  const {
+    customer,
+    cart,
+    isCartLoading,
+    cartId,
+    cartSubtotal,
+    formatPrice,
+    appliedCoupon,
+    couponDiscount,
+    isApplyingCoupon,
+    removeCoupon,
+    fetchCustomerAddresses,
+    addCustomerAddress,
+    clearCart,
+    refreshCart,
+    refreshOrders,
+  } = useShop();
 
-  const [email, setEmail] = useState('ananya.kerala@example.com');
-  const [phone, setPhone] = useState('+91 98471 23456');
-  const [firstName, setFirstName] = useState('Ananya');
-  const [lastName, setLastName] = useState('Menon');
-  const [address, setAddress] = useState('Near Jubilee Hospital, Ooty Road');
-  const [city, setCity] = useState('Perinthalmanna');
-  const [district, setDistrict] = useState('Malappuram');
-  const [pincode, setPincode] = useState('679322');
-  const [deliveryMethod, setDeliveryMethod] = useState<'standard' | 'pickup'>('standard');
-  const [paymentMethod, setPaymentMethod] = useState<'upi' | 'card' | 'cod'>('upi');
+  // ── Items in this order: the whole bag, minus what the customer removes here
+  //    (removed items stay in the bag) ─────────────────────────────────────
+  const [excludedIds, setExcludedIds] = useState<string[]>([]);
 
-  const [isOrderPlaced, setIsOrderPlaced] = useState(false);
-  const [orderNumber, setOrderNumber] = useState('');
+  const orderItems = cart.filter(i => !i.id || !excludedIds.includes(i.id));
+  const setAsideItems = cart.filter(i => i.id && excludedIds.includes(i.id));
+  const isPartial = setAsideItems.length > 0 && orderItems.length > 0;
+  const selectedIdsKey = isPartial ? orderItems.map(i => i.id).filter(Boolean).join(',') : '';
+  const orderSubtotal = isPartial ? orderItems.reduce((sum, i) => sum + linePrice(i), 0) : cartSubtotal;
 
-  const finalShipping = deliveryMethod === 'pickup' ? 0 : (freeShippingRemaining === 0 ? 0 : 150);
-  const finalTotal = cartSubtotal + finalShipping;
+  const removeFromOrder = (id?: string) => {
+    if (id && orderItems.length > 1) setExcludedIds(prev => [...prev, id]);
+  };
+  const addBackToOrder = (id?: string) => setExcludedIds(prev => prev.filter(x => x !== id));
 
-  const keralaDistricts = [
-    'Malappuram',
-    'Kozhikode',
-    'Palakkad',
-    'Thrissur',
-    'Ernakulam',
-    'Wayanad',
-    'Kannur',
-    'Kasaragod',
-    'Kottayam',
-    'Alappuzha',
-    'Idukki',
-    'Pathanamthitta',
-    'Kollam',
-    'Thiruvananthapuram',
-  ];
+  // Online payment (Razorpay) after the order is created
+  const { payForOrder, isPaying } = useOrderPayment();
+  const [paymentState, setPaymentState] = useState<'idle' | 'paid' | 'cod' | 'pending'>('idle');
+  const [paymentMessage, setPaymentMessage] = useState('');
 
-  const [createdOrderObj, setCreatedOrderObj] = useState<any>(null);
+  const addresses = useMemo(() => customer?.addresses || [], [customer?.addresses]);
 
-  const handlePlaceOrder = (e: React.FormEvent) => {
-    e.preventDefault();
-    const created = placeOrder({
-      customer: {
-        id: 'cust-1',
-        name: `${firstName} ${lastName}`,
-        email,
-        phone,
+  // ── Address selection ────────────────────────────────────────────────────
+  const [selectedAddressId, setSelectedAddressId] = useState<string>('');
+  const [isAddingAddress, setIsAddingAddress] = useState(false);
+  const [newAddress, setNewAddress] = useState(EMPTY_ADDRESS);
+  const [isSavingAddress, setIsSavingAddress] = useState(false);
+
+  const [deliveryMethod] = useState<DeliveryMethod>('STANDARD');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('upi');
+
+  // Load saved addresses once
+  useEffect(() => {
+    fetchCustomerAddresses();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Pick the default address (or show the form when there are none)
+  useEffect(() => {
+    if (selectedAddressId && addresses.some(a => a.id === selectedAddressId)) return;
+    const preferred = addresses.find(a => a.isDefaultShipping) || addresses[0];
+    if (preferred) {
+      setSelectedAddressId(preferred.id);
+      setIsAddingAddress(false);
+    } else {
+      setIsAddingAddress(true);
+    }
+  }, [addresses, selectedAddressId]);
+
+  // Prefill the new-address form with the customer's details
+  useEffect(() => {
+    if (!customer) return;
+    setNewAddress(prev => ({
+      ...prev,
+      fullName: prev.fullName || customer.name || '',
+      phone: prev.phone || normalizeMobile(typeof customer.phone === 'string' ? customer.phone : ''),
+    }));
+  }, [customer]);
+
+  const selectedAddress = addresses.find(a => a.id === selectedAddressId);
+
+  // ── Server-side preview ──────────────────────────────────────────────────
+  const cartItemIds = useMemo(
+    () => (selectedIdsKey ? selectedIdsKey.split(',') : undefined),
+    [selectedIdsKey]
+  );
+  const { summary, previewError, resolvedShipping, isShippingLoading } = useCartShippingPreview(
+    Boolean(selectedAddressId) && !isAddingAddress && orderItems.length > 0,
+    {
+      addressId: selectedAddressId || undefined,
+      shippingMethod: deliveryMethod,
+      cartItemIds,
+      skipWhenFreeShipping: false,
+      debounceMs: 350,
+      skipAddressFetch: true,
+      preserveSummaryOnError: true,
+    }
+  );
+  const cartSignature = cart.map(i => `${i.id}:${i.quantity}`).join(',');
+
+  // ── Create checkout ──────────────────────────────────────────────────────
+  const [isPlacing, setIsPlacing] = useState(false);
+  const [placeError, setPlaceError] = useState<string | null>(null);
+  const [session, setSession] = useState<CheckoutSession | null>(null);
+
+  const startPayment = async (created: CheckoutSession, retry = false) => {
+    const outcome = await payForOrder(created.orderId, {
+      retry,
+      purchase: {
+        value: created.summary.total,
+        currency: created.summary.currency || 'INR',
+        num_items: created.summary.items.reduce((n, i) => n + i.quantity, 0) || undefined,
+        content_ids: created.summary.items.map(i => i.sku || i.productId || '').filter(Boolean),
+        content_type: 'product',
       },
-      shippingAddress: {
-        id: 'addr-new',
-        name: `${firstName} ${lastName}`,
-        phone,
-        addressLine1: address,
-        city,
-        district,
-        state: 'Kerala',
-        pincode,
-        type: 'Home',
+      description: created.orderNumber ? `Order ${created.orderNumber}` : 'Allura order',
+      prefill: {
+        name: customer?.name,
+        email: customer?.email,
+        contact: typeof customer?.phone === 'string' ? customer.phone.replace(/\s+/g, '') : undefined,
       },
-      paymentMethod: paymentMethod === 'upi' ? 'UPI' : paymentMethod === 'card' ? 'Card' : 'COD',
     });
+    if (outcome.ok === false) {
+      setPaymentState('pending');
+      setPaymentMessage(outcome.message);
+    } else {
+      setPaymentState('paid');
+      setPaymentMessage('');
+    }
+    refreshOrders();
+    refreshCart(); // the backend removes the ordered items; anything set aside stays
+  };
+  // Same key for retries of the same attempt; a new one when anything changes
+  const idempotency = useRef<{ signature: string; key: string; metaEventId: string } | null>(null);
 
-    setCreatedOrderObj(created);
-    setOrderNumber(created.orderNumber);
-    setIsOrderPlaced(true);
+  // Mobile / PIN errors show once the field is left or the address is submitted
+  const [addrTouched, setAddrTouched] = useState({ phone: false, postalCode: false });
+  const newPhoneError = mobileError(newAddress.phone);
+  const newPinError = pincodeError(newAddress.postalCode);
+
+  const saveNewAddress = async (): Promise<string | null> => {
+    const a = newAddress;
+    if (!a.fullName.trim() || !a.phone.trim() || !a.addressLine1.trim() || !a.city.trim() || !a.state.trim() || !a.postalCode.trim()) {
+      setAddrTouched({ phone: true, postalCode: true });
+      setPlaceError('Please fill in all required address fields.');
+      return null;
+    }
+    if (newPhoneError || newPinError) {
+      setAddrTouched({ phone: true, postalCode: true });
+      setPlaceError(newPhoneError || newPinError);
+      return null;
+    }
+    setPlaceError(null);
+    setIsSavingAddress(true);
+    try {
+      const saved = await addCustomerAddress({
+        label: a.label,
+        fullName: a.fullName.trim(),
+        phone: { countryCode: '+91', number: normalizeMobile(a.phone) },
+        addressLine1: a.addressLine1.trim(),
+        ...(a.addressLine2.trim() ? { addressLine2: a.addressLine2.trim() } : {}),
+        ...(a.landmark.trim() ? { landmark: a.landmark.trim() } : {}),
+        city: a.city.trim(),
+        state: a.state.trim(),
+        postalCode: a.postalCode.trim(),
+        country: 'India',
+        isDefaultShipping: addresses.length === 0,
+        isDefaultBilling: addresses.length === 0,
+      });
+      if (!saved?.id) return null;
+      setSelectedAddressId(saved.id);
+      setIsAddingAddress(false);
+      setNewAddress({ ...EMPTY_ADDRESS, fullName: a.fullName, phone: a.phone });
+      return saved.id;
+    } catch {
+      return null; // toast shown by the context
+    } finally {
+      setIsSavingAddress(false);
+    }
   };
 
-  if (isOrderPlaced) {
+  const handlePlaceOrder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPlaceError(null);
+    if (!cartId) {
+      setPlaceError('Your bag is still loading. Please try again in a moment.');
+      return;
+    }
+
+    let addressId = selectedAddressId;
+    if (isAddingAddress) {
+      const saved = await saveNewAddress();
+      if (!saved) return;
+      addressId = saved;
+    }
+    if (!addressId) {
+      setPlaceError('Please choose a delivery address.');
+      return;
+    }
+
+    const req: CheckoutRequest = {
+      cartId,
+      addressId,
+      couponCode: appliedCoupon?.code,
+      shippingMethod: deliveryMethod,
+      cartItemIds: selectedIdsKey ? selectedIdsKey.split(',') : undefined,
+    };
+    const signature = JSON.stringify({ req, cartSignature });
+    if (!idempotency.current || idempotency.current.signature !== signature) {
+      // A retry of the same attempt reuses both keys, so Meta also sees it as one event
+      idempotency.current = { signature, key: newIdempotencyKey(), metaEventId: newMetaEventId() };
+    }
+    const metaEventId = idempotency.current.metaEventId;
+
+    setIsPlacing(true);
+    try {
+      const created = await createCheckout(req, idempotency.current.key, metaHeaders(metaEventId));
+      setSession(created);
+      trackMetaEvent(
+        'InitiateCheckout',
+        {
+          value: created.summary.total || display.total,
+          currency: created.summary.currency || 'INR',
+          num_items: orderItems.reduce((n, i) => n + i.quantity, 0),
+          content_ids: orderItems.map(i => i.product.sku || i.product.id),
+          content_type: 'product',
+        },
+        metaEventId
+      );
+      // The order now holds these items, so they leave the bag (payment, if still pending, is
+      // completed on the order itself). With some items set aside, the backend removes only the
+      // ordered ones, so reload the bag instead of emptying it.
+      if (isPartial) refreshCart();
+      else clearCart();
+      if (paymentMethod === 'cod') {
+        setPaymentState('cod');
+        refreshOrders();
+      } else {
+        await startPayment(created);
+      }
+    } catch (err: any) {
+      const status = err?.response?.status;
+      if (req.couponCode && isCouponError(err)) {
+        // Rejected at order time (e.g. someone else used up the last redemption): nothing was
+        // charged — drop the coupon and let the totals recalculate without it.
+        const message = checkoutErrorMessage(err, 'Your coupon could not be applied');
+        removeCoupon(`${message}. The coupon was removed — please review your total and place the order again.`);
+        setPlaceError(null);
+      } else {
+        setPlaceError(
+          status === 409
+            ? checkoutErrorMessage(err, 'Some items were just reserved by another shopper or this order is already being processed. Please review your bag and try again.')
+            : checkoutErrorMessage(err, 'Could not place your order. Please try again.')
+        );
+      }
+    } finally {
+      setIsPlacing(false);
+    }
+  };
+
+  // ── Totals ────────────────────────────────────────────────────────────────
+  // The coupon's own discount (from the cart's /coupons/validate call, via ShopContext)
+  // updates in the same tick as `appliedCoupon` — instantly, no network round trip. The
+  // server preview (/checkout/preview) is more authoritative (it also knows tax, shipping
+  // and per-item promotions) but runs on a debounce and lags a beat behind. Rather than
+  // block the UI on that lag, trust the instant coupon discount until the preview catches
+  // up to the SAME coupon state, then prefer the server's full numbers.
+  const estimatedShipping = resolvedShipping ?? 0;
+  const effectiveCoupon = isPartial ? 0 : couponDiscount; // the preview prices the selected items only
+  const summaryMatchesCoupon = !!summary && (summary.couponCode || undefined) === (appliedCoupon?.code || undefined);
+
+  const display = summary
+    ? {
+      subtotal: summary.subtotal,
+      productDiscount: summary.productDiscount,
+      promotionDiscount: summary.promotionDiscount,
+      couponDiscount: summaryMatchesCoupon ? summary.couponDiscount : effectiveCoupon,
+      shipping: summary.shippingAmount,
+      tax: summary.taxAmount,
+      total: summaryMatchesCoupon
+        ? summary.total
+        : computeOrderTotal(
+          summary.subtotal - summary.productDiscount - summary.promotionDiscount,
+          effectiveCoupon,
+          summary.shippingAmount + summary.taxAmount
+        ),
+    }
+    : {
+      subtotal: orderSubtotal,
+      productDiscount: 0,
+      promotionDiscount: 0,
+      couponDiscount: effectiveCoupon,
+      shipping: estimatedShipping,
+      tax: 0,
+      total: computeOrderTotal(orderSubtotal, effectiveCoupon, estimatedShipping),
+    };
+  const isEstimate = !summary;
+  // Until the backend supports cartItemIds it prices the whole bag: never let that be ordered
+  const orderIdSet = new Set(orderItems.map(i => i.id));
+  const selectionError =
+    summary && isPartial &&
+      (summary.items.some(l => l.cartItemId && !orderIdSet.has(l.cartItemId)) || summary.items.length > orderItems.length)
+      ? "Removing items from checkout isn't available yet. Please add the items back, or remove them from your bag instead."
+      : null;
+
+  // The backend priced one or more items at ₹0: don't allow placing the order
+  const unpricedLines = summary ? summary.items.filter(l => l.quantity > 0 && l.unitPrice <= 0) : [];
+  const pricingError =
+    summary && cart.length > 0 && (summary.subtotal <= 0 || unpricedLines.length > 0)
+      ? `We couldn't get the price for ${unpricedLines.length > 0 ? unpricedLines.map(l => l.sku || 'an item').join(', ') : 'your items'
+      }. Please try again shortly or contact us on WhatsApp.`
+      : null;
+
+  // ── Confirmation ─────────────────────────────────────────────────────────
+  if (session && (isPaying || paymentState === 'idle')) {
+    return (
+      <div className="max-w-md mx-auto px-6 py-24 flex flex-col items-center gap-4 text-center">
+        <Loader2 size={32} className="animate-spin text-allura-goldDark" />
+        <h2 className="font-serif text-2xl text-allura-text">Completing your payment…</h2>
+        <p className="text-xs font-sans text-allura-muted">
+          Finish the payment in the secure Razorpay window. Please don't close or refresh this page.
+        </p>
+      </div>
+    );
+  }
+
+  if (session) {
+    const s = session.summary;
+    const isPending = paymentState === 'pending';
+    const reference = session.orderNumber || session.orderId || session.checkoutId;
     return (
       <div className="max-w-2xl mx-auto px-6 py-16 text-center space-y-6 animate-slide-up">
-        <div className="w-20 h-20 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 mx-auto animate-pulse-subtle">
-          <CheckCircle2 size={40} />
+        <div
+          className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto ${isPending ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
+            }`}
+        >
+          {isPending ? <AlertTriangle size={38} /> : <CheckCircle2 size={40} />}
         </div>
 
         <span className="text-[11px] font-sans font-bold tracking-[0.3em] uppercase text-allura-goldDark">
-          ORDER CONFIRMED
+          {paymentState === 'paid' ? 'PAYMENT SUCCESSFUL' : paymentState === 'cod' ? 'ORDER PLACED' : 'PAYMENT PENDING'}
         </span>
 
         <h1 className="font-serif text-3xl sm:text-4xl text-allura-text font-normal uppercase tracking-tight">
-          THANK YOU FOR YOUR ORDER
+          {isPending ? 'YOUR ORDER IS SAVED' : 'THANK YOU FOR YOUR ORDER'}
         </h1>
+
+        {isPending && paymentMessage && (
+          <p className="text-xs font-sans text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-3">{paymentMessage}</p>
+        )}
 
         <div className="bg-allura-card border border-allura-border rounded-xl p-6 text-left space-y-4 shadow-subtle">
           <div className="flex justify-between items-center pb-3 border-b border-allura-border/60">
             <div>
               <p className="text-[11px] font-sans text-allura-muted uppercase tracking-wider">Order Reference</p>
-              <p className="font-serif text-lg font-bold text-allura-darkBrown">{orderNumber}</p>
+              <p className="font-mono text-sm font-bold text-allura-darkBrown break-all">{reference}</p>
             </div>
-            <span className="text-xs bg-emerald-100 text-emerald-800 font-semibold px-2.5 py-1 rounded">
-              Payment Successful
+            <span
+              className={`text-xs font-semibold px-2.5 py-1 rounded uppercase ${paymentState === 'paid' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                }`}
+            >
+              {paymentState === 'paid' ? 'Paid' : paymentState === 'cod' ? 'Pay on delivery' : 'Awaiting payment'}
             </span>
           </div>
 
           <div className="text-xs font-sans text-allura-muted space-y-1">
-            <p><strong>Deliver To:</strong> {firstName} {lastName}, {address}, {city}, {district} - {pincode}</p>
-            <p><strong>Contact:</strong> {phone} • {email}</p>
-            <p><strong>Total Paid:</strong> <strong className="text-allura-darkBrown">{formatPrice(finalTotal)}</strong></p>
+            {selectedAddress && (
+              <p><strong>Deliver To:</strong> {selectedAddress.fullName}, {formatAddress(selectedAddress)}</p>
+            )}
+            <p><strong>Items:</strong> {s.items.reduce((a, i) => a + i.quantity, 0) || orderItems.reduce((a, i) => a + i.quantity, 0)}</p>
+            <p><strong>Payment:</strong> {PAYMENT_LABELS[paymentMethod]}</p>
+            <p><strong>Total:</strong> <strong className="text-allura-darkBrown">{formatPrice(s.total)}</strong></p>
           </div>
 
           <div className="p-3 bg-allura-bgSecondary/60 rounded-lg text-xs font-sans text-allura-text flex items-center gap-2">
-            <Sparkles size={16} className="text-allura-gold flex-shrink-0" />
-            <span>Order details & invoice have been sent to your WhatsApp and email.</span>
+            <Clock size={16} className="text-allura-gold flex-shrink-0" />
+            <span>
+              {paymentState === 'paid'
+                ? "Payment received. We'll confirm and dispatch your order shortly."
+                : paymentState === 'cod'
+                  ? 'Please keep the amount ready. You can pay in cash or UPI when your order arrives.'
+                  : 'Your items are reserved for a limited time. Complete the payment to confirm your order.'}
+            </span>
           </div>
         </div>
 
         <div className="pt-4 flex flex-wrap gap-3 justify-center">
-          {createdOrderObj && (
-            <Link
-              to={`/account/orders/${createdOrderObj.id}/tracking`}
-              className="bg-allura-goldDark hover:bg-allura-darkBrown text-allura-card text-xs font-sans font-bold tracking-[0.2em] uppercase py-3.5 px-6 rounded-xl transition-all flex items-center gap-2 shadow-sm"
+          {isPending && (
+            <button
+              type="button"
+              onClick={() => startPayment(session, true)}
+              disabled={isPaying}
+              className="bg-allura-goldDark hover:bg-allura-darkBrown text-allura-card text-xs font-sans font-bold tracking-[0.2em] uppercase py-3.5 px-6 rounded-xl transition-all flex items-center gap-2 disabled:opacity-60"
             >
-              <span>TRACK LIVE SHIPMENT</span>
-            </Link>
+              <Lock size={14} />
+              <span>PAY NOW · {formatPrice(s.total)}</span>
+            </button>
           )}
           <Link
             to="/account/orders"
@@ -133,8 +462,14 @@ export const CheckoutPage: React.FC = () => {
           >
             MY ORDERS
           </Link>
+          <Link
+            to="/shop"
+            className="border border-allura-border hover:bg-allura-bgSecondary text-allura-text text-xs font-sans font-bold tracking-[0.2em] uppercase py-3.5 px-6 rounded-xl transition-all"
+          >
+            CONTINUE SHOPPING
+          </Link>
           <a
-            href={`https://wa.me/919037991774?text=Hello%20Allura%2C%20I%20have%20placed%20order%20${orderNumber}.%20Please%20confirm%20tracking%20details.`}
+            href={`https://wa.me/919037991774?text=${encodeURIComponent(`Hello Allura, I have placed order ${reference}. Please help me with my order.`)}`}
             target="_blank"
             rel="noopener noreferrer"
             className="bg-[#25D366] text-white text-xs font-sans font-bold tracking-[0.2em] uppercase py-3.5 px-6 rounded-xl transition-all flex items-center justify-center gap-2 shadow-sm"
@@ -144,6 +479,10 @@ export const CheckoutPage: React.FC = () => {
         </div>
       </div>
     );
+  }
+
+  if (isCartLoading && cart.length === 0) {
+    return <CartSkeleton />;
   }
 
   if (cart.length === 0) {
@@ -160,6 +499,8 @@ export const CheckoutPage: React.FC = () => {
       </div>
     );
   }
+
+  const busy = isPlacing || isSavingAddress || isPaying;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 space-y-8">
@@ -181,310 +522,371 @@ export const CheckoutPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Main Grid: Form (7 cols) + Order Summary (5 cols) */}
       <form onSubmit={handlePlaceOrder} className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
         <div className="lg:col-span-7 space-y-8">
-          {/* Section 1: Contact Information */}
-          <div className="bg-allura-card p-6 sm:p-8 rounded-2xl border border-allura-border shadow-xs space-y-4">
-            <h3 className="font-serif text-lg font-semibold uppercase text-allura-text tracking-wide flex items-center gap-2">
-              <span>1. Contact Details</span>
-            </h3>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-allura-darkBrown uppercase">Email Address *</label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  required
-                  className="w-full bg-allura-bg border border-allura-border rounded p-3 text-xs text-allura-text focus:outline-none focus:border-allura-gold"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-allura-darkBrown uppercase">WhatsApp / Phone *</label>
-                <input
-                  type="tel"
-                  value={phone}
-                  onChange={e => setPhone(e.target.value)}
-                  required
-                  className="w-full bg-allura-bg border border-allura-border rounded p-3 text-xs text-allura-text focus:outline-none focus:border-allura-gold"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Section 2: Delivery Address */}
-          <div className="bg-allura-card p-6 sm:p-8 rounded-2xl border border-allura-border shadow-xs space-y-4">
-            <h3 className="font-serif text-lg font-semibold uppercase text-allura-text tracking-wide">
-              2. Shipping Address
-            </h3>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-allura-darkBrown uppercase">First Name *</label>
-                <input
-                  type="text"
-                  value={firstName}
-                  onChange={e => setFirstName(e.target.value)}
-                  required
-                  className="w-full bg-allura-bg border border-allura-border rounded p-3 text-xs text-allura-text focus:outline-none focus:border-allura-gold"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-allura-darkBrown uppercase">Last Name *</label>
-                <input
-                  type="text"
-                  value={lastName}
-                  onChange={e => setLastName(e.target.value)}
-                  required
-                  className="w-full bg-allura-bg border border-allura-border rounded p-3 text-xs text-allura-text focus:outline-none focus:border-allura-gold"
-                />
-              </div>
+          {/* Section 1: Delivery Address */}
+          <div className="bg-allura-card p-4 sm:p-8 rounded-xl sm:rounded-2xl border border-allura-border shadow-xs space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-serif text-lg font-semibold uppercase text-allura-text tracking-wide">
+                1. Delivery Address
+              </h3>
+              {customer?.email && <span className="text-[11px] text-allura-muted">{customer.email}</span>}
             </div>
 
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-allura-darkBrown uppercase">Street Address / House *</label>
-              <input
-                type="text"
-                value={address}
-                onChange={e => setAddress(e.target.value)}
-                required
-                className="w-full bg-allura-bg border border-allura-border rounded p-3 text-xs text-allura-text focus:outline-none focus:border-allura-gold"
-              />
-            </div>
+            {addresses.length > 0 && (
+              <div className="space-y-2.5">
+                {addresses.map(addr => {
+                  const active = !isAddingAddress && selectedAddressId === addr.id;
+                  return (
+                    <label
+                      key={addr.id}
+                      className={`flex items-start gap-3 p-4 rounded-xl border cursor-pointer transition-all ${active ? 'border-allura-gold bg-allura-bgSecondary/40 ring-1 ring-allura-gold' : 'border-allura-border bg-allura-bg'
+                        }`}
+                    >
+                      <input
+                        type="radio"
+                        name="address"
+                        checked={active}
+                        onChange={() => {
+                          setSelectedAddressId(addr.id);
+                          setIsAddingAddress(false);
+                        }}
+                        className="accent-allura-goldDark mt-0.5"
+                      />
+                      <div className="text-xs space-y-0.5">
+                        <p className="font-bold text-allura-text">
+                          {addr.fullName}
+                          <span className="ml-2 text-[10px] font-semibold uppercase text-allura-goldDark">{addr.label}</span>
+                          {addr.isDefaultShipping && <span className="ml-2 text-[10px] text-allura-muted">Default</span>}
+                        </p>
+                        <p className="text-allura-muted">{formatAddress(addr)}</p>
+                        <p className="text-allura-muted">{addr.phone?.countryCode} {addr.phone?.number}</p>
+                      </div>
+                    </label>
+                  );
+                })}
 
-            <div className="grid grid-cols-3 gap-3">
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-allura-darkBrown uppercase">City / Town</label>
-                <input
-                  type="text"
-                  value={city}
-                  onChange={e => setCity(e.target.value)}
-                  required
-                  className="w-full bg-allura-bg border border-allura-border rounded p-3 text-xs text-allura-text focus:outline-none focus:border-allura-gold"
-                />
+                {!isAddingAddress && (
+                  <button
+                    type="button"
+                    onClick={() => setIsAddingAddress(true)}
+                    className="w-full p-3 rounded-xl border border-dashed border-allura-border text-xs font-semibold text-allura-goldDark hover:border-allura-gold flex items-center justify-center gap-1.5"
+                  >
+                    <Plus size={14} /> Deliver to a new address
+                  </button>
+                )}
               </div>
+            )}
 
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-allura-darkBrown uppercase">District</label>
-                <select
-                  value={district}
-                  onChange={e => setDistrict(e.target.value)}
-                  className="w-full bg-allura-bg border border-allura-border rounded p-3 text-xs text-allura-text focus:outline-none focus:border-allura-gold"
-                >
-                  {keralaDistricts.map(d => (
-                    <option key={d} value={d}>{d}</option>
+            {isAddingAddress && (
+              <div className="space-y-4 pt-1">
+                {addresses.length > 0 && (
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-bold text-allura-darkBrown uppercase flex items-center gap-1.5">
+                      <MapPin size={13} /> New Address
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setIsAddingAddress(false)}
+                      className="text-[11px] text-allura-muted underline"
+                    >
+                      Use a saved address
+                    </button>
+                  </div>
+                )}
+
+                <div className="flex gap-2">
+                  {['Home', 'Work', 'Other'].map(l => (
+                    <button
+                      key={l}
+                      type="button"
+                      onClick={() => setNewAddress({ ...newAddress, label: l })}
+                      className={`px-3 py-1.5 rounded-full border text-[11px] font-semibold ${newAddress.label === l ? 'border-allura-goldDark bg-allura-gold/15 text-allura-goldDark' : 'border-allura-border text-allura-muted'
+                        }`}
+                    >
+                      {l}
+                    </button>
                   ))}
-                </select>
-              </div>
+                </div>
 
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-allura-darkBrown uppercase">Pincode</label>
-                <input
-                  type="text"
-                  value={pincode}
-                  onChange={e => setPincode(e.target.value)}
-                  required
-                  className="w-full bg-allura-bg border border-allura-border rounded p-3 text-xs text-allura-text focus:outline-none focus:border-allura-gold"
-                />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-allura-darkBrown uppercase">Full Name *</label>
+                    <input type="text" required value={newAddress.fullName} onChange={e => setNewAddress({ ...newAddress, fullName: e.target.value })} className={inputClass} />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-allura-darkBrown uppercase">Mobile Number *</label>
+                    <div className={`flex items-center bg-allura-bg border rounded focus-within:border-allura-gold ${addrTouched.phone && newPhoneError ? 'border-red-400' : 'border-allura-border'}`}>
+                      <span className="pl-3 pr-1 text-xs text-allura-muted">+91</span>
+                      <input
+                        type="tel"
+                        inputMode="numeric"
+                        autoComplete="tel-national"
+                        required
+                        maxLength={10}
+                        placeholder="10-digit mobile number"
+                        value={newAddress.phone}
+                        onChange={e => setNewAddress({ ...newAddress, phone: normalizeMobile(e.target.value) })}
+                        onBlur={() => setAddrTouched(t => ({ ...t, phone: true }))}
+                        aria-invalid={addrTouched.phone && !!newPhoneError}
+                        className="flex-1 min-w-0 bg-transparent p-3 pl-1 text-xs text-allura-text focus:outline-none"
+                      />
+                    </div>
+                    {addrTouched.phone && newPhoneError && <p className="text-[11px] text-red-600">{newPhoneError}</p>}
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-allura-darkBrown uppercase">House / Street *</label>
+                  <input type="text" required value={newAddress.addressLine1} onChange={e => setNewAddress({ ...newAddress, addressLine1: e.target.value })} className={inputClass} />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-allura-darkBrown uppercase">Area / Locality</label>
+                    <input type="text" value={newAddress.addressLine2} onChange={e => setNewAddress({ ...newAddress, addressLine2: e.target.value })} className={inputClass} />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-allura-darkBrown uppercase">Landmark</label>
+                    <input type="text" value={newAddress.landmark} onChange={e => setNewAddress({ ...newAddress, landmark: e.target.value })} className={inputClass} />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-allura-darkBrown uppercase">City *</label>
+                    <input type="text" required value={newAddress.city} onChange={e => setNewAddress({ ...newAddress, city: e.target.value })} className={inputClass} />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-allura-darkBrown uppercase">State *</label>
+                    <input type="text" required value={newAddress.state} onChange={e => setNewAddress({ ...newAddress, state: e.target.value })} className={inputClass} />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-allura-darkBrown uppercase">PIN Code *</label>
+                    <input
+                      type="text"
+                      required
+                      inputMode="numeric"
+                      autoComplete="postal-code"
+                      maxLength={6}
+                      placeholder="6 digits"
+                      value={newAddress.postalCode}
+                      onChange={e => setNewAddress({ ...newAddress, postalCode: normalizePincode(e.target.value) })}
+                      onBlur={() => setAddrTouched(t => ({ ...t, postalCode: true }))}
+                      aria-invalid={addrTouched.postalCode && !!newPinError}
+                      className={`${inputClass} ${addrTouched.postalCode && newPinError ? '!border-red-400' : ''}`}
+                    />
+                    {addrTouched.postalCode && newPinError && <p className="text-[11px] text-red-600">{newPinError}</p>}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-[11px] text-allura-muted">The address is saved to your account for faster checkout.</p>
+                  <button
+                    type="button"
+                    onClick={saveNewAddress}
+                    disabled={isSavingAddress}
+                    className="px-4 py-2 border border-allura-goldDark text-allura-goldDark rounded text-[11px] font-bold uppercase tracking-wider disabled:opacity-50 flex items-center gap-1.5"
+                  >
+                    {isSavingAddress && <Loader2 size={12} className="animate-spin" />}
+                    Save & Use
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
-          {/* Section 3: Delivery Options */}
-          <div className="bg-allura-card p-6 sm:p-8 rounded-2xl border border-allura-border shadow-xs space-y-4">
+          {/* Section 2: Payment Method */}
+          <div className="bg-allura-card p-4 sm:p-8 rounded-xl sm:rounded-2xl border border-allura-border shadow-xs space-y-4">
             <h3 className="font-serif text-lg font-semibold uppercase text-allura-text tracking-wide">
-              3. Delivery Method
+              2. Payment Method
             </h3>
 
             <div className="space-y-2.5">
-              <label
-                className={`flex items-center justify-between p-4 rounded-xl border cursor-pointer transition-all ${
-                  deliveryMethod === 'standard'
+              {([
+                ['upi', QrCode, 'UPI / QR Code / Instant Transfer', 'Google Pay, PhonePe, Paytm, BHIM'],
+              ] as const).map(([value, Icon, title, subtitle]) => (
+                <label
+                  key={value}
+                  className={`flex items-center justify-between p-4 rounded-xl border cursor-pointer transition-all ${paymentMethod === value
                     ? 'border-allura-gold bg-allura-bgSecondary/40 ring-1 ring-allura-gold'
                     : 'border-allura-border bg-allura-bg'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <input
-                    type="radio"
-                    name="delivery"
-                    checked={deliveryMethod === 'standard'}
-                    onChange={() => setDeliveryMethod('standard')}
-                    className="accent-allura-goldDark"
-                  />
-                  <div>
-                    <p className="text-xs font-bold text-allura-text">Standard Courier (Kerala & All India)</p>
-                    <p className="text-[11px] text-allura-muted">Dispatches in 24 hours, delivered in 2-4 days</p>
-                  </div>
-                </div>
-                <span className="text-xs font-bold text-allura-darkBrown">
-                  {freeShippingRemaining === 0 ? 'FREE' : '₹ 150'}
-                </span>
-              </label>
-
-              <label
-                className={`flex items-center justify-between p-4 rounded-xl border cursor-pointer transition-all ${
-                  deliveryMethod === 'pickup'
-                    ? 'border-allura-gold bg-allura-bgSecondary/40 ring-1 ring-allura-gold'
-                    : 'border-allura-border bg-allura-bg'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <input
-                    type="radio"
-                    name="delivery"
-                    checked={deliveryMethod === 'pickup'}
-                    onChange={() => setDeliveryMethod('pickup')}
-                    className="accent-allura-goldDark"
-                  />
-                  <div>
-                    <p className="text-xs font-bold text-allura-text">In-Store Pickup (Perinthalmanna Salon)</p>
-                    <p className="text-[11px] text-allura-muted">Ready for pickup today at Ooty Road boutique</p>
-                  </div>
-                </div>
-                <span className="text-xs font-bold text-emerald-700">FREE</span>
-              </label>
-            </div>
-          </div>
-
-          {/* Section 4: Payment Method */}
-          <div className="bg-allura-card p-6 sm:p-8 rounded-2xl border border-allura-border shadow-xs space-y-4">
-            <h3 className="font-serif text-lg font-semibold uppercase text-allura-text tracking-wide">
-              4. Payment Method
-            </h3>
-
-            <div className="space-y-2.5">
-              <label
-                className={`flex items-center justify-between p-4 rounded-xl border cursor-pointer transition-all ${
-                  paymentMethod === 'upi'
-                    ? 'border-allura-gold bg-allura-bgSecondary/40 ring-1 ring-allura-gold'
-                    : 'border-allura-border bg-allura-bg'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <input
-                    type="radio"
-                    name="payment"
-                    checked={paymentMethod === 'upi'}
-                    onChange={() => setPaymentMethod('upi')}
-                    className="accent-allura-goldDark"
-                  />
-                  <div className="flex items-center gap-2">
-                    <QrCode size={18} className="text-allura-goldDark" />
-                    <div>
-                      <p className="text-xs font-bold text-allura-text">UPI / QR Code / Instant Transfer</p>
-                      <p className="text-[11px] text-allura-muted">Google Pay, PhonePe, Paytm, BHIM</p>
+                    }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="radio"
+                      name="payment"
+                      checked={paymentMethod === value}
+                      onChange={() => setPaymentMethod(value)}
+                      className="accent-allura-goldDark"
+                    />
+                    <div className="flex items-center gap-2">
+                      <Icon size={18} className="text-allura-goldDark" />
+                      <div>
+                        <p className="text-xs font-bold text-allura-text">{title}</p>
+                        <p className="text-[11px] text-allura-muted">{subtitle}</p>
+                      </div>
                     </div>
                   </div>
-                </div>
-              </label>
-
-              <label
-                className={`flex items-center justify-between p-4 rounded-xl border cursor-pointer transition-all ${
-                  paymentMethod === 'card'
-                    ? 'border-allura-gold bg-allura-bgSecondary/40 ring-1 ring-allura-gold'
-                    : 'border-allura-border bg-allura-bg'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <input
-                    type="radio"
-                    name="payment"
-                    checked={paymentMethod === 'card'}
-                    onChange={() => setPaymentMethod('card')}
-                    className="accent-allura-goldDark"
-                  />
-                  <div className="flex items-center gap-2">
-                    <CreditCard size={18} className="text-allura-goldDark" />
-                    <div>
-                      <p className="text-xs font-bold text-allura-text">Credit / Debit Card</p>
-                      <p className="text-[11px] text-allura-muted">Visa, MasterCard, RuPay, Amex</p>
-                    </div>
-                  </div>
-                </div>
-              </label>
-
-              <label
-                className={`flex items-center justify-between p-4 rounded-xl border cursor-pointer transition-all ${
-                  paymentMethod === 'cod'
-                    ? 'border-allura-gold bg-allura-bgSecondary/40 ring-1 ring-allura-gold'
-                    : 'border-allura-border bg-allura-bg'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <input
-                    type="radio"
-                    name="payment"
-                    checked={paymentMethod === 'cod'}
-                    onChange={() => setPaymentMethod('cod')}
-                    className="accent-allura-goldDark"
-                  />
-                  <div className="flex items-center gap-2">
-                    <Banknote size={18} className="text-allura-goldDark" />
-                    <div>
-                      <p className="text-xs font-bold text-allura-text">Cash on Delivery</p>
-                      <p className="text-[11px] text-allura-muted">Pay at doorstep upon inspection</p>
-                    </div>
-                  </div>
-                </div>
-              </label>
+                </label>
+              ))}
             </div>
           </div>
         </div>
 
-        {/* Right: Order Summary Sidebar (5 cols) */}
-        <div className="lg:col-span-5 bg-allura-card p-6 sm:p-8 rounded-2xl border border-allura-border shadow-luxury space-y-6 sticky top-24">
+        {/* Right: Order Summary */}
+        <div className="lg:col-span-5 bg-allura-card p-4 sm:p-8 rounded-xl sm:rounded-2xl border border-allura-border shadow-luxury space-y-6 lg:sticky top-24">
           <h3 className="font-serif text-lg font-semibold uppercase tracking-wide text-allura-text border-b border-allura-border pb-3">
-            ORDER ITEMS ({cart.reduce((a: number, b: CartItem) => a + b.quantity, 0)})
+            ORDER ITEMS ({orderItems.reduce((a: number, b: CartItem) => a + b.quantity, 0)})
           </h3>
 
           <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
-            {cart.map((item: CartItem) => (
-              <div
-                key={`${item.product.id}-${item.selectedSize}-${item.selectedColor.name}`}
-                className="flex items-center gap-3"
-              >
-                <img
-                  src={item.product.images.primary}
-                  alt={item.product.name}
-                  className="w-14 h-16 object-cover object-top rounded bg-allura-bgSecondary flex-shrink-0"
-                />
-                <div className="flex-1 text-xs">
-                  <h4 className="font-serif font-medium text-allura-text line-clamp-1">{item.product.name}</h4>
-                  <p className="text-allura-muted">Qty: {item.quantity} • Size: {item.selectedSize} • {item.selectedColor.name}</p>
+            {orderItems.map((item: CartItem) => {
+              const line = summary?.items.find(l => l.cartItemId && l.cartItemId === item.id);
+              const lineTotal = line ? line.finalLineTotal : (item.unitPrice ?? item.product.price) * item.quantity;
+              const meta = [
+                `Qty: ${item.quantity}`,
+                item.selectedSize && `Size: ${item.selectedSize}`,
+                item.selectedColor?.name,
+              ].filter(Boolean).join(' • ');
+              return (
+                <div key={item.id || `${item.product.id}-${item.selectedSize}-${item.selectedColor.name}`} className="flex items-center gap-3">
+                  <img
+                    src={item.product.images.primary}
+                    alt={item.product.name}
+                    className="w-14 h-16 object-cover object-top rounded bg-allura-bgSecondary flex-shrink-0"
+                  />
+                  <div className="flex-1 text-xs">
+                    <h4 className="font-serif font-medium text-allura-text line-clamp-1">{item.product.name}</h4>
+                    <p className="text-allura-muted">{meta}</p>
+                  </div>
+                  <div className="text-right">
+                    <span className="font-serif text-xs font-semibold text-allura-darkBrown">{formatPrice(lineTotal)}</span>
+                    {line && line.productDiscount > 0 && (
+                      <p className="text-[10px] text-allura-muted line-through">{formatPrice(line.lineSubtotal)}</p>
+                    )}
+                  </div>
+                  {orderItems.length > 1 && item.id && (
+                    <button
+                      type="button"
+                      onClick={() => removeFromOrder(item.id)}
+                      disabled={busy}
+                      className="p-1.5 -mr-1.5 rounded-full text-allura-muted hover:text-red-700 hover:bg-allura-bgSecondary transition-colors disabled:opacity-40"
+                      aria-label={`Remove ${item.product.name} from this order`}
+                      title="Remove from this order (stays in your bag)"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
                 </div>
-                <span className="font-serif text-xs font-semibold text-allura-darkBrown">
-                  {formatPrice(item.product.price * item.quantity)}
-                </span>
-              </div>
-            ))}
+              );
+            })}
           </div>
+
+          {setAsideItems.length > 0 && (
+            <div className="rounded-xl border border-dashed border-allura-border p-3 space-y-2">
+              <p className="text-[11px] font-sans font-bold uppercase tracking-wider text-allura-muted">
+                Not in this order · stays in your bag ({setAsideItems.length})
+              </p>
+              {setAsideItems.map(item => (
+                <div key={item.id} className="flex items-center gap-3 opacity-80">
+                  <img
+                    src={item.product.images.primary}
+                    alt={item.product.name}
+                    className="w-9 h-11 object-cover object-top rounded bg-allura-bgSecondary flex-shrink-0 grayscale"
+                  />
+                  <div className="flex-1 min-w-0 text-xs">
+                    <p className="font-serif text-allura-text line-clamp-1">{item.product.name}</p>
+                    <p className="text-[11px] text-allura-muted">
+                      Qty: {item.quantity} · {formatPrice(linePrice(item))}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => addBackToOrder(item.id)}
+                    disabled={busy}
+                    className="text-[11px] font-sans font-semibold text-allura-goldDark hover:text-allura-darkBrown flex items-center gap-1 disabled:opacity-40"
+                  >
+                    <Plus size={12} /> Add back
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
 
           <div className="space-y-2 pt-4 border-t border-allura-border text-xs font-sans text-allura-muted">
             <div className="flex justify-between">
               <span>Subtotal</span>
-              <span className="font-semibold text-allura-text">{formatPrice(cartSubtotal)}</span>
+              <span className="font-semibold text-allura-text">{formatPrice(display.subtotal)}</span>
             </div>
-            <div className="flex justify-between">
+            {display.productDiscount > 0 && (
+              <div className="flex justify-between text-emerald-700 font-semibold">
+                <span>Product Discounts</span>
+                <span>-{formatPrice(display.productDiscount)}</span>
+              </div>
+            )}
+            {display.promotionDiscount > 0 && (
+              <div className="flex justify-between text-emerald-700 font-semibold">
+                <span>Promotion</span>
+                <span>-{formatPrice(display.promotionDiscount)}</span>
+              </div>
+            )}
+            {display.couponDiscount > 0 && (
+              <div className="flex justify-between text-emerald-700 font-semibold">
+                <span>Coupon{appliedCoupon ? ` (${appliedCoupon.code})` : ''}</span>
+                <span>-{formatPrice(display.couponDiscount)}</span>
+              </div>
+            )}
+            <div className="flex justify-between items-center">
               <span>Shipping</span>
               <span className="font-semibold text-allura-text">
-                {finalShipping === 0 ? <strong className="text-emerald-700 uppercase">FREE</strong> : '₹ 150'}
+                {isShippingLoading
+                  ? <Loader2 size={14} className="animate-spin text-allura-muted" aria-label="Calculating shipping" />
+                  : resolvedShipping === undefined
+                    ? <span className="text-allura-muted">—</span>
+                    : resolvedShipping === 0
+                      ? <strong className="text-emerald-700 uppercase">FREE</strong>
+                      : formatPrice(resolvedShipping)}
               </span>
             </div>
-            <div className="flex justify-between text-base font-serif font-semibold text-allura-text pt-2 border-t border-allura-border">
-              <span>Total Payable</span>
-              <span className="text-xl text-allura-goldDark">{formatPrice(finalTotal)}</span>
+            <div className="flex justify-between items-center text-base font-serif font-semibold text-allura-text pt-2 border-t border-allura-border">
+              <span>{isEstimate ? 'Estimated Total' : 'Total Payable'}</span>
+              <span className="text-xl text-allura-goldDark">{formatPrice(display.total)}</span>
             </div>
+            {isEstimate && !previewError && (
+              <p className="text-[11px] text-allura-muted">
+                {isAddingAddress ? 'Save your address to see final shipping.' : 'Calculating final shipping…'}
+              </p>
+            )}
           </div>
+
+          {/* Coupon Code */}
+          <CouponInput />
+
+          {(previewError || placeError || pricingError || selectionError) && (
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-sm text-xs font-sans text-rose-800 space-y-1">
+              <p className="font-bold uppercase tracking-wider text-[10px]">Please review</p>
+              <p>{placeError || previewError || selectionError || pricingError}</p>
+              <Link to="/cart" className="inline-block pt-1 font-semibold underline">Edit bag</Link>
+            </div>
+          )}
 
           <button
             type="submit"
-            className="w-full bg-allura-goldDark hover:bg-allura-darkBrown text-allura-card text-xs font-sans font-bold tracking-[0.25em] uppercase py-4 px-6 rounded-sm transition-all duration-300 flex items-center justify-center gap-2 shadow-luxury"
+            disabled={busy || isApplyingCoupon || (!!previewError && !isAddingAddress) || !!pricingError || !!selectionError}
+            className="w-full bg-allura-goldDark hover:bg-allura-darkBrown text-allura-card text-xs font-sans font-bold tracking-[0.25em] uppercase py-4 px-6 rounded-sm transition-all duration-300 flex items-center justify-center gap-2 shadow-luxury disabled:opacity-60"
           >
-            <Lock size={14} />
-            <span>CONFIRM & PLACE ORDER</span>
+            {busy ? <Loader2 size={14} className="animate-spin" /> : <Lock size={14} />}
+            <span>
+              {isSavingAddress
+                ? 'SAVING ADDRESS…'
+                : isPlacing
+                  ? 'PLACING ORDER…'
+                  : paymentMethod === 'cod'
+                    ? `PLACE ORDER · ${formatPrice(display.total)}`
+                    : `PLACE ORDER & PAY · ${formatPrice(display.total)}`}
+            </span>
           </button>
         </div>
       </form>

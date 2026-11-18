@@ -59,7 +59,7 @@ export const AdminRefundsPage: React.FC = () => {
                     <p className="font-medium text-stone-900">{ref.customerName}</p>
                     <p className="text-[10px] text-stone-400">{ref.customerPhone}</p>
                   </td>
-                  <td className="p-4 font-bold text-stone-900">₹ {ref.amount.toLocaleString('en-IN')}</td>
+                  <td className="p-4 font-bold text-[#561C08]">₹ {ref.amount.toLocaleString('en-IN')}</td>
                   <td className="p-4 text-stone-600">{ref.reason}</td>
                   <td className="p-4 font-mono text-[10px] text-stone-500">{ref.gatewayTxId}</td>
                   <td className="p-4 text-right">

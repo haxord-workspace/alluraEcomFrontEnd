@@ -16,7 +16,7 @@ export const MobileBottomNav: React.FC = () => {
   ];
 
   return (
-    <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-allura-card/95 backdrop-blur-md border-t border-allura-border shadow-bottom-sheet safe-bottom">
+    <nav className="print:hidden lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-allura-card/95 backdrop-blur-md border-t border-allura-border shadow-bottom-sheet safe-bottom">
       <div className="grid grid-cols-5 h-16 max-w-md mx-auto">
         {navItems.map(item => {
           const isActive =
@@ -36,7 +36,7 @@ export const MobileBottomNav: React.FC = () => {
             >
               {/* Active Indicator Top Line */}
               {isActive && (
-                <span className="absolute top-0 w-8 h-[2px] bg-allura-gold rounded-full" />
+                <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-[2px] bg-allura-gold rounded-full" />
               )}
 
               <div className="relative">

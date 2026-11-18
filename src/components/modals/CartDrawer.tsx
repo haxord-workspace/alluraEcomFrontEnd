@@ -1,22 +1,43 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { X, Plus, Minus, Trash2, ShoppingBag, ArrowRight, Sparkles, Truck } from 'lucide-react';
+import { X, Plus, Minus, Trash2, ShoppingBag, ArrowRight, Sparkles, Truck, Loader2 } from 'lucide-react';
 import { useShop } from '../../context/ShopContext';
+import { useCartLineActions } from '../../hooks/useCartLineActions';
+import { trackCartView } from '../../service/tracking';
+import { useCartShippingPreview } from '../../hooks/useCartShippingPreview';
 
 export const CartDrawer: React.FC = () => {
   const {
     isCartOpen,
     setIsCartOpen,
     cart,
-    removeFromCart,
-    updateQuantity,
     cartSubtotal,
+    freeShippingThreshold,
     freeShippingRemaining,
     freeShippingProgress,
     formatPrice,
+    storeSettings,
   } = useShop();
 
+  const threshold =
+    typeof storeSettings?.shipping?.freeShippingMinOrder === 'number'
+      ? storeSettings.shipping.freeShippingMinOrder
+      : freeShippingThreshold;
+
   const navigate = useNavigate();
+  const { run, isBusy, isPending } = useCartLineActions();
+  const { resolvedShipping, isShippingLoading, estimatedTotal } = useCartShippingPreview(isCartOpen);
+  const wasOpenRef = useRef(false);
+
+  useEffect(() => {
+    if (isCartOpen && !wasOpenRef.current) {
+      wasOpenRef.current = true;
+      const itemCount = cart.reduce((sum, item) => sum + item.quantity, 0);
+      trackCartView({ source: 'cart_drawer', value: cartSubtotal, itemCount });
+    } else if (!isCartOpen) {
+      wasOpenRef.current = false;
+    }
+  }, [isCartOpen, cart, cartSubtotal]);
 
   if (!isCartOpen) return null;
 
@@ -48,32 +69,34 @@ export const CartDrawer: React.FC = () => {
         </div>
 
         {/* Free Shipping Progress Meter */}
-        <div className="bg-allura-bg p-4 border-b border-allura-border">
-          <div className="flex items-center justify-between text-xs font-medium text-allura-text mb-2">
-            <div className="flex items-center gap-1.5">
-              <Truck size={14} className="text-allura-goldDark" />
-              <span>
-                {freeShippingRemaining > 0 ? (
-                  <>
-                    Add <strong className="text-allura-goldDark">{formatPrice(freeShippingRemaining)}</strong> more for <strong className="text-allura-darkBrown">FREE SHIPPING</strong>
-                  </>
-                ) : (
-                  <span className="text-emerald-700 font-semibold flex items-center gap-1">
-                    <Sparkles size={13} /> You've unlocked FREE SHIPPING!
-                  </span>
-                )}
-              </span>
+        {threshold > 0 && (
+          <div className="bg-allura-bg p-4 border-b border-allura-border">
+            <div className="flex items-center justify-between text-xs font-medium text-allura-text mb-2">
+              <div className="flex items-center gap-1.5">
+                <Truck size={14} className="text-allura-goldDark" />
+                <span>
+                  {freeShippingRemaining > 0 ? (
+                    <>
+                      Add <strong className="text-allura-goldDark">{formatPrice(freeShippingRemaining)}</strong> more for <strong className="text-allura-darkBrown">FREE SHIPPING</strong>
+                    </>
+                  ) : (
+                    <span className="text-emerald-700 font-semibold flex items-center gap-1">
+                      <Sparkles size={13} /> You've unlocked FREE SHIPPING!
+                    </span>
+                  )}
+                </span>
+              </div>
+              <span className="text-[10px] text-allura-muted">Threshold {formatPrice(threshold)}</span>
             </div>
-            <span className="text-[10px] text-allura-muted">Threshold ₹2,999</span>
+            {/* Progress Bar */}
+            <div className="w-full h-1.5 bg-allura-border rounded-full overflow-hidden">
+              <div
+                className="h-full bg-allura-gold transition-all duration-500 rounded-full"
+                style={{ width: `${freeShippingProgress}%` }}
+              />
+            </div>
           </div>
-          {/* Progress Bar */}
-          <div className="w-full h-1.5 bg-allura-border rounded-full overflow-hidden">
-            <div
-              className="h-full bg-allura-gold transition-all duration-500 rounded-full"
-              style={{ width: `${freeShippingProgress}%` }}
-            />
-          </div>
-        </div>
+        )}
 
         {/* Items List */}
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
@@ -127,35 +150,33 @@ export const CartDrawer: React.FC = () => {
                         {item.product.name}
                       </Link>
                       <button
-                        onClick={() =>
-                          removeFromCart(
-                            item.product.id,
-                            item.selectedSize,
-                            item.selectedColor.name
-                          )
-                        }
-                        className="text-allura-muted hover:text-red-700 transition-colors p-1"
+                        onClick={() => run(item, 'remove')}
+                        disabled={isBusy}
+                        className="text-allura-muted hover:text-red-700 transition-colors p-1 disabled:opacity-40 disabled:cursor-not-allowed"
                         aria-label="Remove item"
+                        aria-busy={isPending(item, 'remove')}
                       >
-                        <Trash2 size={14} />
+                        {isPending(item, 'remove') ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
                       </button>
                     </div>
 
                     <div className="text-[11px] text-allura-muted mt-1 flex items-center gap-2">
-                      <span>Size: <strong className="text-allura-text">{item.selectedSize}</strong></span>
-                      <span>•</span>
-                      <span className="flex items-center gap-1">
-                        Color:
-                        <span
-                          className="inline-block w-2.5 h-2.5 rounded-full border border-allura-border"
-                          style={{ backgroundColor: item.selectedColor.hex }}
-                        />
-                        <strong className="text-allura-text">{item.selectedColor.name}</strong>
-                      </span>
+                      {item.selectedSize && <span>Size: <strong className="text-allura-text">{item.selectedSize}</strong></span>}
+                      {item.selectedSize && item.selectedColor.name && <span>•</span>}
+                      {item.selectedColor.name && (
+                        <span className="flex items-center gap-1">
+                          Color:
+                          <span
+                            className="inline-block w-2.5 h-2.5 rounded-full border border-allura-border"
+                            style={{ backgroundColor: item.selectedColor.hex }}
+                          />
+                          <strong className="text-allura-text">{item.selectedColor.name}</strong>
+                        </span>
+                      )}
                     </div>
 
                     <p className="font-serif text-sm font-semibold text-allura-text mt-1">
-                      {formatPrice(item.product.price)}
+                      {formatPrice(item.unitPrice ?? item.product.price)}
                     </p>
                   </div>
 
@@ -163,40 +184,30 @@ export const CartDrawer: React.FC = () => {
                   <div className="flex items-center justify-between pt-2">
                     <div className="flex items-center border border-allura-border rounded bg-allura-bg">
                       <button
-                        onClick={() =>
-                          updateQuantity(
-                            item.product.id,
-                            item.selectedSize,
-                            item.selectedColor.name,
-                            item.quantity - 1
-                          )
-                        }
-                        className="p-1 px-2 text-allura-text hover:bg-allura-bgSecondary transition-colors"
+                        onClick={() => run(item, 'decrease')}
+                        disabled={isBusy}
+                        className="p-1 px-2 text-allura-text hover:bg-allura-bgSecondary transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                         aria-label="Decrease quantity"
+                        aria-busy={isPending(item, 'decrease')}
                       >
-                        <Minus size={11} />
+                        {isPending(item, 'decrease') ? <Loader2 size={11} className="animate-spin" /> : <Minus size={11} />}
                       </button>
                       <span className="text-xs font-semibold px-2 text-allura-text">
                         {item.quantity}
                       </span>
                       <button
-                        onClick={() =>
-                          updateQuantity(
-                            item.product.id,
-                            item.selectedSize,
-                            item.selectedColor.name,
-                            item.quantity + 1
-                          )
-                        }
-                        className="p-1 px-2 text-allura-text hover:bg-allura-bgSecondary transition-colors"
+                        onClick={() => run(item, 'increase')}
+                        disabled={isBusy}
+                        className="p-1 px-2 text-allura-text hover:bg-allura-bgSecondary transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                         aria-label="Increase quantity"
+                        aria-busy={isPending(item, 'increase')}
                       >
-                        <Plus size={11} />
+                        {isPending(item, 'increase') ? <Loader2 size={11} className="animate-spin" /> : <Plus size={11} />}
                       </button>
                     </div>
 
                     <span className="text-xs font-semibold text-allura-darkBrown">
-                      {formatPrice(item.product.price * item.quantity)}
+                      {formatPrice((item.unitPrice ?? item.product.price) * item.quantity)}
                     </span>
                   </div>
                 </div>
@@ -215,18 +226,20 @@ export const CartDrawer: React.FC = () => {
               </div>
               <div className="flex justify-between items-center">
                 <span>Shipping (Kerala & India)</span>
-                <span>
-                  {freeShippingRemaining === 0 ? (
-                    <span className="text-emerald-700 font-bold uppercase tracking-wider">FREE</span>
-                  ) : (
-                    '₹ 150 (Free above ₹2,999)'
-                  )}
+                <span className="font-semibold text-allura-text">
+                  {isShippingLoading
+                    ? <Loader2 size={14} className="animate-spin text-allura-muted" aria-label="Calculating shipping" />
+                    : resolvedShipping === undefined
+                      ? <span className="text-allura-muted">Calculated at checkout</span>
+                      : resolvedShipping === 0
+                        ? <strong className="text-emerald-700 uppercase">FREE</strong>
+                        : formatPrice(resolvedShipping)}
                 </span>
               </div>
               <div className="flex justify-between items-center text-sm font-serif font-semibold text-allura-text pt-2 border-t border-allura-border/60">
                 <span>Estimated Total</span>
                 <span className="text-base text-allura-goldDark">
-                  {formatPrice(cartSubtotal + (freeShippingRemaining === 0 ? 0 : 150))}
+                  {formatPrice(estimatedTotal)}
                 </span>
               </div>
             </div>

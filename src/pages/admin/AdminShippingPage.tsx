@@ -17,7 +17,7 @@ export const AdminShippingPage: React.FC = () => {
     orderNumber: o.orderNumber,
     customerName: o.customer.name,
     city: `${o.shippingAddress.city}, ${o.shippingAddress.state}`,
-    pincode: o.shippingAddress.pincode,
+    postalCode: o.shippingAddress.postalCode,
     courier: o.tracking?.courier || 'Delhivery Luxury Express',
     awb: o.tracking?.awb || 'Pending Generation',
     status: o.orderStatus === 'Pending' || o.orderStatus === 'Processing' ? 'Ready to Ship' : o.orderStatus,
@@ -62,11 +62,11 @@ export const AdminShippingPage: React.FC = () => {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-xs space-y-1">
           <span className="text-[10px] font-sans font-bold uppercase text-stone-400">Kerala Express SLA</span>
-          <p className="font-serif text-2xl font-bold text-stone-900">24–48 Hrs</p>
+          <p className="font-serif text-2xl font-bold text-[#561C08]">24–48 Hrs</p>
         </div>
         <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-xs space-y-1">
           <span className="text-[10px] font-sans font-bold uppercase text-stone-400">All-India Courier SLA</span>
-          <p className="font-serif text-2xl font-bold text-stone-900">3–5 Days</p>
+          <p className="font-serif text-2xl font-bold text-[#561C08]">3–5 Days</p>
         </div>
         <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-xs space-y-1">
           <span className="text-[10px] font-sans font-bold uppercase text-emerald-700">On-Time Delivery</span>
@@ -115,7 +115,7 @@ export const AdminShippingPage: React.FC = () => {
                   </td>
                   <td className="p-4 text-stone-700">
                     <p className="font-medium">{s.city}</p>
-                    <p className="text-[10px] text-stone-400 font-mono">PIN: {s.pincode}</p>
+                    <p className="text-[10px] text-stone-400 font-mono">PIN: {s.postalCode}</p>
                   </td>
                   <td className="p-4 font-medium text-stone-800">{s.courier}</td>
                   <td className="p-4 font-mono font-bold text-stone-900">
@@ -133,7 +133,7 @@ export const AdminShippingPage: React.FC = () => {
                     {s.awb === 'Pending Generation' ? (
                       <button
                         onClick={() => generateDelhiveryAWB(s.orderId)}
-                        className="px-3 py-1.5 bg-stone-900 hover:bg-stone-800 text-white rounded-lg text-xs font-bold uppercase tracking-wider"
+                        className="px-3 py-1.5 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-lg text-xs font-bold uppercase tracking-wider"
                       >
                         Generate AWB
                       </button>

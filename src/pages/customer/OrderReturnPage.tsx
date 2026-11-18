@@ -1,20 +1,20 @@
 import React, { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { 
-  ArrowLeft, 
-  CheckCircle2, 
-  Upload, 
-  ShieldCheck, 
+import {
+  ArrowLeft,
+  CheckCircle2,
+  Upload,
+  ShieldCheck,
   ArrowRight
 } from 'lucide-react';
 import { useShop } from '../../context/ShopContext';
 import type { ReturnReason } from '../../types';
+import { useCustomerOrder } from '../../hooks/useCustomerOrder';
 
 export const OrderReturnPage: React.FC = () => {
   const { orderId } = useParams<{ orderId: string }>();
-  const { getOrderById, submitReturnRequest, customer } = useShop();
-
-  const order = orderId ? getOrderById(orderId) : undefined;
+  const { submitReturnRequest, customer } = useShop();
+  const { order, isLoading: isLoadingOrder } = useCustomerOrder(orderId);
 
   const [step, setStep] = useState<number>(1);
   const [selectedItemIdx, setSelectedItemIdx] = useState<number>(0);
@@ -25,6 +25,15 @@ export const OrderReturnPage: React.FC = () => {
   const [uploadedPhotos, setUploadedPhotos] = useState<string[]>([]);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [returnRef, setReturnRef] = useState('');
+
+  if (isLoadingOrder) {
+    return (
+      <div className="max-w-2xl mx-auto px-4 py-20 flex flex-col items-center gap-3 text-allura-muted">
+        <div className="w-7 h-7 border-2 border-allura-goldDark border-t-transparent rounded-full animate-spin" />
+        <p className="text-xs font-sans uppercase tracking-widest">Loading order…</p>
+      </div>
+    );
+  }
 
   if (!order) {
     return (
@@ -163,7 +172,7 @@ export const OrderReturnPage: React.FC = () => {
       </div>
 
       <div className="bg-allura-card border border-allura-border rounded-2xl p-6 sm:p-8 shadow-luxury space-y-6">
-        
+
         {/* Step 1: Select Item */}
         {step === 1 && (
           <div className="space-y-4">
@@ -217,7 +226,7 @@ export const OrderReturnPage: React.FC = () => {
         {step === 2 && (
           <div className="space-y-5">
             <h3 className="font-serif text-xl text-allura-text font-normal">Select Reason for Return / Exchange</h3>
-            
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {reasonsList.map(r => (
                 <label
@@ -378,7 +387,7 @@ export const OrderReturnPage: React.FC = () => {
               <p><strong>Reason:</strong> {reason}</p>
               {reasonDetail && <p><strong>Notes:</strong> {reasonDetail}</p>}
               <p><strong>Preference:</strong> {preference} {preference === 'Exchange for different size' && `(Replacement Size: ${exchangeSize})`}</p>
-              <p><strong>Pickup Address:</strong> {order.shippingAddress.addressLine1}, {order.shippingAddress.city} - {order.shippingAddress.pincode}</p>
+              <p><strong>Pickup Address:</strong> {order.shippingAddress.addressLine1}, {order.shippingAddress.city} - {order.shippingAddress.postalCode}</p>
             </div>
 
             <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs font-sans text-amber-900 flex items-center gap-2">

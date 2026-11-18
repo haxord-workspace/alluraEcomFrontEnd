@@ -54,10 +54,13 @@ export const AlluraAIAssistant: React.FC = () => {
       {!isAIAssistantOpen && (
         <button
           onClick={() => setIsAIAssistantOpen(true)}
-          className="fixed bottom-24 right-5 sm:bottom-28 sm:right-8 z-40 bg-allura-card text-allura-darkBrown border border-allura-gold/40 shadow-luxury hover:shadow-2xl rounded-full p-3.5 sm:px-5 sm:py-3 flex items-center gap-2.5 transition-all duration-300 hover:scale-105 group"
+          style={{
+            bottom: 'calc(9.25rem + env(safe-area-inset-bottom, 0px))',
+          }}
+          className="fixed right-4 sm:right-5 z-40 bg-allura-card text-allura-darkBrown border border-allura-gold/40 shadow-luxury hover:shadow-2xl rounded-full p-1.5 sm:pl-2 sm:pr-5 sm:py-2 flex items-center gap-2.5 transition-all duration-300 hover:scale-105 group lg:!bottom-[6.5rem]"
           aria-label="Open Allura AI Assistant"
         >
-          <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-allura-gold to-allura-goldLight flex items-center justify-center text-white shadow-sm">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-gradient-to-tr from-allura-gold to-allura-goldLight flex items-center justify-center text-white shadow-sm">
             <Sparkles size={16} className="animate-pulse-subtle" />
           </div>
           <div className="hidden sm:block text-left">
@@ -186,7 +189,7 @@ export const AlluraAIAssistant: React.FC = () => {
                                 <span className="text-stone-300">•</span>
                                 <button
                                   onClick={() => {
-                                    addToCart(p, p.sizes[0] || 'M', p.colors[0]);
+                                    addToCart(p, p.sizes[0], p.colors[0]);
                                   }}
                                   className="text-[11px] font-sans font-bold text-allura-text hover:text-allura-goldDark flex items-center gap-1"
                                 >

@@ -1,12 +1,20 @@
-import React, { useState } from 'react';
+import React, { useState, } from 'react';
 import { Plus } from 'lucide-react';
 import { useAdmin } from '../../context/AdminContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
+// import { type AiAnalyticsResponse } from '../../service/adminDashboard';
 
 export const AdminAiPage: React.FC = () => {
   const { aiArticles, addAIArticle } = useAdmin();
   const [activeTab, setActiveTab] = useState<'kb' | 'logs' | 'actions'>('kb');
   const [isAddArticleOpen, setIsAddArticleOpen] = useState(false);
+  // const [aiDashboard] = useState<AiAnalyticsResponse | null>(null);
+
+  // useEffect(() => {
+  //   getDashboardAi()
+  //     .then(setAiDashboard)
+  //     .catch(err => console.warn('Could not load AI dashboard:', err));
+  // }, []);
 
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState<'FAQ' | 'Shipping Policy' | 'Return Policy' | 'Product Sizing' | 'Care & Craft'>('Product Sizing');
@@ -58,11 +66,10 @@ export const AdminAiPage: React.FC = () => {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
-                className={`px-3.5 py-1.5 rounded-lg transition-colors ${
-                  activeTab === tab.id
-                    ? 'bg-white text-stone-900 shadow-xs'
-                    : 'text-stone-500 hover:text-stone-900'
-                }`}
+                className={`px-3.5 py-1.5 rounded-lg transition-colors ${activeTab === tab.id
+                  ? 'bg-white text-stone-900 shadow-xs'
+                  : 'text-stone-500 hover:text-stone-900'
+                  }`}
               >
                 {tab.label}
               </button>
@@ -71,13 +78,64 @@ export const AdminAiPage: React.FC = () => {
 
           <button
             onClick={() => setIsAddArticleOpen(true)}
-            className="px-4 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-xl text-xs font-sans font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 shadow-sm"
+            className="px-4 py-2 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-xl text-xs font-sans font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 shadow-sm"
           >
             <Plus size={14} />
             <span>Add Knowledge Doc</span>
           </button>
         </div>
       </div>
+
+      {/* DeepSeek AI Engine Status & Queue Analytics */}
+      {/* <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="bg-white border border-stone-200 rounded-2xl p-4 shadow-xs space-y-1">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-sans font-bold uppercase text-stone-400">ENGINE STATUS</span>
+            <Bot size={14} className="text-allura-goldDark" />
+          </div>
+          <p className="font-serif text-xl font-bold text-stone-900">
+            {aiDashboard?.provider || 'DeepSeek AI'}
+          </p>
+          <span className="text-[10px] text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded-full inline-block">
+            {aiDashboard?.status || 'ONLINE'}
+          </span>
+        </div>
+
+        <div className="bg-white border border-stone-200 rounded-2xl p-4 shadow-xs space-y-1">
+          <div className="flex items-center justify-between text-emerald-700">
+            <span className="text-[10px] font-sans font-bold uppercase">COMPLETED INFERENCES</span>
+            <CheckCircle2 size={14} />
+          </div>
+          <p className="font-serif text-xl font-bold text-emerald-800">
+            {aiDashboard?.queue.completed ?? 0}
+          </p>
+          <p className="text-[11px] text-stone-500 font-sans">Automated AI replies</p>
+        </div>
+
+        <div className="bg-white border border-stone-200 rounded-2xl p-4 shadow-xs space-y-1">
+          <div className="flex items-center justify-between text-stone-500">
+            <span className="text-[10px] font-sans font-bold uppercase">PROCESSING / WAITING</span>
+            <Clock size={14} />
+          </div>
+          <p className="font-serif text-xl font-bold text-[#561C08]">
+            {(aiDashboard?.queue.active ?? 0) + (aiDashboard?.queue.waiting ?? 0)}
+          </p>
+          <p className="text-[11px] text-stone-500 font-sans">
+            {aiDashboard?.queue.active ?? 0} active, {aiDashboard?.queue.waiting ?? 0} queued
+          </p>
+        </div>
+
+        <div className="bg-white border border-stone-200 rounded-2xl p-4 shadow-xs space-y-1">
+          <div className="flex items-center justify-between text-rose-700">
+            <span className="text-[10px] font-sans font-bold uppercase">FAILED INFERENCES</span>
+            <AlertTriangle size={14} />
+          </div>
+          <p className="font-serif text-xl font-bold text-rose-800">
+            {aiDashboard?.queue.failed ?? 0}
+          </p>
+          <p className="text-[11px] text-rose-700 font-sans">Zero timeout drops</p>
+        </div>
+      </div> */}
 
       {/* TAB 1: KNOWLEDGE BASE */}
       {activeTab === 'kb' && (
@@ -193,7 +251,7 @@ export const AdminAiPage: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-stone-900 text-white rounded-xl font-bold uppercase"
+                  className="px-5 py-2 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-xl font-bold uppercase"
                 >
                   Save Knowledge
                 </button>

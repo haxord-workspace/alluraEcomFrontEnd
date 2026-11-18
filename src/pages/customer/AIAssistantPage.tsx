@@ -159,7 +159,7 @@ export const AIAssistantPage: React.FC = () => {
                             </Link>
                             <span className="text-stone-300">•</span>
                             <button
-                              onClick={() => addToCart(p, p.sizes[0] || 'M', p.colors[0])}
+                              onClick={() => addToCart(p, p.sizes[0], p.colors[0])}
                               className="text-allura-text hover:text-allura-goldDark font-bold flex items-center gap-1 text-[11px]"
                             >
                               <ShoppingBag size={12} />

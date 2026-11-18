@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { Phone, MapPin, Clock, MessageCircle, Send, CheckCircle2, Navigation } from 'lucide-react';
 import { useShop } from '../context/ShopContext';
+import { useStoreAddress } from '../hooks/useStoreAddress';
 
 export const ContactPage: React.FC = () => {
   const { showToast } = useShop();
+  const { address, mapsUrl } = useStoreAddress();
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [occasion, setOccasion] = useState('Bridal');
@@ -28,7 +30,7 @@ export const ContactPage: React.FC = () => {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-16 space-y-16">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-16 space-y-8 sm:space-y-16">
       {/* Header */}
       <div className="text-center max-w-2xl mx-auto space-y-2">
         <span className="text-[11px] font-sans font-bold tracking-[0.28em] uppercase text-allura-goldDark">
@@ -56,22 +58,26 @@ export const ContactPage: React.FC = () => {
                 <h3 className="font-serif text-base font-semibold uppercase text-allura-text">
                   Boutique Location
                 </h3>
-                <p className="text-xs text-allura-muted font-sans">
-                  Ooty Road, Perinthalmanna, Malappuram, Kerala - 679322
-                </p>
+                {address && (
+                  <p className="text-xs text-allura-muted font-sans">
+                    {address}
+                  </p>
+                )}
               </div>
             </div>
-            <div className="pt-2">
-              <a
-                href="https://maps.google.com/?q=Allura+Boutique+Perinthalmanna"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 text-xs font-sans font-bold text-allura-goldDark hover:text-allura-darkBrown uppercase tracking-wider"
-              >
-                <Navigation size={13} />
-                <span>Open in Google Maps</span>
-              </a>
-            </div>
+            {mapsUrl && (
+              <div className="pt-2">
+                <a
+                  href={mapsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 text-xs font-sans font-bold text-allura-goldDark hover:text-allura-darkBrown uppercase tracking-wider"
+                >
+                  <Navigation size={13} />
+                  <span>Open in Google Maps</span>
+                </a>
+              </div>
+            )}
           </div>
 
           {/* Contact Numbers */}

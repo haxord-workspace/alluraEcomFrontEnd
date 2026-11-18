@@ -1,11 +1,38 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Phone, MapPin, Share2 } from 'lucide-react';
+import { Phone, Mail, MapPin, Share2 } from 'lucide-react';
 import { AlluraLogo } from '../common/AlluraLogo';
+import { useShop } from '../../context/ShopContext';
+
+const DEFAULT_LEGAL_NAME = 'Allura Boutique';
+const DEFAULT_TAGLINE = 'WEAR YOUR STORY WITH ALLURA';
+
+/** Treats missing, blank or the backend's "string" placeholder as no value */
+const clean = (value?: string | null): string | undefined => {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed && trimmed.toLowerCase() !== 'string' ? trimmed : undefined;
+};
+
+const formatPhoneDisplay = (raw?: string | null): string => {
+  if (!raw || typeof raw !== 'string') return '';
+  const digits = raw.replace(/\D/g, '');
+  const national = digits.startsWith('91') && digits.length === 12 ? digits.slice(2) : digits.length === 10 ? digits : null;
+  return national ? `+91 ${national.slice(0, 5)} ${national.slice(5)}` : raw;
+};
 
 export const Footer: React.FC = () => {
+  const { storeSettings } = useShop();
+  const profile = storeSettings?.boutiqueProfile;
+
+  const legalName = clean(profile?.legalName) || DEFAULT_LEGAL_NAME;
+  const tagline = clean(profile?.tagline) || DEFAULT_TAGLINE;
+  const whatsappNumber = clean(profile?.whatsappNumber);
+  const address = clean(profile?.address);
+  const supportEmail = clean(profile?.supportEmail);
+
   return (
-    <footer className="bg-[#561C08] border-t border-[#3D1406] pt-16 pb-24 lg:pb-12 text-[#F7E6C8]">
+    <footer className="print:hidden bg-[#561C08] border-t border-[#3D1406] pt-16 pb-24 lg:pb-12 text-[#F7E6C8]">
       <div className="max-w-7xl mx-auto px-6 lg:px-8">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-10 lg:gap-8 pb-14 border-b border-white/15">
           {/* Col 1: Brand & Logo */}
@@ -15,11 +42,11 @@ export const Footer: React.FC = () => {
               A curated destination for modern women who appreciate elegance, quality and individuality.
             </p>
             <div className="pt-2 text-xs font-heading font-bold uppercase tracking-wider text-[#F7E6C8]">
-              WEAR YOUR STORY WITH ALLURA
+              {tagline}
             </div>
           </div>
 
-          {/* Col 2: Shop */}
+          {/* Col 2: Shop
           <div className="space-y-4">
             <h4 className="text-[12px] font-heading font-bold tracking-[0.25em] text-white uppercase">
               SHOP
@@ -51,9 +78,9 @@ export const Footer: React.FC = () => {
                 </Link>
               </li>
             </ul>
-          </div>
+          </div> */}
 
-          {/* Col 3: About */}
+          {/* Col 3: About
           <div className="space-y-4">
             <h4 className="text-[12px] font-heading font-bold tracking-[0.25em] text-white uppercase">
               ABOUT
@@ -83,7 +110,7 @@ export const Footer: React.FC = () => {
                 <span className="text-[#F7E6C8]/50 cursor-not-allowed">Careers (Coming Soon)</span>
               </li>
             </ul>
-          </div>
+          </div> */}
 
           {/* Col 4: Customer Care */}
           <div className="space-y-4">
@@ -107,12 +134,17 @@ export const Footer: React.FC = () => {
                 </Link>
               </li>
               <li>
-                <Link to="/shipping-returns#faqs" className="hover:text-white transition-colors">
+                <Link to="/faq" className="hover:text-white transition-colors">
                   FAQs
                 </Link>
               </li>
               <li>
-                <Link to="/shipping-returns#terms" className="hover:text-white transition-colors">
+                <Link to="/pages/privacy-policy" className="hover:text-white transition-colors">
+                  Privacy Policy
+                </Link>
+              </li>
+              <li>
+                <Link to="/pages/terms-and-conditions" className="hover:text-white transition-colors">
                   Terms & Conditions
                 </Link>
               </li>
@@ -125,22 +157,29 @@ export const Footer: React.FC = () => {
               GET IN TOUCH
             </h4>
             <ul className="space-y-3 text-xs text-[#F7E6C8]/80 font-body">
-              <li className="flex items-center gap-2.5">
-                <Phone size={14} className="text-[#F7E6C8] flex-shrink-0" />
-                <a href="tel:+919037991774" className="hover:text-white transition-colors">
-                  +91 9037991774
-                </a>
-              </li>
-              <li className="flex items-center gap-2.5">
-                <Phone size={14} className="text-[#F7E6C8] flex-shrink-0" />
-                <a href="tel:+919207801775" className="hover:text-white transition-colors">
-                  +91 9207801775
-                </a>
-              </li>
-              <li className="flex items-start gap-2.5">
-                <MapPin size={14} className="text-[#F7E6C8] flex-shrink-0 mt-0.5" />
-                <span className="leading-snug">OOTY ROAD, PERINTHALMANNA, KERALA</span>
-              </li>
+              {whatsappNumber && (
+                <li className="flex items-center gap-2.5">
+                  <Phone size={14} className="text-[#F7E6C8] flex-shrink-0" />
+                  <a href={`tel:${whatsappNumber}`} className="hover:text-white transition-colors">
+                    {formatPhoneDisplay(whatsappNumber)}
+                  </a>
+                </li>
+              )}
+
+              {supportEmail && (
+                <li className="flex items-center gap-2.5">
+                  <Mail size={14} className="text-[#F7E6C8] flex-shrink-0" />
+                  <a href={`mailto:${supportEmail}`} className="hover:text-white transition-colors">
+                    {supportEmail}
+                  </a>
+                </li>
+              )}
+              {address && (
+                <li className="flex items-start gap-2.5">
+                  <MapPin size={14} className="text-[#F7E6C8] flex-shrink-0 mt-0.5" />
+                  <span className="leading-snug">{address}</span>
+                </li>
+              )}
             </ul>
 
             {/* Social Icons */}
@@ -153,9 +192,9 @@ export const Footer: React.FC = () => {
                 aria-label="Allura Boutique Instagram"
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect width="20" height="20" x="2" y="2" rx="5" ry="5"/>
-                  <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/>
-                  <line x1="17.5" x2="17.51" y1="6.5" y2="6.5"/>
+                  <rect width="20" height="20" x="2" y="2" rx="5" ry="5" />
+                  <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+                  <line x1="17.5" x2="17.51" y1="6.5" y2="6.5" />
                 </svg>
               </a>
               <a
@@ -166,7 +205,7 @@ export const Footer: React.FC = () => {
                 aria-label="Allura Boutique Facebook"
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/>
+                  <path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" />
                 </svg>
               </a>
               <a
@@ -177,8 +216,8 @@ export const Footer: React.FC = () => {
                 aria-label="Allura Boutique YouTube"
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M2.5 17a24.12 24.12 0 0 1 0-10 2 2 0 0 1 1.4-1.4 49.56 49.56 0 0 1 16.2 0A2 2 0 0 1 21.5 7a24.12 24.12 0 0 1 0 10 2 2 0 0 1-1.4 1.4 49.55 49.55 0 0 1-16.2 0A2 2 0 0 1 2.5 17"/>
-                  <polygon points="10 15 15 12 10 9 10 15"/>
+                  <path d="M2.5 17a24.12 24.12 0 0 1 0-10 2 2 0 0 1 1.4-1.4 49.56 49.56 0 0 1 16.2 0A2 2 0 0 1 21.5 7a24.12 24.12 0 0 1 0 10 2 2 0 0 1-1.4 1.4 49.55 49.55 0 0 1-16.2 0A2 2 0 0 1 2.5 17" />
+                  <polygon points="10 15 15 12 10 9 10 15" />
                 </svg>
               </a>
               <a
@@ -196,14 +235,11 @@ export const Footer: React.FC = () => {
 
         {/* Bottom Rights Bar */}
         <div className="pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-[11px] font-body text-[#F7E6C8]/70 tracking-wide">
-          <p>© 2026 Allura Boutique. All rights reserved.</p>
+          <p>© 2026 {legalName}. All rights reserved.</p>
           <div className="flex items-center gap-4">
-            <Link to="/admin" className="text-[#F7E6C8] hover:text-white font-heading font-bold uppercase tracking-wider text-[11px]">
-              Staff / Admin Portal →
-            </Link>
-            <span className="opacity-40">•</span>
+
             <p className="flex items-center gap-1.5 font-heading font-semibold uppercase text-xs text-[#F7E6C8]">
-              WEAR YOUR STORY WITH ALLURA
+              {tagline}
             </p>
           </div>
         </div>

@@ -1,21 +1,26 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { 
-  Package, 
-  MapPin, 
-  Scissors, 
-  MessageCircle, 
-  Sparkles, 
-  Bell, 
-  ArrowRight, 
-  Plus, 
-  FileText, 
-  Truck 
+import {
+  Package,
+  MapPin,
+  Scissors,
+  MessageCircle,
+  Sparkles,
+  Bell,
+  ArrowRight,
+  Plus,
+  FileText,
+  Truck,
+  LogOut
 } from 'lucide-react';
 import { useShop } from '../context/ShopContext';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { RecentlyViewed } from '../components/customer/RecentlyViewed';
 import { InvoiceModal } from '../components/common/InvoiceModal';
+import { downloadOrderInvoice } from '../service/orders';
+import { OrderCardSkeleton } from '../components/ui/OrderCardSkeleton';
+import { MyReviewsAccountTab } from '../components/reviews/MyReviewsAccountTab';
+import { OrderCardReviewSwap } from '../components/reviews/OrderCardReviewSwap';
 
 export const AccountPage: React.FC = () => {
   const {
@@ -26,63 +31,89 @@ export const AccountPage: React.FC = () => {
     formatPrice,
     invoiceOrder,
     setInvoiceOrder,
-    completeProfile,
-    showToast,
+    logoutCustomer,
+    addCustomerAddress,
+    deleteCustomerAddress,
+    refreshOrders,
+    isLoadingOrders,
   } = useShop();
+
+  useEffect(() => {
+    refreshOrders();
+  }, [refreshOrders]);
 
   const [activeTab, setActiveTab] = useState<'overview' | 'orders' | 'addresses' | 'sizes' | 'notifications'>('overview');
 
   // Address edit modal simulation
   const [isAddAddressOpen, setIsAddAddressOpen] = useState(false);
   const [newAddress, setNewAddress] = useState({
-    name: customer?.name || '',
-    phone: customer?.phone || '',
+    label: 'Home',
+    fullName: customer?.name || '',
+    phone: {
+      countryCode: '+91',
+      number: customer?.phone?.replace('+91 ', '') || '',
+    },
     addressLine1: '',
+    addressLine2: '',
+    landmark: '',
     city: 'Perinthalmanna',
-    district: 'Malappuram',
     state: 'Kerala',
-    pincode: '679322',
-    type: 'Home' as const,
+    postalCode: '679322',
+    country: 'India',
+    isDefaultShipping: false,
+    isDefaultBilling: false,
   });
 
   const recentOrder = orders[0];
 
-  const handleAddAddress = (e: React.FormEvent) => {
+  const handleAddAddress = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!customer) return;
-    const added = {
-      id: `addr-${Date.now()}`,
-      ...newAddress,
-      isDefault: customer.addresses.length === 0,
-    };
-    completeProfile({
-      addresses: [...customer.addresses, added],
-    });
-    setIsAddAddressOpen(false);
-    showToast('New delivery address saved', 'success');
+
+    const isFirst = customer.addresses.length === 0;
+    try {
+      await addCustomerAddress({
+        ...newAddress,
+        isDefaultShipping: isFirst || newAddress.isDefaultShipping,
+        isDefaultBilling: isFirst || newAddress.isDefaultBilling,
+      });
+      setIsAddAddressOpen(false);
+      // Reset form (optional)
+    } catch (e) {
+      // handled by context
+    }
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-16 space-y-10">
+    <>
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-16 space-y-10 print:hidden">
       {/* Account Profile Header */}
       <div className="bg-allura-card p-6 sm:p-8 rounded-2xl border border-allura-border shadow-subtle flex flex-col sm:flex-row items-center justify-between gap-6">
         <div className="flex items-center gap-4 text-center sm:text-left">
-          <div className="w-16 h-16 rounded-full bg-allura-bgSecondary text-allura-goldDark font-serif text-2xl font-bold flex items-center justify-center border-2 border-allura-gold flex-shrink-0 shadow-sm">
-            {customer?.name?.charAt(0) || 'A'}
+          <div className="w-16 h-16 rounded-full bg-allura-bgSecondary text-allura-goldDark font-serif text-2xl font-bold flex items-center justify-center border-2 border-allura-gold flex-shrink-0 shadow-sm overflow-hidden">
+            {customer?.avatar ? (
+              <img src={customer.avatar} alt={customer.name} className="w-full h-full object-cover" />
+            ) : (
+              customer?.name?.charAt(0) || 'A'
+            )}
           </div>
           <div>
             <div className="flex items-center gap-2 justify-center sm:justify-start">
               <span className="text-[10px] font-sans font-bold tracking-[0.25em] uppercase text-allura-goldDark">
                 ALLURA CIRCLE {customer?.circleTier?.toUpperCase() || 'MEMBER'}
               </span>
-              <span className="w-1.5 h-1.5 rounded-full bg-allura-gold" />
-              <span className="text-[10px] font-sans text-emerald-700 font-semibold">VIP Privilege Active</span>
+              {customer?.isCircleMember && (
+                <>
+                  <span className="w-1.5 h-1.5 rounded-full bg-allura-gold" />
+                  <span className="text-[10px] font-sans text-emerald-700 font-semibold">VIP Privilege Active</span>
+                </>
+              )}
             </div>
             <h1 className="font-serif text-2xl sm:text-3xl text-allura-text font-normal">
-              {customer?.name || 'Ananya Menon'}
+              {customer?.name}
             </h1>
             <p className="text-xs text-allura-muted font-sans mt-0.5">
-              {customer?.phone || '+91 98471 23456'} • {customer?.email || 'ananya.kerala@example.com'}
+              {[customer?.phone, customer?.email].filter(Boolean).join(' • ')}
             </p>
           </div>
         </div>
@@ -104,6 +135,21 @@ export const AccountPage: React.FC = () => {
           >
             Edit Profile
           </Link>
+
+          <Link
+            to="/account/addresses"
+            className="px-4 py-2.5 rounded-xl border border-allura-border text-xs font-sans font-semibold text-allura-muted hover:text-allura-text hover:bg-allura-bgSecondary transition-colors"
+          >
+            Manage Addresses
+          </Link>
+
+          <button
+            onClick={() => logoutCustomer()}
+            className="px-4 py-2.5 rounded-xl border border-red-200 text-xs font-sans font-bold text-red-600 hover:bg-red-50 transition-colors flex items-center gap-2"
+          >
+            <LogOut size={15} />
+            <span>Logout</span>
+          </button>
         </div>
       </div>
 
@@ -130,6 +176,7 @@ export const AccountPage: React.FC = () => {
             )}
           </button>
         ))}
+        <MyReviewsAccountTab />
       </div>
 
       {/* TAB 1: OVERVIEW */}
@@ -147,11 +194,11 @@ export const AccountPage: React.FC = () => {
             </div>
             <div className="bg-allura-card border border-allura-border rounded-2xl p-5 shadow-subtle space-y-1">
               <span className="text-[10px] font-sans font-bold uppercase tracking-wider text-allura-muted">Preferred Size</span>
-              <p className="font-serif text-2xl font-bold text-allura-goldDark">{customer?.sizePreferences?.preferredSize || 'M'}</p>
+              <p className="font-serif text-2xl font-bold text-allura-goldDark">{customer?.sizePreferences?.preferredSize || '—'}</p>
             </div>
             <div className="bg-allura-card border border-allura-border rounded-2xl p-5 shadow-subtle space-y-1">
               <span className="text-[10px] font-sans font-bold uppercase tracking-wider text-allura-muted">Allura Tier</span>
-              <p className="font-serif text-2xl font-bold text-emerald-800">{customer?.circleTier || 'Gold'}</p>
+              <p className="font-serif text-2xl font-bold text-emerald-800">{customer?.circleTier || 'Member'}</p>
             </div>
           </div>
 
@@ -195,6 +242,7 @@ export const AccountPage: React.FC = () => {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
+                  <OrderCardReviewSwap order={recentOrder} iconSize={14} buttonClassName="px-4 py-2 bg-allura-gold/15 text-allura-goldDark border border-allura-gold/30 rounded-xl text-xs font-sans font-bold hover:bg-allura-gold/25 transition-colors flex items-center gap-1.5">
                   <Link
                     to={`/account/orders/${recentOrder.id}/tracking`}
                     className="px-4 py-2 bg-allura-gold/15 text-allura-goldDark border border-allura-gold/30 rounded-xl text-xs font-sans font-bold hover:bg-allura-gold/25 transition-colors flex items-center gap-1.5"
@@ -202,6 +250,7 @@ export const AccountPage: React.FC = () => {
                     <Truck size={14} />
                     <span>Track Shipment</span>
                   </Link>
+                  </OrderCardReviewSwap>
 
                   <button
                     onClick={() => setInvoiceOrder(recentOrder)}
@@ -234,8 +283,11 @@ export const AccountPage: React.FC = () => {
             </Link>
           </div>
 
-          <div className="space-y-4">
-            {orders.map(order => (
+          {isLoadingOrders && orders.length === 0 ? (
+            <OrderCardSkeleton count={2} />
+          ) : (
+            <div className="space-y-4">
+              {orders.map(order => (
               <div
                 key={order.id}
                 className="bg-allura-card border border-allura-border rounded-2xl p-5 sm:p-6 shadow-subtle space-y-4"
@@ -273,17 +325,20 @@ export const AccountPage: React.FC = () => {
                     >
                       Details
                     </Link>
+                    <OrderCardReviewSwap order={order} buttonClassName="px-3 py-1.5 bg-allura-gold/15 text-allura-goldDark border border-allura-gold/30 text-xs font-sans font-bold rounded-lg hover:bg-allura-gold/25">
                     <Link
                       to={`/account/orders/${order.id}/tracking`}
                       className="px-3 py-1.5 bg-allura-gold/15 text-allura-goldDark border border-allura-gold/30 text-xs font-sans font-bold rounded-lg hover:bg-allura-gold/25"
                     >
                       Track
                     </Link>
+                    </OrderCardReviewSwap>
                   </div>
                 </div>
               </div>
             ))}
-          </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -308,26 +363,35 @@ export const AccountPage: React.FC = () => {
             {customer?.addresses.map(addr => (
               <div
                 key={addr.id}
-                className="bg-allura-card border border-allura-border rounded-2xl p-5 shadow-subtle space-y-3 relative"
+                className="bg-allura-card border border-allura-border rounded-2xl p-5 shadow-subtle space-y-3 relative group"
               >
                 <div className="flex justify-between items-center">
                   <span className="text-[10px] font-sans font-bold uppercase tracking-wider bg-allura-bgSecondary px-2 py-0.5 rounded text-allura-darkBrown">
-                    {addr.type}
+                    {addr.label}
                   </span>
-                  {addr.isDefault && (
+                  {addr.isDefaultShipping && (
                     <span className="text-[10px] font-sans font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded">
-                      Default Address
+                      Default Shipping
                     </span>
                   )}
                 </div>
 
                 <div className="text-xs font-sans text-allura-muted space-y-1">
-                  <p className="font-bold text-allura-text text-sm">{addr.name}</p>
+                  <p className="font-bold text-allura-text text-sm">{addr.fullName}</p>
                   <p>{addr.addressLine1}</p>
                   {addr.addressLine2 && <p>{addr.addressLine2}</p>}
-                  <p>{addr.city}, {addr.district} - {addr.pincode}</p>
-                  <p>{addr.state}, India</p>
-                  <p className="pt-1 text-allura-text">Phone: {addr.phone}</p>
+                  <p>{addr.city} - {addr.postalCode}</p>
+                  <p>{addr.state}, {addr.country}</p>
+                  <p className="pt-1 text-allura-text">Phone: {addr.phone.countryCode} {addr.phone.number}</p>
+                </div>
+
+                <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity flex gap-2">
+                  <button
+                    onClick={() => deleteCustomerAddress(addr.id)}
+                    className="text-xs font-sans text-red-500 hover:underline"
+                  >
+                    Delete
+                  </button>
                 </div>
               </div>
             ))}
@@ -344,18 +408,21 @@ export const AccountPage: React.FC = () => {
                     <input
                       type="text"
                       required
-                      value={newAddress.name}
-                      onChange={e => setNewAddress({ ...newAddress, name: e.target.value })}
+                      value={newAddress.fullName}
+                      onChange={e => setNewAddress({ ...newAddress, fullName: e.target.value })}
                       className="w-full p-2.5 bg-allura-bg border border-allura-border rounded-xl"
                     />
                   </div>
                   <div>
-                    <label className="block font-bold text-allura-muted uppercase text-[10px] mb-1">Phone</label>
+                    <label className="block font-bold text-allura-muted uppercase text-[10px] mb-1">Phone Number</label>
                     <input
                       type="tel"
                       required
-                      value={newAddress.phone}
-                      onChange={e => setNewAddress({ ...newAddress, phone: e.target.value })}
+                      value={newAddress.phone.number}
+                      onChange={e => setNewAddress({
+                        ...newAddress,
+                        phone: { ...newAddress.phone, number: e.target.value }
+                      })}
                       className="w-full p-2.5 bg-allura-bg border border-allura-border rounded-xl"
                     />
                   </div>
@@ -382,12 +449,12 @@ export const AccountPage: React.FC = () => {
                       />
                     </div>
                     <div>
-                      <label className="block font-bold text-allura-muted uppercase text-[10px] mb-1">Pincode</label>
+                      <label className="block font-bold text-allura-muted uppercase text-[10px] mb-1">Pincode / Postal Code</label>
                       <input
                         type="text"
                         required
-                        value={newAddress.pincode}
-                        onChange={e => setNewAddress({ ...newAddress, pincode: e.target.value })}
+                        value={newAddress.postalCode}
+                        onChange={e => setNewAddress({ ...newAddress, postalCode: e.target.value })}
                         className="w-full p-2.5 bg-allura-bg border border-allura-border rounded-xl"
                       />
                     </div>
@@ -428,7 +495,7 @@ export const AccountPage: React.FC = () => {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs font-sans">
             <div className="p-4 bg-allura-bg/60 rounded-xl border border-allura-border">
               <span className="text-allura-muted uppercase text-[10px] font-bold">Standard Size</span>
-              <p className="font-serif text-xl font-bold text-allura-darkBrown mt-1">{customer?.sizePreferences?.preferredSize || 'M'}</p>
+              <p className="font-serif text-xl font-bold text-allura-darkBrown mt-1">{customer?.sizePreferences?.preferredSize || '—'}</p>
             </div>
             <div className="p-4 bg-allura-bg/60 rounded-xl border border-allura-border">
               <span className="text-allura-muted uppercase text-[10px] font-bold">Bust Size</span>
@@ -482,7 +549,9 @@ export const AccountPage: React.FC = () => {
         </div>
       )}
 
-      <InvoiceModal order={invoiceOrder} onClose={() => setInvoiceOrder(null)} />
     </div>
+
+    <InvoiceModal order={invoiceOrder} onClose={() => setInvoiceOrder(null)} onDownload={downloadOrderInvoice} />
+    </>
   );
 };

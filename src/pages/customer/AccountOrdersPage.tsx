@@ -1,17 +1,24 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Package, Search, Eye, RotateCcw, FileText, ArrowLeft, ShoppingBag } from 'lucide-react';
 import { useShop } from '../../context/ShopContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { InvoiceModal } from '../../components/common/InvoiceModal';
+import { downloadOrderInvoice } from '../../service/orders';
+import { OrderCardSkeleton } from '../../components/ui/OrderCardSkeleton';
+import { OrderCardReviewSwap } from '../../components/reviews/OrderCardReviewSwap';
 
 export const AccountOrdersPage: React.FC = () => {
-  const { orders, formatPrice, invoiceOrder, setInvoiceOrder, addToCart } = useShop();
+  const { orders, formatPrice, invoiceOrder, setInvoiceOrder, addToCart, refreshOrders, isLoadingOrders } = useShop();
+
+  useEffect(() => {
+    refreshOrders();
+  }, [refreshOrders]);
   const [filterStatus, setFilterStatus] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState('');
   const navigate = useNavigate();
 
-  const statuses = ['All', 'Processing', 'Shipped', 'Delivered', 'Cancelled', 'Returned'];
+  const statuses = ['All', 'Pending', 'Confirmed', 'Processing', 'Shipped', 'Delivered', 'Cancelled', 'Returned'];
 
   const filteredOrders = orders.filter(order => {
     const matchesFilter = filterStatus === 'All' || order.orderStatus === filterStatus;
@@ -22,7 +29,8 @@ export const AccountOrdersPage: React.FC = () => {
   });
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-16 space-y-8">
+    <>
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-16 space-y-8 print:hidden">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-allura-border/60 pb-6">
         <div>
@@ -72,7 +80,9 @@ export const AccountOrdersPage: React.FC = () => {
       </div>
 
       {/* Orders List */}
-      {filteredOrders.length === 0 ? (
+      {isLoadingOrders && orders.length === 0 ? (
+        <OrderCardSkeleton count={3} />
+      ) : filteredOrders.length === 0 ? (
         <div className="bg-allura-card border border-allura-border rounded-2xl p-12 text-center space-y-4 shadow-subtle">
           <div className="w-14 h-14 rounded-full bg-allura-bgSecondary text-allura-goldDark flex items-center justify-center mx-auto">
             <Package size={28} />
@@ -165,6 +175,7 @@ export const AccountOrdersPage: React.FC = () => {
                     <span>View Details</span>
                   </Link>
 
+                  <OrderCardReviewSwap order={order} buttonClassName="px-3.5 py-1.5 rounded-lg bg-allura-gold/15 text-allura-goldDark border border-allura-gold/30 text-xs font-sans font-bold hover:bg-allura-gold/25 transition-colors flex items-center gap-1.5">
                   <Link
                     to={`/account/orders/${order.id}/tracking`}
                     className="px-3.5 py-1.5 rounded-lg bg-allura-gold/15 text-allura-goldDark border border-allura-gold/30 text-xs font-sans font-bold hover:bg-allura-gold/25 transition-colors flex items-center gap-1.5"
@@ -172,6 +183,7 @@ export const AccountOrdersPage: React.FC = () => {
                     <Package size={13} />
                     <span>Track Order</span>
                   </Link>
+                  </OrderCardReviewSwap>
 
                   <button
                     onClick={() => setInvoiceOrder(order)}
@@ -210,8 +222,10 @@ export const AccountOrdersPage: React.FC = () => {
         </div>
       )}
 
-      {/* Printable Invoice Modal */}
-      <InvoiceModal order={invoiceOrder} onClose={() => setInvoiceOrder(null)} />
     </div>
+
+    {/* Printable Invoice Modal */}
+    <InvoiceModal order={invoiceOrder} onClose={() => setInvoiceOrder(null)} onDownload={downloadOrderInvoice} />
+    </>
   );
 };

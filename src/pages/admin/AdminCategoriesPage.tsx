@@ -1,41 +1,137 @@
-import React, { useState } from 'react';
-import { Plus, Edit3 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Plus, Edit3, Trash2, Folder, Loader2 } from 'lucide-react';
 import { useAdmin } from '../../context/AdminContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { ImageUploadDropzone } from '../../components/admin/ImageUploadDropzone';
+import { getCategories, createCategory, updateCategory, deleteCategory } from '../../service/category';
+import type { Category } from '../../types';
+import { useConfirm } from '../../context/ConfirmContext';
+import { useShop } from '../../context/ShopContext';
+import { getBackendErrorMessage } from '../../utils/apiResponse';
+
+import { AdminErrorBanner } from '../../components/admin/AdminErrorBanner';
 
 export const AdminCategoriesPage: React.FC = () => {
   const { products } = useAdmin();
+  const confirm = useConfirm();
+  const { showToast } = useShop();
 
-  const [categories, setCategories] = useState([
-    { id: 'cat-1', name: 'Ethnic Wear', slug: 'ethnic-wear', order: 1, status: 'Active', image: '/images/best-sellers/classic-cream-anarkali.jpeg' },
-    { id: 'cat-2', name: 'Modest Wear', slug: 'modest-wear', order: 2, status: 'Active', image: '/images/best-sellers/aura-cream-embroidered.jpeg' },
-    { id: 'cat-3', name: 'Party Wear', slug: 'party-wear', order: 3, status: 'Active', image: '/images/best-sellers/blush-modest-elegance.jpeg' },
-    { id: 'cat-4', name: 'Curated Sets', slug: 'curated-sets', order: 4, status: 'Active', image: '/images/best-sellers/emerald-festive-silk.jpeg' },
-    { id: 'cat-5', name: 'Bridal Edit', slug: 'bridal-edit', order: 5, status: 'Active', image: '/images/about/atelier-story.jpg' },
-  ]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [pageError, setPageError] = useState<string | null>(null);
+  const [modalError, setModalError] = useState<string | null>(null);
+  
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  
+  const [formData, setFormData] = useState({
+    name: '',
+    slug: '',
+    status: 'ACTIVE',
+    image: { url: '' },
+  });
 
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [newCatName, setNewCatName] = useState('');
-  const [newCatSlug, setNewCatSlug] = useState('');
-  const [newCatImage, setNewCatImage] = useState('/images/best-sellers/classic-cream-anarkali.jpeg');
+  const fetchCategories = async () => {
+    setIsLoading(true);
+    setPageError(null);
+    try {
+      const data = await getCategories();
+      setCategories(data);
+    } catch (error) {
+      console.error('Failed to fetch categories:', error);
+      setPageError(getBackendErrorMessage(error, 'Failed to fetch categories'));
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-  const handleCreate = (e: React.FormEvent) => {
+  useEffect(() => {
+    fetchCategories();
+  }, []);
+
+  const handleOpenAdd = () => {
+    setEditingCategoryId(null);
+    setModalError(null);
+    setFormData({
+      name: '',
+      slug: '',
+      status: 'ACTIVE',
+      image: { url: '' },
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEdit = (cat: Category) => {
+    setEditingCategoryId(cat.id);
+    setModalError(null);
+    setFormData({
+      name: cat.name,
+      slug: cat.slug,
+      status: cat.status || 'ACTIVE',
+      image: typeof cat.image === 'string'
+        ? { url: cat.image }
+        : { url: cat.image?.url || '' },
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleDelete = async (id: string) => {
+    const category = categories.find(c => c.id === id);
+    const ok = await confirm({
+      title: 'Delete category',
+      message: `Delete "${category?.name || 'this category'}"? This can't be undone. Products in it will no longer be grouped under this category.`,
+      confirmLabel: 'Delete',
+      isDestructive: true,
+    });
+    if (!ok) return;
+    setDeletingId(id);
+    try {
+      const msg = await deleteCategory(id);
+      setCategories(prev => prev.filter(c => c.id !== id));
+      showToast(msg || `Category "${category?.name || ''}" deleted successfully`, 'info');
+    } catch (error: any) {
+      console.error('Failed to delete category:', error);
+      showToast(getBackendErrorMessage(error, 'Failed to delete category'), 'error');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newCatName) return;
-    const added = {
-      id: `cat-${Date.now()}`,
-      name: newCatName,
-      slug: newCatSlug || newCatName.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-      order: categories.length + 1,
-      status: 'Active',
-      image: newCatImage || '/images/best-sellers/classic-cream-anarkali.jpeg',
+    if (!formData.name) return;
+    setModalError(null);
+    setIsSaving(true);
+    
+    // Build payload — send only fields the backend accepts
+    const payload = {
+      name: formData.name,
+      slug: formData.slug,
+      status: formData.status,
+      image: formData.image?.url ? formData.image : undefined,
     };
-    setCategories([...categories, added]);
-    setNewCatName('');
-    setNewCatSlug('');
-    setNewCatImage('/images/best-sellers/classic-cream-anarkali.jpeg');
-    setIsCreateOpen(false);
+
+    try {
+      if (editingCategoryId) {
+        const updated = await updateCategory(editingCategoryId, payload);
+        setCategories(categories.map(c => (c.id === editingCategoryId ? updated : c)));
+        showToast(updated?._message || 'Category updated successfully', 'success');
+      } else {
+        const added = await createCategory(payload);
+        setCategories([...categories, added]);
+        showToast(added?._message || 'Category created successfully', 'success');
+      }
+      setIsModalOpen(false);
+    } catch (error: any) {
+      console.error('Failed to save category:', error);
+      const errText = getBackendErrorMessage(error, 'Failed to save category');
+      setModalError(errText);
+      showToast(errText, 'error');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const getProductCount = (catName: string) => {
@@ -59,80 +155,137 @@ export const AdminCategoriesPage: React.FC = () => {
         </div>
 
         <button
-          onClick={() => setIsCreateOpen(true)}
-          className="px-4 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-xl text-xs font-sans font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 shadow-sm"
+          onClick={handleOpenAdd}
+          className="px-4 py-2 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-xl text-xs font-sans font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 shadow-sm"
         >
           <Plus size={14} />
           <span>Add Category</span>
         </button>
       </div>
 
+      {pageError && (
+        <AdminErrorBanner
+          title="Failed to Load Categories"
+          error={pageError}
+          onDismiss={() => setPageError(null)}
+        />
+      )}
+
       {/* Categories Table */}
       <div className="bg-white border border-stone-200 rounded-2xl overflow-hidden shadow-xs">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs font-sans border-collapse">
-            <thead>
-              <tr className="bg-stone-50 border-b border-stone-200 text-stone-500 uppercase tracking-wider text-[10px]">
-                <th className="p-4 w-12 text-center">Order</th>
-                <th className="p-4">Category Name</th>
-                <th className="p-4">Slug</th>
-                <th className="p-4">Linked Products</th>
-                <th className="p-4">Status</th>
-                <th className="p-4 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-stone-100">
-              {categories.map((cat, idx) => (
-                <tr key={cat.id} className="hover:bg-stone-50/70 transition-colors">
-                  <td className="p-4 text-center font-mono text-stone-400 font-bold">
-                    0{idx + 1}
-                  </td>
-                  <td className="p-4">
-                    <div className="flex items-center gap-3">
-                      <img
-                        src={cat.image}
-                        alt={cat.name}
-                        className="w-10 h-12 object-cover rounded-lg bg-stone-100"
-                      />
-                      <span className="font-serif text-sm font-medium text-stone-900">{cat.name}</span>
-                    </div>
-                  </td>
-                  <td className="p-4 font-mono text-stone-500">/{cat.slug}</td>
-                  <td className="p-4 font-semibold text-stone-800">
-                    {getProductCount(cat.name)} active designs
-                  </td>
-                  <td className="p-4">
-                    <StatusBadge status={cat.status} size="sm" />
-                  </td>
-                  <td className="p-4 text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <button className="p-1.5 text-stone-400 hover:text-stone-800 rounded-lg">
-                        <Edit3 size={14} />
-                      </button>
-                    </div>
-                  </td>
+          {isLoading ? (
+             <div className="p-8 text-center text-stone-500 text-xs">Loading categories...</div>
+          ) : (
+            <table className="w-full text-left text-xs font-sans border-collapse">
+              <thead>
+                <tr className="bg-stone-50 border-b border-stone-200 text-stone-500 uppercase tracking-wider text-[10px]">
+                  <th className="p-4 w-12 text-center">Order</th>
+                  <th className="p-4">Category Name</th>
+                  <th className="p-4">Slug</th>
+                  <th className="p-4">Linked Products</th>
+                  <th className="p-4">Status</th>
+                  <th className="p-4 text-right">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-stone-100">
+                {categories.map((cat, idx) => (
+                  <tr key={cat.id} className="hover:bg-stone-50/70 transition-colors">
+                    <td className="p-4 text-center font-mono text-stone-400 font-bold">
+                      0{idx + 1}
+                    </td>
+                    <td className="p-4">
+                      <div className="flex items-center gap-3">
+                        {(() => {
+                          const imgUrl = typeof cat.image === 'object' ? (cat.image as any)?.url : cat.image;
+                          return imgUrl ? (
+                            <img
+                              src={imgUrl}
+                              alt={cat.name}
+                              className="w-10 h-12 object-cover rounded-lg bg-stone-100"
+                              onError={(e) => {
+                                (e.target as HTMLElement).style.display = 'none';
+                              }}
+                            />
+                          ) : (
+                            <div className="w-10 h-12 rounded-lg bg-stone-100 border border-stone-200 flex items-center justify-center text-stone-400">
+                              <Folder size={18} />
+                            </div>
+                          );
+                        })()}
+                        <span className="font-serif text-sm font-medium text-stone-900">{cat.name}</span>
+                      </div>
+                    </td>
+                    <td className="p-4 font-mono text-stone-500">/{cat.slug}</td>
+                    <td className="p-4 font-semibold text-stone-800">
+                      {getProductCount(cat.name)} active designs
+                    </td>
+                    <td className="p-4">
+                      <StatusBadge status={cat.status} size="sm" />
+                    </td>
+                    <td className="p-4 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <button 
+                          onClick={() => handleOpenEdit(cat)}
+                          className="p-1.5 text-stone-400 hover:text-stone-800 rounded-lg"
+                          title="Edit"
+                        >
+                          <Edit3 size={14} />
+                        </button>
+                        <button 
+                          onClick={() => handleDelete(cat.id)}
+                          disabled={deletingId === cat.id}
+                          className="p-1.5 text-stone-400 hover:text-red-500 rounded-lg disabled:opacity-50"
+                          title="Delete"
+                        >
+                          {deletingId === cat.id ? <Loader2 size={14} className="animate-spin text-stone-400" /> : <Trash2 size={14} />}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {categories.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="p-8 text-center text-stone-500">
+                      No categories found. Click 'Add Category' to create one.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
 
-      {/* Create Category Modal */}
-      {isCreateOpen && (
+      {/* Create/Edit Category Modal */}
+      {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-sm">
           <div className="bg-white border border-stone-200 rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl">
-            <h3 className="font-serif text-xl text-stone-900">Add New Category</h3>
-            <form onSubmit={handleCreate} className="space-y-3 text-xs font-sans">
+            <h3 className="font-serif text-xl text-stone-900">
+              {editingCategoryId ? 'Edit Category' : 'Add New Category'}
+            </h3>
+
+            {modalError && (
+              <AdminErrorBanner
+                title="Category Save Failed"
+                error={modalError}
+                onDismiss={() => setModalError(null)}
+              />
+            )}
+
+            <form onSubmit={handleSubmit} className="space-y-3 text-xs font-sans">
               <div>
                 <label className="block text-[10px] uppercase font-bold text-stone-500 mb-1">Category Name</label>
                 <input
                   type="text"
                   required
-                  value={newCatName}
+                  value={formData.name}
                   onChange={e => {
-                    setNewCatName(e.target.value);
-                    setNewCatSlug(e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, '-'));
+                    setFormData({
+                      ...formData,
+                      name: e.target.value,
+                      slug: e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+                    });
                   }}
                   className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl"
                 />
@@ -142,16 +295,28 @@ export const AdminCategoriesPage: React.FC = () => {
                 <input
                   type="text"
                   required
-                  value={newCatSlug}
-                  onChange={e => setNewCatSlug(e.target.value)}
+                  value={formData.slug}
+                  onChange={e => setFormData({ ...formData, slug: e.target.value })}
                   className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl font-mono"
                 />
+              </div>
+              <div>
+                <label className="block text-[10px] uppercase font-bold text-stone-500 mb-1">Status</label>
+                <select
+                  value={formData.status}
+                  onChange={e => setFormData({ ...formData, status: e.target.value })}
+                  className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none"
+                >
+                  <option value="ACTIVE">Active</option>
+                  <option value="INACTIVE">Inactive</option>
+                  <option value="ARCHIVED">Archived</option>
+                </select>
               </div>
               <div className="pt-2">
                 <ImageUploadDropzone
                   label="Category Cover & Banner Image"
-                  value={newCatImage}
-                  onChange={setNewCatImage}
+                  value={typeof formData.image === 'object' ? (formData.image as any)?.url || '' : (formData.image || '')}
+                  onChange={(url) => setFormData({ ...formData, image: { url } })}
                   aspectRatioLabel="Recommended: 400×500px"
                   presets={[
                     { label: 'Ethnic Anarkali', url: '/images/best-sellers/classic-cream-anarkali.jpeg' },
@@ -164,16 +329,19 @@ export const AdminCategoriesPage: React.FC = () => {
               <div className="flex justify-end gap-2 pt-3">
                 <button
                   type="button"
-                  onClick={() => setIsCreateOpen(false)}
-                  className="px-4 py-2 border border-stone-200 rounded-xl text-stone-500"
+                  disabled={isSaving}
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2 border border-stone-200 rounded-xl text-stone-500 hover:bg-stone-50 disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-stone-900 text-white rounded-xl font-bold uppercase tracking-wider"
+                  disabled={isSaving}
+                  className="px-5 py-2 bg-[#561C08] hover:bg-[#561C08]/90 disabled:opacity-50 text-white rounded-xl font-bold uppercase tracking-wider flex items-center justify-center gap-2 shadow-sm"
                 >
-                  Save Category
+                  {isSaving && <Loader2 size={14} className="animate-spin" />}
+                  <span>{isSaving ? 'Saving...' : 'Save Category'}</span>
                 </button>
               </div>
             </form>

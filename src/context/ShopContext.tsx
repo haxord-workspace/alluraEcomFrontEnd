@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import type {
   Product,
   CartItem,
@@ -9,11 +10,40 @@ import type {
   Coupon,
   AIMessage,
   ReturnRequest,
+  Category,
 } from '../types';
-import { productsData } from '../data/products';
-import { mockOrdersData, mockReturnRequestsData } from '../data/mockOrders';
-import { mockCustomersData } from '../data/mockCustomers';
-import { mockCouponsData } from '../data/mockCoupons';
+import { login, register, logout, googleLogin } from '../service/auth';
+import type { LoginData, RegisterData, GoogleLoginData } from '../service/auth';
+import { getCustomerProfile, profileDisplayName, profilePhone } from '../service/customer';
+import { getStoreProducts, getStoreCategories, getStoreProduct, getStoreSettings, NO_COLOR } from '../service/store';
+import type { StoreSettings } from '../service/store';
+import { getAddresses, addAddress, updateAddress, deleteAddress } from '../service/address';
+import { getWishlist, addWishlistItem, removeWishlistItem, clearWishlist as clearWishlistApi } from '../service/wishlist';
+import type { SavedAddress } from '../types';
+import {
+  getCart,
+  addCartItem,
+  updateCartItem,
+  removeCartItem,
+  clearCart as clearCartApi,
+  recalculateCart as recalculateCartApi,
+  validateCart as validateCartApi,
+} from '../service/cart';
+import type { CartSnapshot, CartTotals, CartValidationResult } from '../service/cart';
+import { validateCoupon } from '../service/coupons';
+import { newMetaEventId, metaHeaders, trackMetaEvent } from '../utils/metaPixel';
+import { getMyOrders, getMyOrder, cancelMyOrder, orderErrorMessage, enrichOrder } from '../service/orders';
+import {
+  getMyNotifications,
+  getUnreadCount,
+  markNotificationRead,
+  markAllNotificationsRead,
+  notificationErrorMessage,
+  registerDeviceToken,
+  removeDeviceToken,
+} from '../service/notifications';
+import { requestPushToken, onForegroundPush } from '../service/firebase';
+import { getBackendErrorMessage } from '../utils/apiResponse';
 
 interface ToastNotification {
   id: string;
@@ -24,16 +54,35 @@ interface ToastNotification {
 interface ShopContextType {
   // Products
   products: Product[];
-  
+  categories: Category[];
+  isLoadingProducts: boolean;
+  storeSettings: StoreSettings | null;
+  refreshStoreSettings: () => Promise<void>;
+
   // Cart & Wishlist
   cart: CartItem[];
   wishlist: string[];
-  addToCart: (product: Product, size: string, color: ProductColor, quantity?: number) => void;
-  removeFromCart: (productId: string, size: string, colorName: string) => void;
-  updateQuantity: (productId: string, size: string, colorName: string, quantity: number) => void;
-  clearCart: () => void;
-  toggleWishlist: (product: Product) => void;
+  cartTotals: CartTotals;
+  /** Server cart id (needed by coupon validation and checkout) */
+  cartId?: string;
+  isCartLoading: boolean;
+  /**
+   * Adds to the bag. Resolves true when the item is in the bag.
+   * Pass { silent: true } (e.g. for Buy Now) to skip the toast and keep the bag drawer closed.
+   */
+  addToCart: (product: Product, size?: string, color?: ProductColor, quantity?: number, options?: { silent?: boolean }) => Promise<boolean>;
+  removeFromCart: (productId: string, size: string, colorName: string) => Promise<void>;
+  updateQuantity: (productId: string, size: string, colorName: string, quantity: number) => Promise<void>;
+  clearCart: () => Promise<void>;
+  refreshCart: () => Promise<void>;
+  recalculateCart: () => Promise<void>;
+  validateCart: () => Promise<CartValidationResult>;
+  wishlistProducts: Product[];
+  isWishlistLoading: boolean;
+  toggleWishlist: (product: Product) => Promise<void>;
   isInWishlist: (productId: string) => boolean;
+  refreshWishlist: () => Promise<void>;
+  clearWishlist: () => Promise<void>;
 
   // Recently Viewed
   recentlyViewed: Product[];
@@ -47,19 +96,38 @@ interface ShopContextType {
   freeShippingProgress: number;
   appliedCoupon: Coupon | null;
   couponDiscount: number;
-  applyCoupon: (code: string) => { success: boolean; message: string };
-  removeCoupon: () => void;
+  applyCoupon: (code: string) => Promise<{ success: boolean; message: string }>;
+  isApplyingCoupon: boolean;
+  /** Pass a reason to show instead of the default "Coupon removed" toast */
+  removeCoupon: (reason?: string) => void;
   finalOrderTotal: number;
 
   // Customer Auth & Profile
   customer: CustomerProfile | null;
   isAuthenticated: boolean;
-  loginWithGoogle: () => Promise<void>;
+  loginUser: (data: LoginData) => Promise<void>;
+  registerUser: (data: RegisterData) => Promise<void>;
+  loginWithGoogle: (data: GoogleLoginData) => Promise<void>;
   completeProfile: (profile: Partial<CustomerProfile>) => void;
-  logoutCustomer: () => void;
+  logoutCustomer: () => Promise<void>;
+
+  // Address Management
+  isLoadingAddresses: boolean;
+  fetchCustomerAddresses: () => Promise<void>;
+  addCustomerAddress: (data: Omit<SavedAddress, 'id'>) => Promise<SavedAddress | undefined>;
+  updateCustomerAddress: (id: string, data: Partial<SavedAddress>) => Promise<void>;
+  deleteCustomerAddress: (id: string) => Promise<void>;
 
   // Orders & Returns
   orders: Order[];
+  ordersTotal: number;
+  isLoadingOrders: boolean;
+  /** GET /orders — refreshes the customer's order list */
+  refreshOrders: () => Promise<void>;
+  /** GET /orders/{id} — loads one order into the cache and returns it */
+  loadOrder: (orderId: string) => Promise<Order | undefined>;
+  /** POST /orders/{id}/cancel */
+  cancelCustomerOrder: (orderId: string, reason: string, note?: string) => Promise<boolean>;
   placeOrder: (orderData: Partial<Order>) => Order;
   getOrderById: (orderId: string) => Order | undefined;
   returns: ReturnRequest[];
@@ -68,8 +136,12 @@ interface ShopContextType {
   // Notifications
   notifications: CustomerNotification[];
   unreadNotificationCount: number;
+  isLoadingNotifications: boolean;
+  notificationsError: string | null;
+  refreshNotifications: () => Promise<void>;
   markNotificationAsRead: (id: string) => void;
   markAllNotificationsAsRead: () => void;
+  enablePushNotifications: () => Promise<{ success: boolean; status: string }>;
 
   // AI Assistant
   isAIAssistantOpen: boolean;
@@ -102,38 +174,8 @@ interface ShopContextType {
 
 const ShopContext = createContext<ShopContextType | undefined>(undefined);
 
-const FREE_SHIPPING_THRESHOLD = 2999;
-
-const INITIAL_NOTIFICATIONS: CustomerNotification[] = [
-  {
-    id: 'notif-1',
-    title: 'Order Dispatched',
-    message: 'Your order #ALR-ORD-849201 is in transit with Delhivery Express.',
-    category: 'Shipping',
-    timestamp: '2 hours ago',
-    isRead: false,
-    actionUrl: '/account/orders/ord-849201/tracking',
-    actionLabel: 'Track Shipment',
-  },
-  {
-    id: 'notif-2',
-    title: 'Festive Luxury Edit 2026',
-    message: 'Use code FESTIVE15 to unlock 15% savings across all handcrafted silk sets.',
-    category: 'Offers',
-    timestamp: '1 day ago',
-    isRead: false,
-    actionUrl: '/offers',
-    actionLabel: 'View Offer',
-  },
-  {
-    id: 'notif-3',
-    title: 'Allura Circle Member Reward',
-    message: 'You have earned Gold tier privileges. Enjoy priority atelier stitching.',
-    category: 'Account',
-    timestamp: '3 days ago',
-    isRead: true,
-  },
-];
+/** Last FCM token registered for this browser, so we don't re-register the same one. */
+const DEVICE_TOKEN_STORAGE_KEY = 'allura_fcm_token';
 
 const INITIAL_AI_MESSAGES: AIMessage[] = [
   {
@@ -143,86 +185,162 @@ const INITIAL_AI_MESSAGES: AIMessage[] = [
     timestamp: 'Just now',
   },
 ];
+import { useAppDispatch } from '../store/hooks';
+import { fetchCustomerProfile } from '../store/slices/authSlice';
+import { hasCustomerSession, storeCustomerTokens, clearCustomerTokens, CUSTOMER_SESSION_EXPIRED_EVENT } from '../service/api';
 
 export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [products] = useState<Product[]>(productsData);
+  const dispatch = useAppDispatch();
+  const navigate = useNavigate();
+  // The admin portal doesn't use the storefront catalog or the customer's cart / wishlist
+  const isAdminRoute = useLocation().pathname.startsWith('/admin');
 
-  // Cart state
-  const [cart, setCart] = useState<CartItem[]>(() => {
-    try {
-      const saved = localStorage.getItem('allura_cart');
-      return saved ? JSON.parse(saved) : [
-        {
-          product: productsData[0],
-          selectedSize: 'M',
-          selectedColor: productsData[0].colors[0],
-          quantity: 1,
-        }
-      ];
-    } catch {
-      return [];
-    }
-  });
+  useEffect(() => {
+    // Restore the customer's profile after a refresh, but only if they are actually logged in
+    // (GET /orders is not part of the API, so it is no longer called here)
+    if (!isAdminRoute && hasCustomerSession()) dispatch(fetchCustomerProfile());
+  }, [dispatch, isAdminRoute]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [isLoadingProducts, setIsLoadingProducts] = useState(true);
+  const [storeSettings, setStoreSettings] = useState<StoreSettings | null>(null);
 
-  // Wishlist state
-  const [wishlist, setWishlist] = useState<string[]>(() => {
+  // Fetch the public boutique profile / shipping settings once per storefront visit.
+  // Never blocks rendering — callers keep their own defaults until this resolves.
+  const settingsRequested = useRef(false);
+  const refreshStoreSettings = useCallback(async () => {
     try {
-      const saved = localStorage.getItem('allura_wishlist');
-      return saved ? JSON.parse(saved) : [productsData[0].id, productsData[1].id];
-    } catch {
-      return [];
+      const data = await getStoreSettings();
+      setStoreSettings(data);
+    } catch (e) {
+      console.error('Failed to load store settings:', e);
+      settingsRequested.current = false;
     }
-  });
+  }, []);
+
+  useEffect(() => {
+    if (isAdminRoute || settingsRequested.current) return;
+    settingsRequested.current = true;
+    refreshStoreSettings();
+  }, [isAdminRoute, refreshStoreSettings]);
+
+  // Load the real storefront catalog the first time a storefront page is shown: categories first
+  // so product category names can be resolved from the raw categoryId the list endpoint returns.
+  const catalogRequested = useRef(false);
+  useEffect(() => {
+    if (isAdminRoute || catalogRequested.current) return;
+    catalogRequested.current = true;
+    let cancelled = false;
+
+    const loadCatalog = async () => {
+      setIsLoadingProducts(true);
+      try {
+        const fetchedCategories = await getStoreCategories();
+        if (cancelled) return;
+        setCategories(fetchedCategories);
+
+        const categoryMap = fetchedCategories.reduce<Record<string, string>>((acc, cat) => {
+          acc[cat.id] = cat.name;
+          return acc;
+        }, {});
+
+        const { products: fetchedProducts } = await getStoreProducts({ limit: 100 }, categoryMap);
+        if (cancelled) return;
+        setProducts(fetchedProducts);
+      } catch (e) {
+        console.error('Failed to load storefront catalog:', e);
+        catalogRequested.current = false; // allow a retry on the next storefront visit
+      } finally {
+        if (!cancelled) setIsLoadingProducts(false);
+      }
+    };
+
+    loadCatalog();
+    return () => {
+      cancelled = true;
+      // StrictMode unmounts/remounts once in development: let the remount issue the (de-duplicated) request
+      catalogRequested.current = false;
+    };
+  }, [isAdminRoute]);
+
+  // Cart state (server is the source of truth; loaded once the customer is known)
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [cartId, setCartId] = useState<string | undefined>(undefined);
+  const [cartTotals, setCartTotals] = useState<CartTotals>({});
+  const [isCartLoading, setIsCartLoading] = useState(false);
+
+  // Lets cart responses that only carry a productId resolve to a full catalog product
+  const productsRef = useRef<Product[]>(products);
+  useEffect(() => { productsRef.current = products; }, [products]);
+  const lookupProduct = useCallback((productId: string) => productsRef.current.find(p => p.id === productId), []);
+
+  // Wishlist state (server is the source of truth; loaded once the customer is known)
+  const [wishlist, setWishlist] = useState<string[]>([]);
+  const [wishlistProductMap, setWishlistProductMap] = useState<Record<string, Product>>({});
+  const [isWishlistLoading, setIsWishlistLoading] = useState(false);
 
   // Recently Viewed state
   const [recentlyViewed, setRecentlyViewed] = useState<Product[]>(() => {
     try {
       const saved = localStorage.getItem('allura_recently_viewed');
-      return saved ? JSON.parse(saved) : [productsData[0], productsData[1], productsData[2]];
+      return saved ? JSON.parse(saved) : [];
     } catch {
-      return [productsData[0], productsData[1]];
+      return [];
     }
   });
 
   // Customer Profile & Session
   const [customer, setCustomer] = useState<CustomerProfile | null>(() => {
     try {
+      // The profile is cached in localStorage, but it's only valid while a login token
+      // (or a refresh token to renew it) still exists; otherwise start signed out.
       const saved = localStorage.getItem('allura_customer');
-      return saved ? JSON.parse(saved) : mockCustomersData[0];
+      if (!saved || !hasCustomerSession()) {
+        localStorage.removeItem('allura_customer');
+        return null;
+      }
+      return JSON.parse(saved);
     } catch {
-      return mockCustomersData[0];
+      return null;
     }
   });
 
+  // showToast is declared further down; reach it through a ref
+  const showToastRef = useRef<((message: string, type?: 'success' | 'info' | 'gold' | 'error') => void) | null>(null);
+
+  // The API client signals when the session can't be renewed (refresh token missing/expired)
+  useEffect(() => {
+    const onExpired = () => {
+      setCustomer(prev => {
+        if (prev) showToastRef.current?.('Your session has expired. Please sign in again.', 'info');
+        return null;
+      });
+    };
+    window.addEventListener(CUSTOMER_SESSION_EXPIRED_EVENT, onExpired);
+    return () => window.removeEventListener(CUSTOMER_SESSION_EXPIRED_EVENT, onExpired);
+  }, []);
+
   // Orders state
-  const [orders, setOrders] = useState<Order[]>(() => {
-    try {
-      const saved = localStorage.getItem('allura_orders');
-      return saved ? JSON.parse(saved) : mockOrdersData;
-    } catch {
-      return mockOrdersData;
-    }
-  });
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [ordersTotal, setOrdersTotal] = useState(0);
+  const [isLoadingOrders, setIsLoadingOrders] = useState(false);
+  const [isLoadingAddresses, setIsLoadingAddresses] = useState(false);
 
   // Return requests state
   const [returns, setReturns] = useState<ReturnRequest[]>(() => {
     try {
       const saved = localStorage.getItem('allura_returns');
-      return saved ? JSON.parse(saved) : mockReturnRequestsData;
+      return saved ? JSON.parse(saved) : [];
     } catch {
-      return mockReturnRequestsData;
+      return [];
     }
   });
 
-  // Notifications state
-  const [notifications, setNotifications] = useState<CustomerNotification[]>(() => {
-    try {
-      const saved = localStorage.getItem('allura_notifications');
-      return saved ? JSON.parse(saved) : INITIAL_NOTIFICATIONS;
-    } catch {
-      return INITIAL_NOTIFICATIONS;
-    }
-  });
+  // Notifications state (real API; was localStorage-mock, now server-backed)
+  const [notifications, setNotifications] = useState<CustomerNotification[]>([]);
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+  const [isLoadingNotifications, setIsLoadingNotifications] = useState(false);
+  const [notificationsError, setNotificationsError] = useState<string | null>(null);
 
   // Applied coupon state
   const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(() => {
@@ -253,23 +371,11 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
   const [invoiceOrder, setInvoiceOrder] = useState<Order | null>(null);
   const [toasts, setToasts] = useState<ToastNotification[]>([]);
+  
+  const isAuthenticated = !!customer;
+  const customerId: string | null = customer ? customer.id || customer.email || 'signed-in' : null;
 
   // Sync state to localStorage
-  useEffect(() => {
-    try {
-      localStorage.setItem('allura_cart', JSON.stringify(cart));
-    } catch (e) {
-      console.error(e);
-    }
-  }, [cart]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('allura_wishlist', JSON.stringify(wishlist));
-    } catch (e) {
-      console.error(e);
-    }
-  }, [wishlist]);
 
   useEffect(() => {
     try {
@@ -287,13 +393,44 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [customer]);
 
-  useEffect(() => {
+  // GET /customer/profile: real name, phone and avatar for the signed-in customer
+  // (the login response may only carry the email). Runs after sign-in and on app start.
+  const syncCustomerProfile = useCallback(async () => {
+    if (!hasCustomerSession()) return;
     try {
-      localStorage.setItem('allura_orders', JSON.stringify(orders));
+      const p = await getCustomerProfile();
+      setCustomer(prev =>
+        prev
+          ? {
+              ...prev,
+              id: prev.id && !prev.id.startsWith('usr-') ? prev.id : p.id || prev.id,
+              name: profileDisplayName(p) || prev.name,
+              email: p.email || prev.email,
+              phone: profilePhone(p) || prev.phone,
+              avatar: p.avatarUrl || prev.avatar,
+            }
+          : prev
+      );
     } catch (e) {
-      console.error(e);
+      console.warn('Could not load the customer profile:', e);
     }
-  }, [orders]);
+  }, []);
+
+  useEffect(() => {
+    if (customerId && !isAdminRoute) syncCustomerProfile();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customerId]);
+
+  // Drop the old locally-stored sample orders and clear orders on logout
+  useEffect(() => {
+    try { localStorage.removeItem('allura_orders'); } catch { /* ignore */ }
+  }, []);
+  useEffect(() => {
+    if (!customer) {
+      setOrders([]);
+      setOrdersTotal(0);
+    }
+  }, [customer]);
 
   useEffect(() => {
     try {
@@ -303,13 +440,85 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [returns]);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem('allura_notifications', JSON.stringify(notifications));
-    } catch (e) {
-      console.error(e);
+  const refreshNotifications = useCallback(async () => {
+    if (!customer || !hasCustomerSession() || isAdminRoute) {
+      setNotifications([]);
+      return;
     }
-  }, [notifications]);
+    setIsLoadingNotifications(true);
+    setNotificationsError(null);
+    try {
+      setNotifications(await getMyNotifications({ limit: 20 }));
+    } catch (err) {
+      setNotificationsError(notificationErrorMessage(err, 'Could not load notifications'));
+    } finally {
+      setIsLoadingNotifications(false);
+    }
+  }, [customerId, isAdminRoute]);
+
+  const refreshUnreadNotificationCount = useCallback(async () => {
+    if (!customer || !hasCustomerSession() || isAdminRoute) {
+      setUnreadNotificationCount(0);
+      return;
+    }
+    try {
+      setUnreadNotificationCount(await getUnreadCount());
+    } catch {
+      // Silent — the badge just keeps its last known value until the next tick.
+    }
+  }, [customerId, isAdminRoute]);
+
+  // Load on login / app start, clear on logout
+  useEffect(() => {
+    refreshNotifications();
+  }, [refreshNotifications]);
+
+  // Unread badge: on load, on tab focus, and every 60s. Stops when logged out.
+  useEffect(() => {
+    refreshUnreadNotificationCount();
+    if (!customer || isAdminRoute) return;
+    const timer = setInterval(refreshUnreadNotificationCount, 60000);
+    const onFocus = () => refreshUnreadNotificationCount();
+    window.addEventListener('focus', onFocus);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [refreshUnreadNotificationCount, customer, isAdminRoute]);
+
+  // Push notifications: Re-register on app load when the user is logged in and permission
+  // is ALREADY 'granted'. No popup or unprompted permission dialog is triggered.
+  useEffect(() => {
+    if (!customer || isAdminRoute) return;
+    if (typeof window === 'undefined' || !('Notification' in window)) return;
+    if (Notification.permission !== 'granted') return;
+
+    let isMounted = true;
+    (async () => {
+      try {
+        const token = await requestPushToken();
+        if (!token || !isMounted) return;
+        await registerDeviceToken({ token, platform: 'WEB' });
+        localStorage.setItem(DEVICE_TOKEN_STORAGE_KEY, token);
+      } catch (err) {
+        console.warn('Could not register the push device token:', err);
+      }
+    })();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [customerId, isAdminRoute]);
+
+  // A push that arrives while the site is open: toast + refresh the bell.
+  useEffect(() => {
+    if (!customer || isAdminRoute) return;
+    return onForegroundPush(({ title, body }) => {
+      showToast(title ? (body ? `${title}: ${body}` : title) : 'New notification', 'gold');
+      refreshNotifications();
+      refreshUnreadNotificationCount();
+    });
+  }, [customerId, isAdminRoute, refreshNotifications, refreshUnreadNotificationCount]);
 
   useEffect(() => {
     try {
@@ -330,10 +539,12 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const showToast = useCallback((message: string, type: 'success' | 'info' | 'gold' | 'error' = 'gold') => {
     const id = Math.random().toString(36).substring(2, 9);
     setToasts(prev => [...prev, { id, message, type }]);
+    const duration = type === 'error' ? 6500 : 3600;
     setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id));
-    }, 3600);
+    }, duration);
   }, []);
+  showToastRef.current = showToast;
 
   const removeToast = useCallback((id: string) => {
     setToasts(prev => prev.filter(t => t.id !== id));
@@ -346,110 +557,464 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   }, []);
 
-  const addToCart = useCallback((product: Product, size: string, color: ProductColor, quantity = 1) => {
-    setCart(prev => {
-      const existingIndex = prev.findIndex(
-        item => item.product.id === product.id && item.selectedSize === size && item.selectedColor.name === color.name
-      );
-      if (existingIndex > -1) {
-        const next = [...prev];
-        next[existingIndex].quantity += quantity;
-        return next;
-      }
-      return [...prev, { product, selectedSize: size, selectedColor: color, quantity }];
-    });
+  const cartErrorMessage = (error: any, fallback: string): string =>
+    getBackendErrorMessage(error, fallback);
 
-    addRecentlyViewed(product);
-    showToast(`Added ${product.name} (${size}) to your Bag`, 'gold');
-    setIsCartOpen(true);
-  }, [addRecentlyViewed, showToast]);
-
-  const removeFromCart = useCallback((productId: string, size: string, colorName: string) => {
-    setCart(prev =>
-      prev.filter(
-        item => !(item.product.id === productId && item.selectedSize === size && item.selectedColor.name === colorName)
-      )
-    );
-    showToast('Item removed from Bag', 'info');
-  }, [showToast]);
-
-  const updateQuantity = useCallback((productId: string, size: string, colorName: string, quantity: number) => {
-    if (quantity <= 0) {
-      removeFromCart(productId, size, colorName);
-      return;
-    }
-    setCart(prev =>
-      prev.map(item => {
-        if (item.product.id === productId && item.selectedSize === size && item.selectedColor.name === colorName) {
-          return { ...item, quantity };
-        }
-        return item;
-      })
-    );
-  }, [removeFromCart]);
-
-  const clearCart = useCallback(() => {
-    setCart([]);
+  const applyCartSnapshot = useCallback((snapshot: CartSnapshot) => {
+    if (snapshot.id) setCartId(snapshot.id);
+    setCart(snapshot.items);
+    setCartTotals(snapshot.totals);
   }, []);
 
-  const toggleWishlist = useCallback((product: Product) => {
+  const refreshCart = useCallback(async () => {
+    if (!customer || !hasCustomerSession()) {
+      setCart([]);
+      setCartTotals({});
+      setCartId(undefined);
+      return;
+    }
+    if (isAdminRoute) return;
+    setIsCartLoading(true);
+    try {
+      applyCartSnapshot(await getCart(lookupProduct));
+    } catch (e) {
+      console.error('Failed to load cart:', e);
+    } finally {
+      setIsCartLoading(false);
+    }
+  }, [customerId, isAdminRoute, applyCartSnapshot, lookupProduct]);
+
+  // Load on login / app start, clear on logout
+  useEffect(() => {
+    refreshCart();
+  }, [refreshCart]);
+
+  // Mutations that don't echo the cart back fall back to a re-fetch
+  const applyOrRefresh = useCallback(async (snapshot: CartSnapshot | null) => {
+    if (snapshot) applyCartSnapshot(snapshot);
+    else await refreshCart();
+  }, [applyCartSnapshot, refreshCart]);
+
+  const findCartLine = (productId: string, size: string, colorName: string) =>
+    cart.find(item => item.product.id === productId && item.selectedSize === size && item.selectedColor.name === colorName);
+
+  const addToCart = useCallback(async (
+    product: Product,
+    size = '',
+    color: ProductColor = NO_COLOR,
+    quantity = 1,
+    options: { silent?: boolean } = {}
+  ): Promise<boolean> => {
+    if (!customer) {
+      navigate('/auth/login');
+      return false;
+    }
+    try {
+      // The list endpoint doesn't include variants, so load the detail to find the SKU for this size / colour
+      let variants = product.variants;
+      let hasVariants = product.hasVariants;
+      if (!variants) {
+        try {
+          const detail = await getStoreProduct(product.id);
+          variants = detail.variants;
+          hasVariants = detail.hasVariants;
+        } catch {
+          variants = undefined;
+        }
+      }
+      const matches = (a: string, b: string) => !a || !b || a.toLowerCase() === b.toLowerCase();
+      const variant =
+        variants?.find(v => matches(v.size, size) && matches(v.color.name, color.name)) ||
+        (variants?.length === 1 ? variants[0] : undefined);
+
+      if (hasVariants && variants && variants.length > 0 && !variant) {
+        showToast(`Please choose a size and colour for ${product.name}`, 'error');
+        return false;
+      }
+
+      if (hasVariants && (!variants || variants.length === 0)) {
+        // Warning: product says it has variants but none were loaded.
+        // We will proceed to add without a variantId.
+        console.warn(`Product ${product.id} hasVariants but no variants array found. Adding base product.`);
+      }
+
+      // Meta: same event ID for the Pixel (below) and the backend's CAPI call (headers)
+      const metaEventId = newMetaEventId();
+      const snapshot = await addCartItem(
+        { productId: product.id, variantId: variant?.id, quantity },
+        lookupProduct,
+        metaHeaders(metaEventId)
+      );
+      await applyOrRefresh(snapshot);
+      const unitPrice = variant?.price || product.price;
+      trackMetaEvent(
+        'AddToCart',
+        {
+          content_ids: [variant?.sku || product.sku || product.id],
+          content_name: product.name,
+          content_type: 'product',
+          contents: [{ id: variant?.sku || product.sku || product.id, quantity, item_price: unitPrice }],
+          value: unitPrice * quantity,
+          currency: 'INR',
+        },
+        metaEventId
+      );
+
+      addRecentlyViewed(product);
+      if (!options.silent) {
+        showToast(`Added ${product.name}${size ? ` (${size})` : ''} to your Bag`, 'gold');
+        setIsCartOpen(true);
+      }
+      return true;
+    } catch (error: any) {
+      showToast(cartErrorMessage(error, 'Could not add this piece to your Bag'), 'error');
+      return false;
+    }
+  }, [addRecentlyViewed, showToast, customerId, navigate, lookupProduct, applyOrRefresh]);
+
+  const removeFromCart = useCallback(async (productId: string, size: string, colorName: string) => {
+    const line = findCartLine(productId, size, colorName);
+    if (!line) return;
+    // Not optimistic: the line stays (with a spinner) until the server confirms
+    try {
+      if (!line.id) throw new Error('Missing cart item id');
+      await applyOrRefresh(await removeCartItem(line.id, lookupProduct));
+      showToast('Item removed from Bag', 'info');
+    } catch (error: any) {
+      showToast(cartErrorMessage(error, 'Could not remove this item'), 'error');
+    }
+  }, [cart, showToast, lookupProduct, applyOrRefresh]);
+
+  const updateQuantity = useCallback(async (productId: string, size: string, colorName: string, quantity: number) => {
+    if (quantity <= 0) {
+      await removeFromCart(productId, size, colorName);
+      return;
+    }
+    const line = findCartLine(productId, size, colorName);
+    if (!line) return;
+    // Not optimistic: the count changes once the server confirms it
+    try {
+      if (!line.id) throw new Error('Missing cart item id');
+      await applyOrRefresh(await updateCartItem(line.id, quantity, lookupProduct));
+    } catch (error: any) {
+      showToast(cartErrorMessage(error, 'Could not update the quantity'), 'error');
+    }
+  }, [cart, removeFromCart, showToast, lookupProduct, applyOrRefresh]);
+
+  const clearCart = useCallback(async () => {
+    setCart([]);
+    setCartTotals({});
+    if (!customer) return;
+    try {
+      await clearCartApi();
+    } catch (e) {
+      console.error('Failed to clear cart:', e);
+      await refreshCart();
+    }
+  }, [customerId, refreshCart]);
+
+  const couponWarning = useRef('');
+  const recalculateCart = useCallback(async () => {
+    if (!customer) return;
+    try {
+      await applyOrRefresh(await recalculateCartApi(lookupProduct));
+    } catch (e: any) {
+      const body = e?.response?.data;
+      const isCouponProblem = body?.error?.code === 'COUPON_INVALID' || /coupon/i.test(body?.message || '');
+      if (isCouponProblem) {
+        // Drop the coupon locally and tell the customer once (not on every recalculation)
+        setAppliedCoupon(null);
+        setCouponDiscountAmount(0);
+        const message = body?.message || 'Your coupon is no longer valid';
+        if (couponWarning.current !== message) {
+          couponWarning.current = message;
+          showToast(`${message}. The coupon was removed from your bag.`, 'info');
+        }
+      } else {
+        console.error('Failed to recalculate cart:', e);
+      }
+    }
+  }, [customerId, lookupProduct, applyOrRefresh, showToast]);
+
+  const validateCart = useCallback(async (): Promise<CartValidationResult> => {
+    if (!customer) return { valid: false, issues: ['Please sign in to continue to checkout.'] };
+    const result = await validateCartApi();
+    if (!result.valid) {
+      showToast(result.issues[0] || 'Your Bag needs attention before checkout.', 'error');
+      // The server may have adjusted quantities or prices; show the latest state
+      await refreshCart();
+    }
+    return result;
+  }, [customerId, showToast, refreshCart]);
+
+  const refreshWishlist = useCallback(async () => {
+    if (!customer || !hasCustomerSession()) {
+      setWishlist([]);
+      setWishlistProductMap({});
+      return;
+    }
+    if (isAdminRoute) return;
+    setIsWishlistLoading(true);
+    try {
+      const entries = await getWishlist();
+      setWishlist(entries.map(e => e.productId));
+      setWishlistProductMap(
+        entries.reduce<Record<string, Product>>((acc, e) => {
+          if (e.product) acc[e.productId] = e.product;
+          return acc;
+        }, {})
+      );
+    } catch (e) {
+      console.error('Failed to load wishlist:', e);
+    } finally {
+      setIsWishlistLoading(false);
+    }
+  }, [customerId, isAdminRoute]);
+
+  // Load on login / app start, clear on logout
+  useEffect(() => {
+    refreshWishlist();
+  }, [refreshWishlist]);
+
+  const toggleWishlist = useCallback(async (product: Product) => {
+    if (!customer) {
+      navigate('/auth/login');
+      return;
+    }
     const exists = wishlist.includes(product.id);
+
+    // Optimistic update, rolled back if the API call fails
     if (exists) {
       setWishlist(prev => prev.filter(id => id !== product.id));
-      showToast(`Removed from your Wishlist`, 'info');
     } else {
       setWishlist(prev => [...prev, product.id]);
-      showToast(`Added to your Wishlist ❤️`, 'gold');
+      setWishlistProductMap(prev => ({ ...prev, [product.id]: product }));
+    }
+
+    try {
+      if (exists) {
+        await removeWishlistItem({ productId: product.id });
+        showToast(`Removed from your Wishlist`, 'info');
+      } else {
+        await addWishlistItem({ productId: product.id });
+        showToast(`Added to your Wishlist ❤️`, 'gold');
+      }
+    } catch (error: any) {
+      setWishlist(prev => (exists ? [...prev, product.id] : prev.filter(id => id !== product.id)));
+      showToast(error.response?.data?.message || 'Could not update your Wishlist', 'error');
+    }
+  }, [wishlist, showToast, customerId, navigate]);
+
+  const clearWishlist = useCallback(async () => {
+    const previous = wishlist;
+    setWishlist([]);
+    try {
+      await clearWishlistApi();
+      setWishlistProductMap({});
+      showToast('Wishlist cleared', 'info');
+    } catch (error: any) {
+      setWishlist(previous);
+      showToast(error.response?.data?.message || 'Could not clear your Wishlist', 'error');
     }
   }, [wishlist, showToast]);
 
   const isInWishlist = useCallback((productId: string) => wishlist.includes(productId), [wishlist]);
 
+  // Prefer the server-populated product, fall back to the loaded catalog
+  const wishlistProducts = wishlist
+    .map(id => wishlistProductMap[id] || products.find(p => p.id === id))
+    .filter((p): p is Product => !!p);
+
   // Pricing calculations
   const cartCount = cart.reduce((acc, item) => acc + item.quantity, 0);
-  const cartSubtotal = cart.reduce((acc, item) => acc + item.product.price * item.quantity, 0);
-  const freeShippingRemaining = Math.max(0, FREE_SHIPPING_THRESHOLD - cartSubtotal);
-  const freeShippingProgress = Math.min(100, (cartSubtotal / FREE_SHIPPING_THRESHOLD) * 100);
+  const cartSubtotal = cart.reduce((acc, item) => acc + (item.unitPrice ?? item.product.price) * item.quantity, 0);
+  const freeShippingThreshold =
+    typeof storeSettings?.shipping?.freeShippingMinOrder === 'number'
+      ? storeSettings.shipping.freeShippingMinOrder
+      : 0;
+  const freeShippingRemaining = Math.max(0, freeShippingThreshold - cartSubtotal);
+  const freeShippingProgress = freeShippingThreshold > 0
+    ? Math.min(100, (cartSubtotal / freeShippingThreshold) * 100)
+    : 100;
 
-  // Coupon calculations
-  let couponDiscount = 0;
-  if (appliedCoupon && cartSubtotal >= appliedCoupon.minOrderValue) {
-    if (appliedCoupon.discountType === 'Percentage') {
-      const calc = (cartSubtotal * appliedCoupon.discountValue) / 100;
-      couponDiscount = appliedCoupon.maxDiscount ? Math.min(calc, appliedCoupon.maxDiscount) : calc;
-    } else {
-      couponDiscount = appliedCoupon.discountValue;
-    }
-  }
+  // Coupon: the discount amount always comes from POST /coupons/validate
+  const [couponDiscountAmount, setCouponDiscountAmount] = useState(0);
+  const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
+  const lastValidatedCouponKey = useRef('');
+  const couponDiscount = appliedCoupon ? Math.min(couponDiscountAmount, cartSubtotal) : 0;
 
   const finalOrderTotal = Math.max(0, cartSubtotal - couponDiscount);
 
-  const applyCoupon = useCallback((code: string) => {
-    const clean = code.trim().toUpperCase();
-    const found = mockCouponsData.find(c => c.code === clean && c.status === 'Active');
-    if (!found) {
-      showToast(`Invalid coupon code: "${code}"`, 'error');
-      return { success: false, message: 'Invalid or expired coupon code.' };
-    }
-    if (cartSubtotal < found.minOrderValue) {
-      showToast(`Minimum order of ₹${found.minOrderValue.toLocaleString('en-IN')} required for ${clean}`, 'info');
-      return { success: false, message: `Minimum cart value of ₹${found.minOrderValue} required.` };
-    }
-    setAppliedCoupon(found);
-    showToast(`Coupon ${found.code} applied successfully!`, 'success');
-    return { success: true, message: `Applied ${found.code} successfully!` };
-  }, [cartSubtotal, showToast]);
-
-  const removeCoupon = useCallback(() => {
+  const clearCoupon = useCallback(() => {
     setAppliedCoupon(null);
-    showToast('Coupon removed', 'info');
-  }, [showToast]);
+    setCouponDiscountAmount(0);
+    lastValidatedCouponKey.current = '';
+  }, []);
+
+  const applyCoupon = useCallback(async (code: string) => {
+    const clean = code.trim().toUpperCase();
+    if (!clean) return { success: false, message: 'Enter a coupon code.' };
+    if (!customer) {
+      navigate('/auth/login');
+      return { success: false, message: 'Please sign in to use a coupon.' };
+    }
+    if (!cartId || cart.length === 0) {
+      const message = 'Add items to your Bag before applying a coupon.';
+      showToast(message, 'info');
+      return { success: false, message };
+    }
+
+    setIsApplyingCoupon(true);
+    try {
+      const result = await validateCoupon(clean, cartId);
+      if (!result.valid) {
+        showToast(result.message, 'error');
+        return { success: false, message: result.message };
+      }
+      lastValidatedCouponKey.current = `${clean}|${cartId}|${cartSubtotal}`;
+      setAppliedCoupon(
+        result.coupon || {
+          id: clean,
+          code: clean,
+          description: '',
+          discountType: 'Fixed',
+          discountValue: result.discountAmount,
+          minOrderValue: 0,
+          usageCount: 0,
+          startDate: '',
+          endDate: '',
+          status: 'Active',
+        }
+      );
+      setCouponDiscountAmount(result.discountAmount);
+      const message = `Coupon ${clean} applied: you save ₹${Math.round(result.discountAmount).toLocaleString('en-IN')}`;
+      showToast(message, 'success');
+      return { success: true, message };
+    } catch {
+      const message = 'Could not check this coupon right now. Please try again.';
+      showToast(message, 'error');
+      return { success: false, message };
+    } finally {
+      setIsApplyingCoupon(false);
+    }
+  }, [customerId, cartId, cart.length, cartSubtotal, showToast, navigate]);
+
+  const removeCoupon = useCallback((reason?: string) => {
+    clearCoupon();
+    showToast(reason || 'Coupon removed', 'info');
+  }, [clearCoupon, showToast]);
+
+  // Re-check the applied coupon whenever the bag changes (the discount or eligibility may change)
+  const appliedCouponCode = appliedCoupon?.code;
+  useEffect(() => {
+    if (!appliedCouponCode) return;
+    if (!customer) { clearCoupon(); return; }
+    if (!cartId) return; // cart not loaded yet
+    if (cart.length === 0) { clearCoupon(); return; }
+
+    const key = `${appliedCouponCode}|${cartId}|${cartSubtotal}`;
+    if (key === lastValidatedCouponKey.current) return;
+
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      validateCoupon(appliedCouponCode, cartId)
+        .then(result => {
+          if (cancelled) return;
+          lastValidatedCouponKey.current = key;
+          if (result.valid) {
+            setCouponDiscountAmount(result.discountAmount);
+          } else {
+            clearCoupon();
+            showToast(`Coupon ${appliedCouponCode} removed: ${result.message}`, 'info');
+          }
+        })
+        .catch(() => {});
+    }, 400);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [appliedCouponCode, cartId, cartSubtotal, cart.length, customerId, clearCoupon, showToast]);
 
   // Customer Auth
-  const loginWithGoogle = async () => {
-    await new Promise(resolve => setTimeout(resolve, 800));
-    setCustomer(mockCustomersData[0]);
-    showToast(`Welcome back, ${mockCustomersData[0].name}`, 'gold');
+  const loginUser = async (data: LoginData) => {
+    try {
+      const response = await login(data);
+      storeCustomerTokens(response);
+      
+      const userProfile: CustomerProfile = response.user || {
+        id: `usr-${Date.now()}`,
+        name: data.email.split('@')[0],
+        email: data.email,
+        phone: '',
+        addresses: [],
+        orders: [],
+      };
+      setCustomer(userProfile);
+      showToast(`Welcome back, ${userProfile.name}`, 'gold');
+    } catch (error: any) {
+      let errorMessage = 'Login failed. Please check your credentials.';
+      if (error.response?.data?.error?.details?.[0]?.message) {
+        errorMessage = error.response.data.error.details[0].message;
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      }
+      showToast(errorMessage, 'error');
+      throw error;
+    }
+  };
+
+  const loginWithGoogle = async (data: GoogleLoginData) => {
+    try {
+      const response = await googleLogin(data);
+      storeCustomerTokens(response);
+      
+      const userProfile: CustomerProfile = response.user || {
+        id: `usr-${Date.now()}`,
+        name: 'Google User',
+        email: '',
+        phone: '',
+        addresses: [],
+        orders: [],
+      };
+      setCustomer(userProfile);
+      showToast(`Welcome back, ${userProfile.name}`, 'gold');
+    } catch (error: any) {
+      let errorMessage = 'Google login failed.';
+      if (error.response?.data?.error?.details?.[0]?.message) {
+        errorMessage = error.response.data.error.details[0].message;
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      }
+      showToast(errorMessage, 'error');
+      throw error;
+    }
+  };
+
+  const registerUser = async (data: RegisterData) => {
+    try {
+      const metaEventId = newMetaEventId();
+      const response = await register(data, metaHeaders(metaEventId));
+      trackMetaEvent('CompleteRegistration', { status: true }, metaEventId);
+      storeCustomerTokens(response);
+      
+      const userProfile: CustomerProfile = response.user || {
+        id: `usr-${Date.now()}`,
+        name: data.name || data.email.split('@')[0],
+        email: data.email,
+        phone: '',
+        addresses: [],
+        orders: [],
+      };
+      setCustomer(userProfile);
+      showToast(`Welcome to Allura, ${userProfile.name}!`, 'gold');
+    } catch (error: any) {
+      let errorMessage = 'Registration failed.';
+      if (error.response?.data?.error?.details?.[0]?.message) {
+        errorMessage = error.response.data.error.details[0].message;
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      }
+      showToast(errorMessage, 'error');
+      throw error;
+    }
   };
 
   const completeProfile = (profile: Partial<CustomerProfile>) => {
@@ -459,9 +1024,96 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const logoutCustomer = () => {
+  const logoutCustomer = async () => {
+    // Remove the push device token before clearing the session (per Phase E) —
+    // if this fails, logout still proceeds.
+    const storedToken = localStorage.getItem(DEVICE_TOKEN_STORAGE_KEY);
+    if (storedToken) {
+      try {
+        await removeDeviceToken(storedToken);
+      } catch (e) {
+        console.warn('Could not remove the push device token on logout', e);
+      }
+      localStorage.removeItem(DEVICE_TOKEN_STORAGE_KEY);
+    }
+    try {
+      await logout();
+    } catch (e) {
+      console.warn('Logout API call failed, still clearing local state', e);
+    }
+    clearCustomerTokens();
     setCustomer(null);
     showToast('Logged out of customer session', 'info');
+  };
+
+  const getApiErrorMessage = (error: any, defaultMsg: string) => {
+    return getBackendErrorMessage(error, defaultMsg);
+  };
+
+  // Address API Handlers
+  const fetchCustomerAddresses = async () => {
+    if (!customer) return;
+    setIsLoadingAddresses(true);
+    try {
+      const addresses = await getAddresses();
+      setCustomer((prev) => prev ? { ...prev, addresses } : prev);
+    } catch (error) {
+      console.error('Failed to fetch addresses:', error);
+    } finally {
+      setIsLoadingAddresses(false);
+    }
+  };
+
+  const addCustomerAddress = async (data: Omit<SavedAddress, 'id'>): Promise<SavedAddress | undefined> => {
+    if (!customer) return undefined;
+    try {
+      const newAddress = await addAddress(data);
+      setCustomer((prev) => {
+        if (!prev) return prev;
+        return { ...prev, addresses: [...(prev.addresses || []), newAddress] };
+      });
+      showToast('Address saved successfully', 'success');
+      return newAddress;
+    } catch (error) {
+      showToast(getApiErrorMessage(error, 'Failed to save address'), 'error');
+      throw error;
+    }
+  };
+
+  const updateCustomerAddress = async (id: string, data: Partial<SavedAddress>) => {
+    if (!customer) return;
+    try {
+      const updated = await updateAddress(id, data);
+      setCustomer((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          addresses: prev.addresses.map((a) => (a.id === id ? updated : a)),
+        };
+      });
+      showToast('Address updated successfully', 'success');
+    } catch (error) {
+      showToast(getApiErrorMessage(error, 'Failed to update address'), 'error');
+      throw error;
+    }
+  };
+
+  const deleteCustomerAddress = async (id: string) => {
+    if (!customer) return;
+    try {
+      await deleteAddress(id);
+      setCustomer((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          addresses: prev.addresses.filter((a) => a.id !== id),
+        };
+      });
+      showToast('Address deleted successfully', 'info');
+    } catch (error) {
+      showToast(getApiErrorMessage(error, 'Failed to delete address'), 'error');
+      throw error;
+    }
   };
 
   // Orders
@@ -480,21 +1132,26 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
       },
       shippingAddress: orderData.shippingAddress || customer?.addresses[0] || {
         id: 'addr-temp',
-        name: 'Ananya Menon',
-        phone: '+91 98471 23456',
+        label: 'Home',
+        fullName: 'Ananya Menon',
+        phone: {
+          countryCode: '+91',
+          number: '98471 23456',
+        },
         addressLine1: 'Near Jubilee Hospital',
         city: 'Perinthalmanna',
-        district: 'Malappuram',
         state: 'Kerala',
-        pincode: '679322',
-        type: 'Home',
+        postalCode: '679322',
+        country: 'India',
+        isDefaultShipping: true,
+        isDefaultBilling: true,
       },
       items: cart.map(item => ({
         product: item.product,
         selectedSize: item.selectedSize,
         selectedColor: item.selectedColor,
         quantity: item.quantity,
-        unitPrice: item.product.price,
+        unitPrice: item.unitPrice ?? item.product.price,
         mrp: item.product.originalPrice || item.product.price,
         sku: `${item.product.sku}-${item.selectedSize}`,
       })),
@@ -504,6 +1161,7 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
       couponCode: appliedCoupon?.code,
       tax: Math.round(cartSubtotal * 0.05),
       total: finalOrderTotal + (freeShippingRemaining === 0 ? 0 : 150),
+      currency: 'INR',
       paymentMethod: orderData.paymentMethod || 'UPI',
       paymentStatus: 'Paid',
       orderStatus: 'Processing',
@@ -560,8 +1218,69 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return newOrder;
   };
 
+  // Order lines only carry ids, so fill in names / images / size / colour from the storefront catalog
+  const enrichedOrders = React.useMemo(
+    () =>
+      orders.map(o =>
+        enrichOrder(o, (productId, variantId) => {
+          const p = products.find(pr => pr.id === productId);
+          if (!p) return undefined;
+          const v = variantId ? p.variants?.find(pv => pv.id === variantId) : undefined;
+          return {
+            name: p.name,
+            image: v?.images?.find(i => i.isPrimary)?.url || v?.images?.[0]?.url || p.images.primary,
+            size: v?.size || undefined,
+            color: v?.color?.name || undefined,
+          };
+        })
+      ),
+    [orders, products]
+  );
+
   const getOrderById = (orderId: string) => {
-    return orders.find(o => o.id === orderId || o.orderNumber === orderId);
+    return enrichedOrders.find(o => o.id === orderId || o.orderNumber === orderId);
+  };
+
+  const upsertOrder = (order: Order) =>
+    setOrders(prev => (prev.some(o => o.id === order.id) ? prev.map(o => (o.id === order.id ? order : o)) : [order, ...prev]));
+
+  const refreshOrders = useCallback(async () => {
+    if (!customer || !hasCustomerSession()) return;
+    setIsLoadingOrders(true);
+    try {
+      const result = await getMyOrders({ limit: 50 });
+      setOrders(result.orders);
+      setOrdersTotal(result.total);
+    } catch (e) {
+      console.error('Failed to load orders:', e);
+    } finally {
+      setIsLoadingOrders(false);
+    }
+  }, [customerId]);
+
+  const loadOrder = useCallback(async (orderId: string) => {
+    if (!customer || !hasCustomerSession()) return undefined;
+    try {
+      const order = await getMyOrder(orderId);
+      upsertOrder(order);
+      return order;
+    } catch (e) {
+      console.error('Failed to load order:', e);
+      return undefined;
+    }
+  }, [customerId]);
+
+  const cancelCustomerOrder = async (orderId: string, reason: string, note?: string) => {
+    try {
+      const updated = await cancelMyOrder(orderId, reason, note);
+      if (updated) upsertOrder(updated);
+      else await loadOrder(orderId);
+      showToast('Your order has been cancelled', 'info');
+      return true;
+    } catch (e) {
+      showToast(orderErrorMessage(e, 'This order can no longer be cancelled'), 'error');
+      return false;
+    }
   };
 
   const submitReturnRequest = (returnData: Omit<ReturnRequest, 'id' | 'status' | 'requestedDate'>): ReturnRequest => {
@@ -577,17 +1296,74 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return newReturn;
   };
 
-  // Notifications
-  const unreadNotificationCount = notifications.filter(n => !n.isRead).length;
-
-  const markNotificationAsRead = (id: string) => {
-    setNotifications(prev => prev.map(n => (n.id === id ? { ...n, isRead: true } : n)));
+  // Notifications — optimistic, rolled back if the API call fails
+  const markNotificationAsRead = async (id: string) => {
+    let wasUnread = false;
+    setNotifications(prev =>
+      prev.map(n => {
+        if (n.id === id && !n.isRead) wasUnread = true;
+        return n.id === id ? { ...n, isRead: true } : n;
+      })
+    );
+    if (wasUnread) setUnreadNotificationCount(c => Math.max(0, c - 1));
+    try {
+      await markNotificationRead(id);
+    } catch {
+      setNotifications(prev => prev.map(n => (n.id === id ? { ...n, isRead: false } : n)));
+      if (wasUnread) setUnreadNotificationCount(c => c + 1);
+    }
   };
 
-  const markAllNotificationsAsRead = () => {
+  const markAllNotificationsAsRead = async () => {
+    const prevNotifications = notifications;
+    const prevCount = unreadNotificationCount;
     setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
-    showToast('All notifications marked as read', 'info');
+    setUnreadNotificationCount(0);
+    try {
+      await markAllNotificationsRead();
+      showToast('All notifications marked as read', 'info');
+    } catch (err) {
+      setNotifications(prevNotifications);
+      setUnreadNotificationCount(prevCount);
+      showToast(notificationErrorMessage(err, 'Could not mark notifications as read'), 'error');
+    }
   };
+
+  const enablePushNotifications = useCallback(async (): Promise<{ success: boolean; status: string }> => {
+    if (typeof window === 'undefined' || !('Notification' in window) || !('serviceWorker' in navigator)) {
+      return { success: false, status: 'unsupported' };
+    }
+
+    try {
+      let permission = Notification.permission;
+      if (permission === 'default') {
+        permission = await Notification.requestPermission();
+      }
+
+      if (permission !== 'granted') {
+        return { success: false, status: permission };
+      }
+
+      const token = await requestPushToken();
+      if (!token) {
+        return { success: false, status: 'token_failed' };
+      }
+
+      if (customer) {
+        try {
+          await registerDeviceToken({ token, platform: 'WEB' });
+        } catch (err) {
+          console.warn('Could not register device token on backend:', err);
+        }
+      }
+      localStorage.setItem(DEVICE_TOKEN_STORAGE_KEY, token);
+      showToast('Push notifications enabled', 'success');
+      return { success: true, status: 'granted' };
+    } catch (err: any) {
+      console.warn('Could not enable push notifications:', err);
+      return { success: false, status: err?.message || 'error' };
+    }
+  }, [customer]);
 
   // AI Assistant Engine
   const sendAIMessage = async (text: string) => {
@@ -610,13 +1386,13 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     if (lower.includes('wedding') || lower.includes('reception') || lower.includes('bridal') || lower.includes('festive') || lower.includes('occasion')) {
       replyText = "For wedding celebrations and festive receptions, I highly recommend these opulent handcrafted silhouettes featuring authentic zari and scalloped organza dupattas:";
-      suggested = productsData.filter(p => p.occasion === 'Festive' || p.category === 'Ethnic Wear').slice(0, 3);
+      suggested = products.filter(p => p.occasion === 'Festive' || p.category === 'Ethnic Wear').slice(0, 3);
     } else if (lower.includes('black') || lower.includes('dress') || lower.includes('modest') || lower.includes('pleated')) {
       replyText = "Here are our most coveted modest ensembles with graceful draping and premium wrinkle-resistant crepes:";
-      suggested = productsData.filter(p => p.category === 'Modest Wear' || p.name.toLowerCase().includes('cream') || p.name.toLowerCase().includes('blush')).slice(0, 3);
+      suggested = products.filter(p => p.category === 'Modest Wear' || p.name.toLowerCase().includes('cream') || p.name.toLowerCase().includes('blush')).slice(0, 3);
     } else if (lower.includes('3000') || lower.includes('under 3000') || lower.includes('6000') || lower.includes('under 6000') || lower.includes('affordable')) {
       replyText = "Here are exquisite pieces that fit seamlessly within your budget without compromising on fabric purity:";
-      suggested = productsData.filter(p => p.price <= 6500).slice(0, 3);
+      suggested = products.filter(p => p.price <= 6500).slice(0, 3);
     } else if (lower.includes('size') || lower.includes('sizing') || lower.includes('fit') || lower.includes('36')) {
       replyText = "Allura silhouettes are tailored with true-to-size modest proportions and include a generous 2-inch inner margin for easy bespoke adjustments. For a bust size of 36 inches, Size M will offer the most graceful silhouette.";
     } else if (lower.includes('order') || lower.includes('where is') || lower.includes('track') || lower.includes('849201') || lower.includes('alr-ord')) {
@@ -632,7 +1408,7 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
       replyText = "We offer a seamless 7-day doorstep return and size exchange service across India. You can submit an exchange request directly from your Account Orders page or WhatsApp our concierge.";
     } else {
       replyText = "Here are a few of our most beloved best-sellers from the current season atelier edit:";
-      suggested = productsData.slice(0, 3);
+      suggested = products.slice(0, 3);
     }
 
     const aiReply: AIMessage = {
@@ -661,8 +1437,22 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
     <ShopContext.Provider
       value={{
         products,
+        categories,
+        isLoadingProducts,
+        storeSettings,
+        refreshStoreSettings,
         cart,
+        cartTotals,
+        cartId,
+        isCartLoading,
+        refreshCart,
+        recalculateCart,
+        validateCart,
         wishlist,
+        wishlistProducts,
+        isWishlistLoading,
+        refreshWishlist,
+        clearWishlist,
         addToCart,
         removeFromCart,
         updateQuantity,
@@ -673,28 +1463,45 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
         addRecentlyViewed,
         cartCount,
         cartSubtotal,
-        freeShippingThreshold: FREE_SHIPPING_THRESHOLD,
+        freeShippingThreshold,
         freeShippingRemaining,
         freeShippingProgress,
         appliedCoupon,
         couponDiscount,
         applyCoupon,
+        isApplyingCoupon,
         removeCoupon,
         finalOrderTotal,
         customer,
-        isAuthenticated: !!customer,
+        isAuthenticated,
+        loginUser,
+        registerUser,
         loginWithGoogle,
         completeProfile,
         logoutCustomer,
-        orders,
+        fetchCustomerAddresses,
+        isLoadingAddresses,
+        addCustomerAddress,
+        updateCustomerAddress,
+        deleteCustomerAddress,
+        orders: enrichedOrders,
+        ordersTotal,
+        isLoadingOrders,
+        refreshOrders,
+        loadOrder,
+        cancelCustomerOrder,
         placeOrder,
         getOrderById,
         returns,
         submitReturnRequest,
         notifications,
         unreadNotificationCount,
+        isLoadingNotifications,
+        notificationsError,
+        refreshNotifications,
         markNotificationAsRead,
         markAllNotificationsAsRead,
+        enablePushNotifications,
         isAIAssistantOpen,
         setIsAIAssistantOpen,
         aiMessages,
