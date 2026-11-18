@@ -1,11 +1,53 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { CheckCircle2, ArrowRight, ShieldCheck, Phone, User, Mail, Lock, Unlock, Loader2 } from 'lucide-react';
 import { useShop } from '../../context/ShopContext';
 import { AlluraLogo } from '../../components/common/AlluraLogo';
 import { getCustomerProfile, updateCustomerProfile, profileDisplayName, profilePhone, profileErrorMessage } from '../../service/customer';
-import { normalizeMobile, mobileError } from '../../utils/addressValidation';
+import { normalizeMobile } from '../../utils/addressValidation';
+import {
+  signUpRules,
+  profileRules,
+  normalizeEmail,
+  normalizePhoneInput,
+  isIndianCountryCode,
+  type SignUpValues,
+  type ProfileValues,
+} from '../../utils/userValidation';
+import { useFieldValidation } from '../../hooks/useFieldValidation';
+import { FormField } from '../../components/common/FormField';
 import { useGoogleLogin } from '@react-oauth/google';
+
+// Input ids, also used to focus the first invalid field on submit
+const SIGN_UP_IDS: Record<keyof SignUpValues, string> = {
+  name: 'signup-name',
+  email: 'signup-email',
+  password: 'signup-password',
+  confirmPassword: 'signup-confirm-password',
+};
+const PROFILE_IDS: Record<keyof ProfileValues, string> = {
+  firstName: 'profile-first-name',
+  lastName: 'profile-last-name',
+  displayName: 'profile-display-name',
+  countryCode: 'profile-country-code',
+  phoneNumber: 'profile-phone-number',
+};
+// Backend validation paths -> form fields
+const SIGN_UP_SERVER_FIELDS: Record<string, keyof SignUpValues> = {
+  name: 'name',
+  email: 'email',
+  password: 'password',
+};
+const PROFILE_SERVER_FIELDS: Record<string, keyof ProfileValues> = {
+  firstName: 'firstName',
+  lastName: 'lastName',
+  displayName: 'displayName',
+  'phone.countryCode': 'countryCode',
+  'phone.number': 'phoneNumber',
+  phone: 'phoneNumber',
+};
+
+const focusField = (id: string) => document.getElementById(id)?.focus();
 
 // After signing in, go to the Home page, unless the customer was sent here from a specific page
 // (e.g. checkout or wishlist), in which case return them there. The Account page and the auth
@@ -60,12 +102,18 @@ export const AuthPage: React.FC = () => {
   const [avatarUrl, setAvatarUrl] = useState('');
   const [isLoadingProfile, setIsLoadingProfile] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
-  const [phoneTouched, setPhoneTouched] = useState(false);
   // Indian numbers get the 10-digit check; other country codes only need digits
-  const isIndia = countryCode.replace(/\s/g, '') === '+91';
-  const phoneError = isIndia
-    ? mobileError(phoneNumber)
-    : /^\d{6,15}$/.test(phoneNumber) ? '' : 'Enter a valid phone number (digits only).';
+  const isIndia = isIndianCountryCode(countryCode);
+
+  // Shared validation (utils/userValidation) — sign-up only applies in register mode
+  const signUp = useFieldValidation(signUpRules, {
+    name: authName,
+    email: authEmail,
+    password: authPassword,
+    confirmPassword: authConfirmPassword,
+  });
+  const profile = useFieldValidation(profileRules, { firstName, lastName, displayName, countryCode, phoneNumber });
+  const signUpError = (field: keyof SignUpValues) => (isLoginMode ? '' : signUp.errorFor(field));
 
   // Prefill the edit-profile form from the real backend profile
   useEffect(() => {
@@ -93,17 +141,21 @@ export const AuthPage: React.FC = () => {
 
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isLoading) return;
+    if (!isLoginMode) {
+      // Includes the existing "passwords match" check, now shown under Confirm Password
+      const firstInvalid = signUp.validateAll();
+      if (firstInvalid) {
+        focusField(SIGN_UP_IDS[firstInvalid]);
+        return;
+      }
+    }
     setIsLoading(true);
     try {
       if (isLoginMode) {
         await loginUser({ email: authEmail, password: authPassword });
       } else {
-        if (authPassword !== authConfirmPassword) {
-          showToast('Passwords do not match.', 'error');
-          setIsLoading(false);
-          return;
-        }
-        await registerUser({ name: authName, email: authEmail, password: authPassword });
+        await registerUser({ name: authName.trim(), email: normalizeEmail(authEmail), password: authPassword });
       }
       setIsSuccess(true);
       setTimeout(() => {
@@ -111,15 +163,27 @@ export const AuthPage: React.FC = () => {
         const from = postLoginPath((location.state as any)?.from?.pathname);
         navigate(from, { replace: true });
       }, 1000);
-    } catch {
+    } catch (err) {
+      // registerUser already shows the backend message as a toast; also put field errors under their fields
+      if (!isLoginMode) {
+        const field = signUp.applyServerErrors(err, SIGN_UP_SERVER_FIELDS);
+        if (field) focusField(SIGN_UP_IDS[field]);
+      }
       setIsLoading(false);
     }
   };
 
+  const toggleAuthMode = () => {
+    signUp.reset();
+    setIsLoginMode(!isLoginMode);
+  };
+
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (phoneError) {
-      setPhoneTouched(true);
+    if (isSavingProfile) return;
+    const firstInvalid = profile.validateAll();
+    if (firstInvalid) {
+      focusField(PROFILE_IDS[firstInvalid]);
       return;
     }
     setIsSavingProfile(true);
@@ -141,6 +205,8 @@ export const AuthPage: React.FC = () => {
       navigate('/account');
     } catch (err) {
       showToast(profileErrorMessage(err, 'Failed to update profile. Please try again.'), 'error');
+      const field = profile.applyServerErrors(err, PROFILE_SERVER_FIELDS);
+      if (field) focusField(PROFILE_IDS[field]);
     } finally {
       setIsSavingProfile(false);
     }
@@ -160,7 +226,7 @@ export const AuthPage: React.FC = () => {
 
         {/* Dynamic State views */}
         {isCompleteProfile || (customer && !isSuccess) ? (
-          <form onSubmit={handleSaveProfile} className="space-y-5 text-left pt-2">
+          <form onSubmit={handleSaveProfile} noValidate className="space-y-5 text-left pt-2">
             <div className="text-center pb-2">
               <h1 className="font-serif text-2xl text-allura-text font-normal">Complete Your Profile</h1>
               <p className="text-xs font-sans text-allura-muted mt-1">
@@ -177,86 +243,111 @@ export const AuthPage: React.FC = () => {
                 </div>
               )}
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[11px] font-sans font-bold uppercase tracking-wider text-allura-muted mb-1">
-                    First Name
-                  </label>
-                  <div className="relative">
-                    <User size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-allura-muted" />
+                <FormField id={PROFILE_IDS.firstName} label="First Name" error={profile.errorFor('firstName')}>
+                  {f => (
+                    <div className="relative">
+                      <User size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-allura-muted" />
+                      <input
+                        id={f.id}
+                        type="text"
+                        autoComplete="given-name"
+                        value={firstName}
+                        onChange={e => { setFirstName(e.target.value); profile.markChanged('firstName'); }}
+                        onBlur={() => profile.touch('firstName')}
+                        required
+                        disabled={isLoadingProfile}
+                        aria-invalid={f.invalid}
+                        aria-describedby={f.describedBy}
+                        className={`w-full pl-10 pr-4 py-2.5 bg-allura-bg border ${f.borderClass} rounded-xl text-xs font-sans text-allura-text focus:outline-none focus:border-allura-gold disabled:opacity-60`}
+                      />
+                    </div>
+                  )}
+                </FormField>
+                <FormField id={PROFILE_IDS.lastName} label="Last Name" error={profile.errorFor('lastName')}>
+                  {f => (
                     <input
+                      id={f.id}
                       type="text"
-                      value={firstName}
-                      onChange={e => setFirstName(e.target.value)}
+                      autoComplete="family-name"
+                      value={lastName}
+                      onChange={e => { setLastName(e.target.value); profile.markChanged('lastName'); }}
+                      onBlur={() => profile.touch('lastName')}
                       required
                       disabled={isLoadingProfile}
-                      className="w-full pl-10 pr-4 py-2.5 bg-allura-bg border border-allura-border rounded-xl text-xs font-sans text-allura-text focus:outline-none focus:border-allura-gold disabled:opacity-60"
+                      aria-invalid={f.invalid}
+                      aria-describedby={f.describedBy}
+                      className={`w-full px-4 py-2.5 bg-allura-bg border ${f.borderClass} rounded-xl text-xs font-sans text-allura-text focus:outline-none focus:border-allura-gold disabled:opacity-60`}
                     />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-[11px] font-sans font-bold uppercase tracking-wider text-allura-muted mb-1">
-                    Last Name
-                  </label>
-                  <input
-                    type="text"
-                    value={lastName}
-                    onChange={e => setLastName(e.target.value)}
-                    required
-                    disabled={isLoadingProfile}
-                    className="w-full px-4 py-2.5 bg-allura-bg border border-allura-border rounded-xl text-xs font-sans text-allura-text focus:outline-none focus:border-allura-gold disabled:opacity-60"
-                  />
-                </div>
+                  )}
+                </FormField>
               </div>
 
-              <div>
-                <label className="block text-[11px] font-sans font-bold uppercase tracking-wider text-allura-muted mb-1">
-                  Display Name
-                </label>
-                <input
-                  type="text"
-                  value={displayName}
-                  onChange={e => setDisplayName(e.target.value)}
-                  placeholder="How you'd like to be addressed"
-                  disabled={isLoadingProfile}
-                  className="w-full px-4 py-2.5 bg-allura-bg border border-allura-border rounded-xl text-xs font-sans text-allura-text focus:outline-none focus:border-allura-gold disabled:opacity-60"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-sans font-bold uppercase tracking-wider text-allura-muted mb-1">
-                  WhatsApp Number
-                </label>
-                <div className="flex gap-2">
+              <FormField id={PROFILE_IDS.displayName} label="Display Name" error={profile.errorFor('displayName')}>
+                {f => (
                   <input
+                    id={f.id}
                     type="text"
-                    value={countryCode}
-                    onChange={e => setCountryCode(e.target.value)}
-                    required
+                    value={displayName}
+                    onChange={e => { setDisplayName(e.target.value); profile.markChanged('displayName'); }}
+                    onBlur={() => profile.touch('displayName')}
+                    placeholder="How you'd like to be addressed"
                     disabled={isLoadingProfile}
-                    className="w-16 px-2 py-2.5 bg-allura-bg border border-allura-border rounded-xl text-xs font-sans text-allura-text text-center focus:outline-none focus:border-allura-gold disabled:opacity-60"
+                    aria-invalid={f.invalid}
+                    aria-describedby={f.describedBy}
+                    className={`w-full px-4 py-2.5 bg-allura-bg border ${f.borderClass} rounded-xl text-xs font-sans text-allura-text focus:outline-none focus:border-allura-gold disabled:opacity-60`}
                   />
-                  <div className="relative flex-1">
-                    <Phone size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-allura-muted" />
-                    <input
-                      type="tel"
-                      inputMode="numeric"
-                      autoComplete="tel-national"
-                      value={phoneNumber}
-                      onChange={e => setPhoneNumber(isIndia ? normalizeMobile(e.target.value) : e.target.value.replace(/\D/g, '').slice(0, 15))}
-                      onBlur={() => setPhoneTouched(true)}
-                      maxLength={isIndia ? 10 : 15}
-                      placeholder={isIndia ? '10-digit mobile number' : 'Phone number'}
-                      required
-                      disabled={isLoadingProfile}
-                      aria-invalid={phoneTouched && !!phoneError}
-                      className={`w-full pl-10 pr-4 py-2.5 bg-allura-bg border rounded-xl text-xs font-sans text-allura-text focus:outline-none focus:border-allura-gold disabled:opacity-60 ${
-                        phoneTouched && phoneError ? 'border-red-400' : 'border-allura-border'
-                      }`}
-                    />
-                  </div>
-                </div>
-                {phoneTouched && phoneError && <p className="mt-1 text-[11px] text-red-600">{phoneError}</p>}
-              </div>
+                )}
+              </FormField>
+
+              {/* Country code + number share one label and one error line */}
+              <FormField
+                id={PROFILE_IDS.phoneNumber}
+                label="WhatsApp Number"
+                error={profile.errorFor('countryCode') || profile.errorFor('phoneNumber')}
+              >
+                {f => {
+                  const codeError = !!profile.errorFor('countryCode');
+                  const numberError = !!profile.errorFor('phoneNumber');
+                  return (
+                    <div className="flex gap-2">
+                      <input
+                        id={PROFILE_IDS.countryCode}
+                        type="text"
+                        aria-label="Country code"
+                        value={countryCode}
+                        onChange={e => { setCountryCode(e.target.value); profile.markChanged('countryCode'); }}
+                        onBlur={() => profile.touch('countryCode')}
+                        required
+                        disabled={isLoadingProfile}
+                        aria-invalid={codeError}
+                        aria-describedby={f.describedBy}
+                        className={`w-16 px-2 py-2.5 bg-allura-bg border ${codeError ? 'border-red-400' : 'border-allura-border'} rounded-xl text-xs font-sans text-allura-text text-center focus:outline-none focus:border-allura-gold disabled:opacity-60`}
+                      />
+                      <div className="relative flex-1">
+                        <Phone size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-allura-muted" />
+                        <input
+                          id={f.id}
+                          type="tel"
+                          inputMode="numeric"
+                          autoComplete="tel-national"
+                          value={phoneNumber}
+                          onChange={e => { setPhoneNumber(normalizePhoneInput(e.target.value, countryCode)); profile.markChanged('phoneNumber'); }}
+                          onBlur={() => profile.touch('phoneNumber')}
+                          maxLength={isIndia ? 10 : 15}
+                          placeholder={isIndia ? '10-digit mobile number' : 'Phone number'}
+                          required
+                          disabled={isLoadingProfile}
+                          aria-invalid={numberError}
+                          aria-describedby={f.describedBy}
+                          className={`w-full pl-10 pr-4 py-2.5 bg-allura-bg border rounded-xl text-xs font-sans text-allura-text focus:outline-none focus:border-allura-gold disabled:opacity-60 ${
+                            numberError ? 'border-red-400' : 'border-allura-border'
+                          }`}
+                        />
+                      </div>
+                    </div>
+                  );
+                }}
+              </FormField>
 
               <div>
                 <label className="block text-[11px] font-sans font-bold uppercase tracking-wider text-allura-muted mb-1">
@@ -321,89 +412,115 @@ export const AuthPage: React.FC = () => {
               </p>
             </div>
 
-            <form onSubmit={handleAuthSubmit} className="space-y-4 pt-2">
+            {/* Login keeps the browser's built-in checks; sign-up uses the shared inline validation */}
+            <form onSubmit={handleAuthSubmit} noValidate={!isLoginMode} className="space-y-4 pt-2">
               {!isLoginMode && (
-                <div>
-                  <label className="block text-[11px] font-sans font-bold uppercase tracking-wider text-allura-muted mb-1">
-                    Full Name
-                  </label>
-                  <div className="relative">
-                    <User size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-allura-muted" />
-                    <input
-                      type="text"
-                      value={authName}
-                      onChange={e => setAuthName(e.target.value)}
-                      required
-                      placeholder="Full Name"
-                      className="w-full pl-10 pr-4 py-2.5 bg-allura-bg border border-allura-border rounded-xl text-xs font-sans text-allura-text focus:outline-none focus:border-allura-gold"
-                    />
-                  </div>
-                </div>
+                <FormField id={SIGN_UP_IDS.name} label="Full Name" error={signUpError('name')}>
+                  {f => (
+                    <div className="relative">
+                      <User size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-allura-muted" />
+                      <input
+                        id={f.id}
+                        type="text"
+                        autoComplete="name"
+                        value={authName}
+                        onChange={e => { setAuthName(e.target.value); signUp.markChanged('name'); }}
+                        onBlur={() => signUp.touch('name')}
+                        required
+                        placeholder="Full Name"
+                        aria-invalid={f.invalid}
+                        aria-describedby={f.describedBy}
+                        className={`w-full pl-10 pr-4 py-2.5 bg-allura-bg border ${f.borderClass} rounded-xl text-xs font-sans text-allura-text focus:outline-none focus:border-allura-gold`}
+                      />
+                    </div>
+                  )}
+                </FormField>
               )}
 
-              <div>
-                <label className="block text-[11px] font-sans font-bold uppercase tracking-wider text-allura-muted mb-1">
-                  Email Address
-                </label>
-                <div className="relative">
-                  <Mail size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-allura-muted" />
-                  <input
-                    type="email"
-                    value={authEmail}
-                    onChange={e => setAuthEmail(e.target.value)}
-                    required
-                    placeholder="user@example.com"
-                    className="w-full pl-10 pr-4 py-2.5 bg-allura-bg border border-allura-border rounded-xl text-xs font-sans text-allura-text focus:outline-none focus:border-allura-gold"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-sans font-bold uppercase tracking-wider text-allura-muted mb-1">
-                  Password
-                </label>
+              <FormField id={SIGN_UP_IDS.email} label="Email Address" error={signUpError('email')}>
+                {f => (
                   <div className="relative">
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute left-3.5 top-1/2 -translate-y-1/2 text-allura-muted hover:text-allura-text focus:outline-none"
-                    >
-                      {showPassword ? <Unlock size={15} /> : <Lock size={15} />}
-                    </button>
+                    <Mail size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-allura-muted" />
                     <input
-                      type={showPassword ? 'text' : 'password'}
-                      value={authPassword}
-                      onChange={e => setAuthPassword(e.target.value)}
+                      id={f.id}
+                      type="email"
+                      value={authEmail}
+                      onChange={e => { setAuthEmail(e.target.value); signUp.markChanged('email'); }}
+                      onBlur={() => { if (!isLoginMode) signUp.touch('email'); }}
                       required
-                      placeholder="••••••••"
-                      className="w-full pl-10 pr-4 py-2.5 bg-allura-bg border border-allura-border rounded-xl text-xs font-sans text-allura-text focus:outline-none focus:border-allura-gold"
+                      placeholder="user@example.com"
+                      aria-invalid={f.invalid}
+                      aria-describedby={f.describedBy}
+                      className={`w-full pl-10 pr-4 py-2.5 bg-allura-bg border ${f.borderClass} rounded-xl text-xs font-sans text-allura-text focus:outline-none focus:border-allura-gold`}
                     />
                   </div>
+                )}
+              </FormField>
+
+              <div>
+                <FormField id={SIGN_UP_IDS.password} label="Password" error={signUpError('password')}>
+                  {f => (
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute left-3.5 top-1/2 -translate-y-1/2 text-allura-muted hover:text-allura-text focus:outline-none"
+                      >
+                        {showPassword ? <Unlock size={15} /> : <Lock size={15} />}
+                      </button>
+                      <input
+                        id={f.id}
+                        type={showPassword ? 'text' : 'password'}
+                        value={authPassword}
+                        onChange={e => { setAuthPassword(e.target.value); signUp.markChanged('password'); }}
+                        onBlur={() => { if (!isLoginMode) signUp.touch('password'); }}
+                        required
+                        placeholder="••••••••"
+                        aria-invalid={f.invalid}
+                        aria-describedby={f.describedBy}
+                        className={`w-full pl-10 pr-4 py-2.5 bg-allura-bg border ${f.borderClass} rounded-xl text-xs font-sans text-allura-text focus:outline-none focus:border-allura-gold`}
+                      />
+                    </div>
+                  )}
+                </FormField>
+                {isLoginMode && (
+                  <div className="flex justify-end mt-1">
+                    <Link
+                      to="/forgot-password"
+                      className="py-1 text-[11px] font-sans text-allura-muted hover:text-allura-text transition-colors"
+                    >
+                      Forgot password?
+                    </Link>
+                  </div>
+                )}
               </div>
 
               {!isLoginMode && (
-                <div>
-                  <label className="block text-[11px] font-sans font-bold uppercase tracking-wider text-allura-muted mb-1">
-                    Confirm Password
-                  </label>
-                  <div className="relative">
-                    <button
-                      type="button"
-                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                      className="absolute left-3.5 top-1/2 -translate-y-1/2 text-allura-muted hover:text-allura-text focus:outline-none"
-                    >
-                      {showConfirmPassword ? <Unlock size={15} /> : <Lock size={15} />}
-                    </button>
-                    <input
-                      type={showConfirmPassword ? 'text' : 'password'}
-                      value={authConfirmPassword}
-                      onChange={e => setAuthConfirmPassword(e.target.value)}
-                      required
-                      placeholder="••••••••"
-                      className="w-full pl-10 pr-4 py-2.5 bg-allura-bg border border-allura-border rounded-xl text-xs font-sans text-allura-text focus:outline-none focus:border-allura-gold"
-                    />
-                  </div>
-                </div>
+                <FormField id={SIGN_UP_IDS.confirmPassword} label="Confirm Password" error={signUpError('confirmPassword')}>
+                  {f => (
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        className="absolute left-3.5 top-1/2 -translate-y-1/2 text-allura-muted hover:text-allura-text focus:outline-none"
+                      >
+                        {showConfirmPassword ? <Unlock size={15} /> : <Lock size={15} />}
+                      </button>
+                      <input
+                        id={f.id}
+                        type={showConfirmPassword ? 'text' : 'password'}
+                        value={authConfirmPassword}
+                        onChange={e => { setAuthConfirmPassword(e.target.value); signUp.markChanged('confirmPassword'); }}
+                        onBlur={() => signUp.touch('confirmPassword')}
+                        required
+                        placeholder="••••••••"
+                        aria-invalid={f.invalid}
+                        aria-describedby={f.describedBy}
+                        className={`w-full pl-10 pr-4 py-2.5 bg-allura-bg border ${f.borderClass} rounded-xl text-xs font-sans text-allura-text focus:outline-none focus:border-allura-gold`}
+                      />
+                    </div>
+                  )}
+                </FormField>
               )}
 
               <button
@@ -442,7 +559,7 @@ export const AuthPage: React.FC = () => {
             <div className="text-center pt-2 border-t border-allura-border/60 mt-4">
               <button
                 type="button"
-                onClick={() => setIsLoginMode(!isLoginMode)}
+                onClick={toggleAuthMode}
                 className="text-xs font-sans text-allura-muted hover:text-allura-text transition-colors"
               >
                 {isLoginMode ? "Don't have an account? Sign up" : "Already have an account? Sign in"}

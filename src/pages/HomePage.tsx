@@ -21,6 +21,7 @@ import { CategoryCardSkeleton } from '../components/ui/CategoryCardSkeleton';
 import { AlluraCircleSection } from '../components/ui/AlluraCircleSection';
 import { AbandonedCartBanner } from '../components/customer/AbandonedCartBanner';
 import { useShop } from '../context/ShopContext';
+import { useStoreAddress } from '../hooks/useStoreAddress';
 import { SEOHead } from '../components/common/SEOHead';
 import { getStoreCollectionPage, type StoreCollection } from '../service/store';
 import { getPublicFaqs, type PublicFaq } from '../service/faqs';
@@ -31,6 +32,7 @@ import { useCategoryCarousel } from '../hooks/useCategoryCarousel';
 export const HomePage: React.FC = () => {
   const navigate = useNavigate();
   const { products, categories, isLoadingProducts } = useShop();
+  const { address: storeAddress } = useStoreAddress();
   const [currentSlide, setCurrentSlide] = useState(0);
   const [openFaqId, setOpenFaqId] = useState<string | null>(null);
   const [faqs, setFaqs] = useState<PublicFaq[]>([]);
@@ -342,13 +344,16 @@ export const HomePage: React.FC = () => {
     name: 'Allura Boutique',
     image: 'https://images.unsplash.com/photo-1610030469983-98e550d6193c?auto=format&fit=crop&w=1200&q=80',
     description: 'Curated Indian luxury fashion, handcrafted Kasavu weaves, and modest silhouettes in Perinthalmanna, Kerala.',
-    address: {
-      '@type': 'PostalAddress',
-      streetAddress: 'Ooty Road',
-      addressLocality: 'Perinthalmanna',
-      addressRegion: 'Kerala',
-      addressCountry: 'IN',
-    },
+    // Store address from the boutique settings; left out of the schema until it's available
+    ...(storeAddress
+      ? {
+          address: {
+            '@type': 'PostalAddress',
+            streetAddress: storeAddress,
+            addressCountry: 'IN',
+          },
+        }
+      : {}),
     telephone: '+919037991774',
     url: 'https://alluraboutique.in',
   };

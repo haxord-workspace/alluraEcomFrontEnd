@@ -52,6 +52,9 @@ export interface ProductAnalyticsParams extends AnalyticsDateRangeParams {
 export interface ProductAnalyticsItem {
   productId: string;
   name: string;
+  /** Products without a category are grouped under UNCATEGORIZED_ID by the service */
+  categoryId: string;
+  categoryName: string;
   unitsSold: number;
   grossRevenue: number;
   views: number;
@@ -63,7 +66,8 @@ export interface ProductAnalyticsItem {
 
 export interface ProductAnalyticsResponse {
   products: ProductAnalyticsItem[];
-  pagination: {
+  /** Not always present in the response */
+  pagination?: {
     page: number;
     limit: number;
     total: number;

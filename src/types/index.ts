@@ -425,6 +425,7 @@ export interface Coupon {
   description: string;
   discountType: 'Percentage' | 'Fixed';
   discountValue: number;
+  /** From the API's minimumOrderValue; 0 = no minimum */
   minOrderValue: number;
   maxDiscount?: number;
   usageLimit?: number;

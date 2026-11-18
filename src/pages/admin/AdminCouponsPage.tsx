@@ -14,6 +14,7 @@ import {
   couponErrorMessage,
 } from '../../service/coupons';
 import type { CouponInput } from '../../service/coupons';
+import { getBackendFieldErrors } from '../../utils/apiResponse';
 import type { Coupon } from '../../types';
 
 const today = () => new Date().toISOString().split('T')[0];
@@ -25,10 +26,23 @@ const EMPTY_FORM = {
   type: 'PERCENTAGE' as CouponInput['discount']['type'],
   value: 10,
   maxDiscountAmount: '' as number | '',
+  /** Raw text of the Minimum Cart Value input ('' = no minimum) */
+  minimumOrderValue: '',
   startsAt: today(),
   expiresAt: inDays(30),
   status: 'ACTIVE' as NonNullable<CouponInput['status']>,
 };
+
+const MIN_CART_INPUT_ID = 'coupon-minimum-order-value';
+// Plain amount: digits, optionally up to 2 decimals (no sign, no exponent) — matches the backend's number >= 0
+const MIN_CART_PATTERN = /^\d+(\.\d{1,2})?$/;
+const minCartValueError = (raw: string): string => {
+  const value = raw.trim();
+  if (!value) return '';
+  return MIN_CART_PATTERN.test(value) ? '' : 'Enter a valid amount: numbers only, 0 or more (up to 2 decimals).';
+};
+const formatRupees = (amount: number) => `₹${amount.toLocaleString('en-IN')}`;
+const minCartLabel = (amount?: number) => (amount && amount > 0 ? `Min. cart ${formatRupees(amount)}` : 'No minimum');
 
 const benefitLabel = (c: { discountType: Coupon['discountType']; discountValue: number; maxDiscount?: number }) =>
   c.discountType === 'Percentage'
@@ -56,6 +70,10 @@ export const AdminCouponsPage: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [form, setForm] = useState(EMPTY_FORM);
+  // Minimum Cart Value field: inline error after blur / submit, backend field error, saved value when editing
+  const [minCartTouched, setMinCartTouched] = useState(false);
+  const [minCartServerError, setMinCartServerError] = useState<string | null>(null);
+  const [editingOriginalMin, setEditingOriginalMin] = useState(0);
 
   const fetchCoupons = useCallback(async () => {
     setIsLoading(true);
@@ -77,6 +95,9 @@ export const AdminCouponsPage: React.FC = () => {
     setEditingId(null);
     setFormError(null);
     setForm({ ...EMPTY_FORM, startsAt: today(), expiresAt: inDays(30) });
+    setMinCartTouched(false);
+    setMinCartServerError(null);
+    setEditingOriginalMin(0);
     setIsCreateOpen(true);
   };
 
@@ -89,10 +110,15 @@ export const AdminCouponsPage: React.FC = () => {
       type: coupon.discountType === 'Fixed' ? 'FIXED' : 'PERCENTAGE',
       value: coupon.discountValue,
       maxDiscountAmount: coupon.maxDiscount ?? '',
+      // Empty when there's no minimum (0 / missing), like the other optional fields
+      minimumOrderValue: coupon.minOrderValue > 0 ? String(coupon.minOrderValue) : '',
       startsAt: coupon.startDate || today(),
       expiresAt: coupon.endDate || inDays(30),
       status: coupon.status === 'Active' ? 'ACTIVE' : 'DRAFT',
     });
+    setMinCartTouched(false);
+    setMinCartServerError(null);
+    setEditingOriginalMin(coupon.minOrderValue > 0 ? coupon.minOrderValue : 0);
     setIsCreateOpen(true);
   };
 
@@ -144,6 +170,17 @@ export const AdminCouponsPage: React.FC = () => {
       showToast('Expiry date must be after the start date', 'error');
       return;
     }
+    if (minCartValueError(form.minimumOrderValue)) {
+      setMinCartTouched(true);
+      document.getElementById(MIN_CART_INPUT_ID)?.focus();
+      return;
+    }
+
+    // Sent only when entered. Clearing a saved minimum on edit sends 0 (= no minimum):
+    // the backend takes a number >= 0, and leaving the key out of the PATCH would keep the old value.
+    const minRaw = form.minimumOrderValue.trim();
+    const minimumOrderValue =
+      minRaw !== '' ? Number(minRaw) : editingId && editingOriginalMin > 0 ? 0 : undefined;
 
     const input: CouponInput = {
       code,
@@ -155,6 +192,7 @@ export const AdminCouponsPage: React.FC = () => {
           ? { maxDiscountAmount: Number(form.maxDiscountAmount) }
           : {}),
       },
+      ...(minimumOrderValue !== undefined && Number.isFinite(minimumOrderValue) ? { minimumOrderValue } : {}),
       startsAt: new Date(`${form.startsAt}T00:00:00`).toISOString(),
       expiresAt: new Date(`${form.expiresAt}T23:59:59`).toISOString(),
       status: form.status,
@@ -192,6 +230,9 @@ export const AdminCouponsPage: React.FC = () => {
       const errText = couponErrorMessage(err, editingId ? 'Failed to update coupon' : 'Failed to create coupon');
       setFormError(errText);
       showToast(errText, 'error');
+      // A backend validation error for this field also shows under the field
+      const minFieldError = getBackendFieldErrors(err).minimumOrderValue;
+      if (minFieldError) setMinCartServerError(minFieldError);
     } finally {
       setIsSaving(false);
     }
@@ -203,6 +244,15 @@ export const AdminCouponsPage: React.FC = () => {
   });
 
   const previewValue = Number(form.value) || 0;
+
+  // Minimum Cart Value: inline error, backend error, and a FIXED-discount sanity warning
+  const minCartRaw = form.minimumOrderValue.trim();
+  const minCartError = (minCartTouched ? minCartValueError(form.minimumOrderValue) : '') || minCartServerError || '';
+  const minCartAmount = minCartRaw !== '' && !minCartValueError(minCartRaw) ? Number(minCartRaw) : undefined;
+  const minCartWarning =
+    form.type === 'FIXED' && minCartAmount !== undefined && minCartAmount > 0 && previewValue > minCartAmount
+      ? `The ${formatRupees(previewValue)} discount is more than the ${formatRupees(minCartAmount)} minimum, so it could exceed the cart value.`
+      : '';
 
   return (
     <div className="space-y-6 pb-12">
@@ -297,8 +347,8 @@ export const AdminCouponsPage: React.FC = () => {
                       )}
                     </td>
                     <td className="p-4 font-bold text-[#561C08]">{benefitLabel(coupon)}</td>
-                    <td className="p-4 font-semibold text-stone-700">
-                      {coupon.minOrderValue > 0 ? `₹ ${coupon.minOrderValue.toLocaleString('en-IN')}` : '—'}
+                    <td className={`p-4 whitespace-nowrap ${coupon.minOrderValue > 0 ? 'font-semibold text-stone-700' : 'text-stone-400'}`}>
+                      {minCartLabel(coupon.minOrderValue)}
                     </td>
                     <td className="p-4 font-mono text-stone-800">
                       {coupon.usageCount}{coupon.usageLimit ? ` / ${coupon.usageLimit}` : ''} used
@@ -424,7 +474,7 @@ export const AdminCouponsPage: React.FC = () => {
                 </div>
                 {form.type === 'PERCENTAGE' && (
                   <div>
-                    <label className="block text-[10px] font-bold uppercase text-stone-500 mb-1">Max Discount (₹)</label>
+                    <label className="block text-[10px] font-bold uppercase text-stone-500 mb-1">Max Discount (₹) (optional)</label>
                     <input
                       type="number"
                       min={0}
@@ -435,6 +485,43 @@ export const AdminCouponsPage: React.FC = () => {
                     />
                   </div>
                 )}
+              </div>
+
+              <div>
+                <label htmlFor={MIN_CART_INPUT_ID} className="block text-[10px] font-bold uppercase text-stone-500 mb-1">
+                  Minimum Cart Value (₹) (optional)
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 font-bold pointer-events-none">₹</span>
+                  <input
+                    id={MIN_CART_INPUT_ID}
+                    type="text"
+                    inputMode="decimal"
+                    autoComplete="off"
+                    placeholder="No minimum"
+                    value={form.minimumOrderValue}
+                    onKeyDown={e => {
+                      // No exponent or sign characters: the amount is a plain number >= 0
+                      if (['e', 'E', '+', '-'].includes(e.key)) e.preventDefault();
+                    }}
+                    onChange={e => {
+                      setForm({ ...form, minimumOrderValue: e.target.value });
+                      setMinCartServerError(null);
+                    }}
+                    onBlur={() => setMinCartTouched(true)}
+                    aria-invalid={!!minCartError}
+                    aria-describedby={`${MIN_CART_INPUT_ID}-hint${minCartError ? ` ${MIN_CART_INPUT_ID}-error` : ''}`}
+                    className={`w-full p-2.5 pl-7 bg-stone-50 border rounded-xl ${minCartError ? 'border-rose-400' : 'border-stone-200'}`}
+                  />
+                </div>
+                {minCartError ? (
+                  <p id={`${MIN_CART_INPUT_ID}-error`} className="mt-1 text-[11px] text-rose-700">{minCartError}</p>
+                ) : minCartWarning ? (
+                  <p className="mt-1 text-[11px] text-amber-700">{minCartWarning}</p>
+                ) : null}
+                <p id={`${MIN_CART_INPUT_ID}-hint`} className="mt-1 text-[10px] text-stone-400">
+                  Coupon applies only when the cart subtotal is at least this amount. Leave empty for no minimum.
+                </p>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -472,9 +559,8 @@ export const AdminCouponsPage: React.FC = () => {
                       key={value}
                       type="button"
                       onClick={() => setForm({ ...form, status: value })}
-                      className={`p-2.5 rounded-xl border text-left transition-colors ${
-                        form.status === value ? 'border-stone-900 bg-stone-50' : 'border-stone-200 hover:border-stone-400'
-                      }`}
+                      className={`p-2.5 rounded-xl border text-left transition-colors ${form.status === value ? 'border-stone-900 bg-stone-50' : 'border-stone-200 hover:border-stone-400'
+                        }`}
                     >
                       <p className="font-bold text-stone-900">{label}</p>
                       <p className="text-[10px] text-stone-500">{hint}</p>
@@ -484,7 +570,7 @@ export const AdminCouponsPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold uppercase text-stone-500 mb-1">Description / Customer Note</label>
+                <label className="block text-[10px] font-bold uppercase text-stone-500 mb-1">Description / Customer Note (optional)</label>
                 <input
                   type="text"
                   placeholder="E.g. Festive discount on all bridal wear"
@@ -504,6 +590,7 @@ export const AdminCouponsPage: React.FC = () => {
                     discountValue: previewValue,
                     maxDiscount: form.maxDiscountAmount === '' ? undefined : Number(form.maxDiscountAmount),
                   })}
+                  {' · '}{minCartLabel(minCartAmount)}
                   {' · '}valid {form.startsAt} to {form.expiresAt}
                 </p>
                 {form.description && <p className="text-[11px] text-stone-500">{form.description}</p>}

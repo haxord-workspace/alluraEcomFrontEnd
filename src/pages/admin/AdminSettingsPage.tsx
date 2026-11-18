@@ -60,6 +60,30 @@ const EMPTY_BOUTIQUE_FORM: BoutiqueSettingsForm = {
   expressShippingFee: '',
 };
 
+const renderRoleBadge = (role: AdminStaffMember['role']) => (
+  <span
+    className={`inline-block px-2.5 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider ${role === 'SUPER_ADMIN'
+      ? 'bg-amber-100 text-amber-900 border border-amber-300'
+      : role === 'ADMIN'
+        ? 'bg-blue-100 text-blue-900 border border-blue-300'
+        : 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+      }`}
+  >
+    {role.replace(/_/g, ' ')}
+  </span>
+);
+
+const renderStatus = (status: AdminStaffMember['status']) =>
+  status === 'Active' ? (
+    <span className="inline-flex items-center gap-1.5 text-xs text-emerald-700 font-medium">
+      <span className="w-2 h-2 rounded-full bg-emerald-500"></span> Active
+    </span>
+  ) : (
+    <span className="inline-flex items-center gap-1.5 text-xs text-amber-700 font-medium">
+      <span className="w-2 h-2 rounded-full bg-amber-500"></span> {status}
+    </span>
+  );
+
 const toForm = (s: SettingsResponse): BoutiqueSettingsForm => ({
   storeName: s.boutiqueProfile?.legalName ?? '',
   tagline: s.boutiqueProfile?.tagline ?? '',
@@ -709,7 +733,7 @@ export const AdminSettingsPage: React.FC = () => {
       {activeTab === 'admins' && (
         <div className="space-y-8">
           {/* Admin Staff Table */}
-          <div className="bg-primary-50 rounded-xl border border-primary-200/80 p-6 shadow-sm space-y-5">
+          <div className="bg-primary-50 rounded-xl border border-primary-200/80 p-4 sm:p-6 shadow-sm space-y-5">
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="font-serif text-xl text-primary-900">Atelier Management & Staff</h2>
@@ -717,35 +741,60 @@ export const AdminSettingsPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="overflow-x-auto">
+            <div>
               {isStaffLoading ? (
-                <table className="w-full text-left text-sm">
-                  <thead>
-                    <tr className="border-b border-primary-200/70 text-xs uppercase tracking-wider text-primary-600 font-semibold">
-                      <th className="pb-3">Staff Name</th>
-                      <th className="pb-3">Email Address</th>
-                      <th className="pb-3">Assigned Role</th>
-                      <th className="pb-3">Status</th>
-                      <th className="pb-3">Last Active</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-primary-100">
+                <>
+                  {/* Mobile skeleton cards */}
+                  <ul className="md:hidden space-y-3">
                     {Array.from({ length: 3 }).map((_, idx) => (
-                      <tr key={idx}>
-                        <td className="py-3">
-                          <div className="flex items-center gap-2.5">
-                            <div className="w-8 h-8 rounded-full bg-stone-200/80 animate-pulse" />
-                            <div className="h-3.5 w-32 bg-stone-200/80 rounded animate-pulse" />
+                      <li key={idx} className="rounded-lg border border-primary-200/70 bg-white/60 p-4 space-y-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 shrink-0 rounded-full bg-stone-200/80 animate-pulse" />
+                          <div className="flex-1 min-w-0 space-y-2">
+                            <div className="h-3.5 w-2/3 bg-stone-200/80 rounded animate-pulse" />
+                            <div className="h-3 w-5/6 bg-stone-200/70 rounded animate-pulse" />
                           </div>
-                        </td>
-                        <td className="py-3"><div className="h-3 w-44 bg-stone-200/70 rounded animate-pulse" /></td>
-                        <td className="py-3"><div className="h-5 w-24 bg-stone-200/70 rounded animate-pulse" /></td>
-                        <td className="py-3"><div className="h-3 w-16 bg-stone-200/70 rounded animate-pulse" /></td>
-                        <td className="py-3"><div className="h-3 w-28 bg-stone-200/70 rounded animate-pulse" /></td>
-                      </tr>
+                        </div>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="h-5 w-24 bg-stone-200/70 rounded animate-pulse" />
+                          <div className="h-3 w-16 bg-stone-200/70 rounded animate-pulse" />
+                        </div>
+                        <div className="h-3 w-28 bg-stone-200/70 rounded animate-pulse" />
+                      </li>
                     ))}
-                  </tbody>
-                </table>
+                  </ul>
+
+                  {/* Desktop skeleton table */}
+                  <div className="hidden md:block overflow-x-auto">
+                    <table className="w-full min-w-[640px] text-left text-sm">
+                      <thead>
+                        <tr className="border-b border-primary-200/70 text-xs uppercase tracking-wider text-primary-600 font-semibold">
+                          <th className="pb-3 pr-4">Staff Name</th>
+                          <th className="pb-3 pr-4">Email Address</th>
+                          <th className="pb-3 pr-4">Assigned Role</th>
+                          <th className="pb-3 pr-4">Status</th>
+                          <th className="pb-3">Last Active</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-primary-100">
+                        {Array.from({ length: 3 }).map((_, idx) => (
+                          <tr key={idx}>
+                            <td className="py-3 pr-4">
+                              <div className="flex items-center gap-2.5">
+                                <div className="w-8 h-8 shrink-0 rounded-full bg-stone-200/80 animate-pulse" />
+                                <div className="h-3.5 w-32 bg-stone-200/80 rounded animate-pulse" />
+                              </div>
+                            </td>
+                            <td className="py-3 pr-4"><div className="h-3 w-44 bg-stone-200/70 rounded animate-pulse" /></td>
+                            <td className="py-3 pr-4"><div className="h-5 w-24 bg-stone-200/70 rounded animate-pulse" /></td>
+                            <td className="py-3 pr-4"><div className="h-3 w-16 bg-stone-200/70 rounded animate-pulse" /></td>
+                            <td className="py-3"><div className="h-3 w-28 bg-stone-200/70 rounded animate-pulse" /></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
               ) : staffError ? (
                 <div className="p-8 text-center space-y-3">
                   <p className="text-sm text-rose-600">{staffError}</p>
@@ -763,52 +812,65 @@ export const AdminSettingsPage: React.FC = () => {
                   No staff found
                 </div>
               ) : (
-                <table className="w-full text-left text-sm">
-                  <thead>
-                    <tr className="border-b border-primary-200/70 text-xs uppercase tracking-wider text-primary-600 font-semibold">
-                      <th className="pb-3">Staff Name</th>
-                      <th className="pb-3">Email Address</th>
-                      <th className="pb-3">Assigned Role</th>
-                      <th className="pb-3">Status</th>
-                      <th className="pb-3">Last Active</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-primary-100">
+                <>
+                  {/* Mobile staff cards */}
+                  <ul className="md:hidden space-y-3">
                     {staffList.map((u) => (
-                      <tr key={u.id} className="hover:bg-white/50 transition-colors">
-                        <td className="py-3 font-medium text-primary-900 flex items-center gap-2.5">
-                          <div className="w-8 h-8 rounded-full bg-accent-gold/20 text-accent-gold flex items-center justify-center font-bold text-xs">
+                      <li key={u.id} className="rounded-lg border border-primary-200/70 bg-white/60 p-4 space-y-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 shrink-0 rounded-full bg-accent-gold/20 text-accent-gold flex items-center justify-center font-bold text-xs">
                             {getStaffInitials(u.name)}
                           </div>
-                          {u.name}
-                        </td>
-                        <td className="py-3 text-primary-600 font-mono text-xs">{u.email}</td>
-                        <td className="py-3">
-                          <span className={`inline-block px-2.5 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider ${u.role === 'SUPER_ADMIN'
-                            ? 'bg-amber-100 text-amber-900 border border-amber-300'
-                            : u.role === 'ADMIN'
-                              ? 'bg-blue-100 text-blue-900 border border-blue-300'
-                              : 'bg-emerald-100 text-emerald-900 border border-emerald-300'
-                            }`}>
-                            {u.role.replace(/_/g, ' ')}
-                          </span>
-                        </td>
-                        <td className="py-3">
-                          {u.status === 'Active' ? (
-                            <span className="inline-flex items-center gap-1.5 text-xs text-emerald-700 font-medium">
-                              <span className="w-2 h-2 rounded-full bg-emerald-500"></span> Active
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1.5 text-xs text-amber-700 font-medium">
-                              <span className="w-2 h-2 rounded-full bg-amber-500"></span> {u.status}
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-3 text-xs text-primary-500">{u.lastLogin}</td>
-                      </tr>
+                          <div className="min-w-0">
+                            <p className="font-medium text-sm text-primary-900 truncate">{u.name}</p>
+                            <p className="text-primary-600 font-mono text-xs break-all">{u.email}</p>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          {renderRoleBadge(u.role)}
+                          {renderStatus(u.status)}
+                        </div>
+                        <p className="text-xs text-primary-500">
+                          <span className="uppercase tracking-wider text-[10px] font-semibold text-primary-600 mr-1.5">Last Active</span>
+                          {u.lastLogin}
+                        </p>
+                      </li>
                     ))}
-                  </tbody>
-                </table>
+                  </ul>
+
+                  {/* Desktop staff table */}
+                  <div className="hidden md:block overflow-x-auto">
+                    <table className="w-full min-w-[640px] text-left text-sm">
+                      <thead>
+                        <tr className="border-b border-primary-200/70 text-xs uppercase tracking-wider text-primary-600 font-semibold">
+                          <th className="pb-3 pr-4">Staff Name</th>
+                          <th className="pb-3 pr-4">Email Address</th>
+                          <th className="pb-3 pr-4">Assigned Role</th>
+                          <th className="pb-3 pr-4">Status</th>
+                          <th className="pb-3">Last Active</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-primary-100">
+                        {staffList.map((u) => (
+                          <tr key={u.id} className="hover:bg-white/50 transition-colors">
+                            <td className="py-3 pr-4 font-medium text-primary-900">
+                              <div className="flex items-center gap-2.5">
+                                <div className="w-8 h-8 shrink-0 rounded-full bg-accent-gold/20 text-accent-gold flex items-center justify-center font-bold text-xs">
+                                  {getStaffInitials(u.name)}
+                                </div>
+                                {u.name}
+                              </div>
+                            </td>
+                            <td className="py-3 pr-4 text-primary-600 font-mono text-xs break-all">{u.email}</td>
+                            <td className="py-3 pr-4 whitespace-nowrap">{renderRoleBadge(u.role)}</td>
+                            <td className="py-3 pr-4 whitespace-nowrap">{renderStatus(u.status)}</td>
+                            <td className="py-3 text-xs text-primary-500 whitespace-nowrap">{u.lastLogin}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
               )}
             </div>
           </div>

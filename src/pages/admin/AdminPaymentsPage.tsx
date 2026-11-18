@@ -13,7 +13,8 @@ import type { PaymentDetail, PaymentLedgerMethod, PaymentLedgerStatus, PaymentLi
 const PAGE_SIZE = 20;
 
 const STATUSES: ('All' | PaymentLedgerStatus)[] = ['All', 'PAID', 'PENDING', 'FAILED', 'REFUNDED'];
-const METHODS: ('All' | PaymentLedgerMethod)[] = ['All', 'UPI', 'CARD', 'NETBANKING', 'COD'];
+// Used by the Method filter, which is hidden for now (only online payment is offered)
+// const METHODS: ('All' | PaymentLedgerMethod)[] = ['All', 'UPI', 'CARD', 'NETBANKING', 'COD'];
 const SORTS: { value: NonNullable<PaymentListParams['sort']>; label: string }[] = [
   { value: '-createdAt', label: 'Newest first' },
   { value: 'createdAt', label: 'Oldest first' },
@@ -206,8 +207,8 @@ export const AdminPaymentsPage: React.FC = () => {
           <button
             onClick={() => setShowAdvanced(v => !v)}
             className={`px-3.5 py-2 rounded-xl text-xs font-sans font-semibold transition-colors flex items-center gap-1.5 whitespace-nowrap ${showAdvanced || hasActiveFilters
-                ? 'bg-[#561C08] text-white shadow-xs'
-                : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+              ? 'bg-[#561C08] text-white shadow-xs'
+              : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
               }`}
           >
             <SlidersHorizontal size={13} />
@@ -226,8 +227,8 @@ export const AdminPaymentsPage: React.FC = () => {
                 setPage(1);
               }}
               className={`px-3.5 py-1.5 rounded-full text-xs font-sans font-semibold transition-colors whitespace-nowrap ${statusFilter === st
-                  ? 'bg-[#561C08] text-white shadow-xs'
-                  : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                ? 'bg-[#561C08] text-white shadow-xs'
+                : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
                 }`}
             >
               {st}
@@ -237,7 +238,8 @@ export const AdminPaymentsPage: React.FC = () => {
 
         {showAdvanced && (
           <div className="border-t border-stone-100 pt-4 space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {/* Method filter hidden: only online payment is offered right now
               <div>
                 <label className="block text-[10px] font-sans font-bold uppercase text-stone-400 mb-1">Method</label>
                 <select
@@ -250,6 +252,7 @@ export const AdminPaymentsPage: React.FC = () => {
                   ))}
                 </select>
               </div>
+              */}
               <div>
                 <label className="block text-[10px] font-sans font-bold uppercase text-stone-400 mb-1">From</label>
                 <input
@@ -341,7 +344,8 @@ export const AdminPaymentsPage: React.FC = () => {
                 <th className="p-4">Payment ID & Date</th>
                 <th className="p-4">Order Reference</th>
                 <th className="p-4">Customer</th>
-                <th className="p-4">Method</th>
+                {/* Method hidden: only online payment is offered right now */}
+                {/* <th className="p-4">Method</th> */}
                 <th className="p-4">Gross Amount</th>
                 <th className="p-4">Gateway Reference</th>
                 <th className="p-4">Status</th>
@@ -351,11 +355,11 @@ export const AdminPaymentsPage: React.FC = () => {
             <tbody className="divide-y divide-stone-100">
               {isLoading && payments.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="p-10 text-center text-stone-400">Loading payments…</td>
+                  <td colSpan={7} className="p-10 text-center text-stone-400">Loading payments…</td>
                 </tr>
               ) : payments.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="p-10 text-center text-stone-400">
+                  <td colSpan={7} className="p-10 text-center text-stone-400">
                     {search || statusFilter !== 'All' || hasActiveFilters
                       ? 'No payments match these filters.'
                       : 'No payments yet.'}
@@ -373,7 +377,7 @@ export const AdminPaymentsPage: React.FC = () => {
                       <p className="font-medium text-stone-900">{pay.customerName || '—'}</p>
                       <p className="text-[10px] text-stone-400">{pay.customerEmail}</p>
                     </td>
-                    <td className="p-4 font-semibold text-stone-700">{pay.method || '—'}</td>
+                    {/* <td className="p-4 font-semibold text-stone-700">{pay.method || '—'}</td> */}
                     <td className="p-4 font-bold text-[#561C08]">₹ {pay.amount.toLocaleString('en-IN')}</td>
                     <td className="p-4 font-mono text-[10px] text-stone-500">{pay.gatewayReference || '—'}</td>
                     <td className="p-4">
@@ -468,8 +472,10 @@ export const AdminPaymentsPage: React.FC = () => {
                   <dt className="text-[#191616] font-medium">Email</dt>
                   <dd className="text-stone-900 text-right">{detail.customerEmail || '—'}</dd>
 
+                  {/* Method hidden: only online payment is offered right now
                   <dt className="text-[#191616] font-medium">Method</dt>
                   <dd className="text-stone-900 font-medium text-right">{detail.method || '—'}</dd>
+                  */}
 
                   <dt className="text-[#191616] font-medium">Amount</dt>
                   <dd className="text-[#561C08] font-bold text-right">

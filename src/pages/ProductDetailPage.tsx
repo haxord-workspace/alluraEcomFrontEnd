@@ -17,6 +17,7 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import { useShop } from '../context/ShopContext';
+import { useStoreAddress } from '../hooks/useStoreAddress';
 import { useAdmin } from '../context/AdminContext';
 import { getStoreProductBySlug } from '../service/store';
 import { trackProductView } from '../service/tracking';
@@ -43,6 +44,7 @@ export const ProductDetailPage: React.FC = () => {
     freeShippingRemaining,
     freeShippingThreshold,
   } = useShop();
+  const { address: storeAddress } = useStoreAddress();
   const { banners } = useAdmin();
 
   const activeProductPromo = (banners || []).find(
@@ -632,7 +634,7 @@ export const ProductDetailPage: React.FC = () => {
                 <div className="p-4 pt-1 text-xs text-allura-muted font-sans space-y-1.5 border-t border-allura-border/40">
                   <p>• Fast delivery across Malappuram & Kerala in 2-3 business days.</p>
                   <p>• All India courier express delivery in 4-6 business days.</p>
-                  <p>• In-store pickup available at Allura Boutique, Ooty Road, Perinthalmanna.</p>
+                  <p>• In-store pickup available at Allura Boutique{storeAddress ? `, ${storeAddress}` : ''}.</p>
                 </div>
               )}
             </div>

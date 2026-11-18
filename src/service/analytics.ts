@@ -5,6 +5,7 @@ import type {
   SalesAnalyticsParams,
   SalesAnalytics,
   ProductAnalyticsParams,
+  ProductAnalyticsItem,
   ProductAnalyticsResponse,
   AnalyticsDateRangeParams,
   FunnelAnalytics,
@@ -30,13 +31,42 @@ export const getSalesAnalytics = async (params: SalesAnalyticsParams = {}): Prom
   return unwrap(response);
 };
 
-/** GET /admin/analytics/products */
+/** Group key / label for products the backend returns without a category */
+export const UNCATEGORIZED_ID = 'uncategorized';
+export const UNCATEGORIZED_LABEL = 'Uncategorized';
+
+const toNumber = (value: unknown): number => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+};
+
+/** One row of data.products, with missing / null numbers defaulted to 0 */
+const normalizeProductAnalyticsItem = (raw: any): ProductAnalyticsItem => ({
+  productId: String(raw?.productId ?? raw?.id ?? ''),
+  name: raw?.name || 'Unnamed product',
+  categoryId: raw?.categoryId ? String(raw.categoryId) : UNCATEGORIZED_ID,
+  categoryName: raw?.categoryName || UNCATEGORIZED_LABEL,
+  unitsSold: toNumber(raw?.unitsSold),
+  grossRevenue: toNumber(raw?.grossRevenue),
+  views: toNumber(raw?.views),
+  addToCartCount: toNumber(raw?.addToCartCount),
+  purchaseCount: toNumber(raw?.purchaseCount),
+  conversionRate: toNumber(raw?.conversionRate),
+  cartToPurchaseRate: toNumber(raw?.cartToPurchaseRate),
+});
+
+/** GET /admin/analytics/products — data.products is a flat product list */
 export const getProductAnalytics = async (
   params: ProductAnalyticsParams = {},
   signal?: AbortSignal
 ): Promise<ProductAnalyticsResponse> => {
   const response = await adminApi.get('/admin/analytics/products', { params, signal });
-  return unwrap(response);
+  const data = unwrap(response);
+  return {
+    ...data,
+    products: Array.isArray(data?.products) ? data.products.map(normalizeProductAnalyticsItem) : [],
+    pagination: data?.pagination ?? undefined,
+  };
 };
 
 /** GET /admin/analytics/funnel */

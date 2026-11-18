@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Search,
   Bell,
@@ -9,11 +9,14 @@ import {
   Check,
   Mail,
   Smartphone,
-  Loader2,
   AlertTriangle,
+  BellOff,
+  RefreshCw,
+  X,
 } from 'lucide-react';
 import { useAdmin } from '../../context/AdminContext';
 import { usePermissions } from '../../hooks/usePermissions';
+import { useCloseOnScroll } from '../../hooks/useCloseOnScroll';
 import { Link, useNavigate } from 'react-router-dom';
 import type { AdminRole } from '../../types';
 import { getAdminNotifications, notificationErrorMessage } from '../../service/notifications';
@@ -134,14 +137,42 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({ onMobileMenuToggle }) 
   const unreadCount = bellItems.filter(n => new Date(n.createdAt).getTime() > lastSeen).length;
   const badgeLabel = unreadCount > 9 ? '9+' : String(unreadCount);
 
+  // Last-seen timestamp captured when the panel opened, so items that were new
+  // at that moment stay highlighted while it is open
+  const [seenBeforeOpen, setSeenBeforeOpen] = useState<number>(0);
+
   const toggleBellDropdown = () => {
     const next = !isAdminNotificationsOpen;
     setIsAdminNotificationsOpen(next);
     if (next) {
+      setSeenBeforeOpen(lastSeen);
       fetchBellNotifications();
       markSeenNow();
     }
   };
+
+  // Close the bell dropdown when the page is scrolled while it is open
+  // (scrolling the dropdown's own list keeps it open)
+  const bellContainerRef = useRef<HTMLDivElement>(null);
+  const closeBellDropdown = useCallback(() => setIsAdminNotificationsOpen(false), [setIsAdminNotificationsOpen]);
+  useCloseOnScroll(isAdminNotificationsOpen, bellContainerRef, closeBellDropdown);
+
+  // Close on outside tap/click and on Escape
+  useEffect(() => {
+    if (!isAdminNotificationsOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (e.target instanceof Node && !bellContainerRef.current?.contains(e.target)) closeBellDropdown();
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeBellDropdown();
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [isAdminNotificationsOpen, closeBellDropdown]);
 
   const openNotificationDetail = (id: string) => {
     setIsAdminNotificationsOpen(false);
@@ -241,93 +272,153 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({ onMobileMenuToggle }) 
 
         {/* Notifications Dropdown — hidden entirely for roles without view access */}
         {canViewNotifications && (
-          <div className="relative">
+          <div className="relative" ref={bellContainerRef}>
             <button
               onClick={toggleBellDropdown}
-              className="relative p-2 text-stone-500 hover:text-stone-800 rounded-xl hover:bg-stone-100 transition-colors"
+              className={`relative p-2 rounded-xl transition-colors ${isAdminNotificationsOpen
+                ? 'bg-stone-100 text-stone-800'
+                : 'text-stone-500 hover:text-stone-800 hover:bg-stone-100'
+                }`}
+              aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} new` : 'Notifications'}
+              aria-haspopup="dialog"
+              aria-expanded={isAdminNotificationsOpen}
             >
               <Bell size={18} />
               {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-rose-600 text-white text-[9px] font-bold flex items-center justify-center">
+                <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-rose-600 text-white text-[9px] font-bold flex items-center justify-center ring-2 ring-white">
                   {badgeLabel}
                 </span>
               )}
             </button>
 
             {isAdminNotificationsOpen && (
-              <div className="absolute right-0 mt-2 w-[calc(100vw-2rem)] max-w-sm sm:w-96 bg-white border border-stone-200 rounded-2xl shadow-2xl overflow-hidden z-50 animate-slide-up">
-                <div className="p-3.5 bg-stone-50 border-b border-stone-200 flex items-center justify-between">
-                  <span className="font-serif text-sm font-bold text-stone-800">
-                    Operations Notifications
-                  </span>
-                  <button
-                    onClick={() => setIsAdminNotificationsOpen(false)}
-                    className="text-xs text-stone-500 hover:text-stone-800 font-sans"
-                  >
-                    Close
-                  </button>
+              <div
+                role="dialog"
+                aria-label="Notifications"
+                className="fixed inset-x-3 top-[4.5rem] max-h-[calc(100dvh-5.5rem)] sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-96 sm:max-h-[min(32rem,calc(100dvh-6rem))] flex flex-col bg-white border border-stone-200 rounded-2xl shadow-2xl overflow-hidden z-50 animate-slide-up"
+              >
+                {/* Header */}
+                <div className="shrink-0 px-4 py-3 bg-stone-50 border-b border-stone-200 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-serif text-sm font-bold text-stone-800 truncate">Notifications</p>
+                    <p className="text-[11px] font-sans text-stone-500">
+                      {bellItems.length > 0 ? `Latest ${bellItems.length} operations alerts` : 'Operations alerts'}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      onClick={fetchBellNotifications}
+                      disabled={isBellLoading}
+                      className="p-2 rounded-lg text-stone-500 hover:text-stone-800 hover:bg-stone-200/60 disabled:opacity-50 transition-colors"
+                      aria-label="Refresh notifications"
+                      title="Refresh"
+                    >
+                      <RefreshCw size={15} className={isBellLoading ? 'animate-spin' : ''} />
+                    </button>
+                    <button
+                      onClick={closeBellDropdown}
+                      className="p-2 rounded-lg text-stone-500 hover:text-stone-800 hover:bg-stone-200/60 transition-colors"
+                      aria-label="Close notifications"
+                      title="Close"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
                 </div>
 
-                <div className="divide-y divide-stone-100 max-h-80 overflow-y-auto">
+                {/* List */}
+                <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
                   {isForbidden ? (
-                    <div className="p-5 text-center text-xs font-sans text-stone-500">
-                      You don't have access to notifications.
+                    <div className="px-6 py-10 flex flex-col items-center gap-2 text-center">
+                      <Shield size={22} className="text-stone-300" />
+                      <p className="text-xs font-sans text-stone-500">You don't have access to notifications.</p>
                     </div>
                   ) : isBellLoading && bellItems.length === 0 ? (
-                    <div className="p-6 flex flex-col items-center gap-2 text-stone-400">
-                      <Loader2 size={18} className="animate-spin" />
-                      <span className="text-xs font-sans">Loading…</span>
-                    </div>
+                    <ul className="divide-y divide-stone-100" aria-busy="true">
+                      {Array.from({ length: 4 }).map((_, idx) => (
+                        <li key={idx} className="px-4 py-3.5 space-y-2">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="h-3.5 w-2/3 bg-stone-200/80 rounded animate-pulse" />
+                            <div className="h-3 w-12 bg-stone-200/70 rounded animate-pulse" />
+                          </div>
+                          <div className="h-3 w-1/2 bg-stone-200/70 rounded animate-pulse" />
+                        </li>
+                      ))}
+                    </ul>
                   ) : bellError ? (
-                    <div className="p-4 text-xs font-sans text-rose-800 flex items-center justify-between gap-2">
-                      <span className="flex items-center gap-1.5">
-                        <AlertTriangle size={13} />
-                        {bellError}
-                      </span>
-                      <button onClick={fetchBellNotifications} className="font-bold underline shrink-0">
+                    <div className="px-6 py-10 flex flex-col items-center gap-3 text-center">
+                      <AlertTriangle size={22} className="text-rose-400" />
+                      <p className="text-xs font-sans text-rose-800">{bellError}</p>
+                      <button
+                        onClick={fetchBellNotifications}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-300 text-xs font-sans font-semibold text-stone-700 hover:bg-stone-50"
+                      >
+                        <RefreshCw size={12} />
                         Retry
                       </button>
                     </div>
                   ) : bellItems.length === 0 ? (
-                    <div className="p-5 text-center text-xs font-sans text-stone-500">
-                      No notifications yet.
+                    <div className="px-6 py-10 flex flex-col items-center gap-2 text-center">
+                      <BellOff size={22} className="text-stone-300" />
+                      <p className="text-sm font-sans font-medium text-stone-700">You're all caught up</p>
+                      <p className="text-xs font-sans text-stone-500">New operations alerts will appear here.</p>
                     </div>
                   ) : (
-                    bellItems.map(n => (
-                      <div
-                        key={n.id}
-                        onClick={() => openNotificationDetail(n.id)}
-                        className="p-3.5 text-xs font-sans transition-colors cursor-pointer hover:bg-stone-50"
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="font-semibold text-stone-900 flex items-center gap-1.5 truncate">
-                            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${statusDotClass(n.status)}`} />
-                            <span className="truncate">{n.displayTitle || String(n.businessEvent).replace(/_/g, ' ')}</span>
-                          </p>
-                          <span className="text-[10px] text-stone-400 shrink-0">{relativeTime(n.createdAt)}</span>
-                        </div>
-                        <div className="flex items-center justify-between mt-0.5">
-                          <p className="text-stone-600 text-[11px] truncate">{n.recipient.name || n.recipient.email || '—'}</p>
-                          <div className="flex gap-1 text-stone-400 shrink-0">
-                            {n.channels.map((c: NotificationChannel, i: number) => (
-                              <ChannelDot key={i} channel={c} />
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    ))
+                    <ul className="divide-y divide-stone-100">
+                      {bellItems.map(n => {
+                        const isNew = new Date(n.createdAt).getTime() > seenBeforeOpen;
+                        const title = n.displayTitle || String(n.businessEvent).replace(/_/g, ' ');
+                        return (
+                          <li key={n.id}>
+                            <button
+                              type="button"
+                              onClick={() => openNotificationDetail(n.id)}
+                              className={`w-full text-left px-4 py-3.5 font-sans transition-colors hover:bg-stone-50 focus:outline-none focus-visible:bg-stone-100 ${isNew ? 'bg-amber-50/60' : ''}`}
+                            >
+                              <div className="flex items-start gap-3">
+                                <span
+                                  className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${statusDotClass(n.status)}`}
+                                  title={String(n.status).replace(/_/g, ' ')}
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <p className={`text-[13px] leading-snug text-stone-900 line-clamp-2 break-words ${isNew ? 'font-bold' : 'font-semibold'}`}>
+                                      {title}
+                                    </p>
+                                    <span className="text-[10px] text-stone-400 shrink-0 whitespace-nowrap pt-0.5">
+                                      {relativeTime(n.createdAt)}
+                                    </span>
+                                  </div>
+                                  <div className="mt-1 flex items-center justify-between gap-2">
+                                    <p className="text-stone-600 text-xs truncate">
+                                      {n.recipient.name || n.recipient.email || '—'}
+                                    </p>
+                                    <div className="flex items-center gap-1.5 text-stone-400 shrink-0">
+                                      {n.channels.map((c: NotificationChannel, i: number) => (
+                                        <ChannelDot key={i} channel={c} />
+                                      ))}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
                   )}
                 </div>
 
+                {/* Footer */}
                 <Link
                   to="/admin/notifications"
                   onClick={() => {
                     setIsAdminNotificationsOpen(false);
                     markSeenNow();
                   }}
-                  className="block p-3 text-center text-xs font-sans font-bold text-[#561C08] hover:bg-stone-50 border-t border-stone-100"
+                  className="shrink-0 block py-3.5 text-center text-xs font-sans font-bold text-[#561C08] hover:bg-stone-50 border-t border-stone-200"
                 >
-                  View all
+                  View all notifications
                 </Link>
               </div>
             )}

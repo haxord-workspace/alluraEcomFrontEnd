@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Bell } from 'lucide-react';
 import { useShop } from '../../context/ShopContext';
 import { NotificationList } from './NotificationList';
+import { useCloseOnScroll } from '../../hooks/useCloseOnScroll';
 
 export const NotificationBell: React.FC = () => {
   const {
@@ -42,6 +43,9 @@ export const NotificationBell: React.FC = () => {
       window.removeEventListener('keydown', onKey);
     };
   }, [isOpen]);
+
+  // Close when the page is scrolled while open (scrolling the list itself keeps it open)
+  useCloseOnScroll(isOpen, containerRef, close);
 
   return (
     <div className="relative" ref={containerRef}>
