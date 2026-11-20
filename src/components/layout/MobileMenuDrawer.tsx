@@ -105,7 +105,8 @@ export const MobileMenuDrawer: React.FC = () => {
                 { label: 'Our Story', to: '/about' },
                 { label: 'Visit Boutique (Perinthalmanna)', to: '/contact' },
                 { label: 'Size Guide & Measurement', to: '/size-guide' },
-                { label: 'Shipping & Exchange Policy', to: '/shipping-returns' },
+                // Previously '/shipping-returns' (dummy page, now a redirect) — points at the dynamic content page
+                { label: 'Shipping & Exchange Policy', to: '/pages/shipping-policy' },
               ].map(item => (
                 <Link
                   key={item.label}

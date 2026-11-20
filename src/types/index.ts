@@ -40,7 +40,7 @@ export interface AdminProductVariant {
   productId: string;
   sku: string;
   barcode?: { value: string; type: string } | null;
-  attributes: { color?: string; size?: string; [key: string]: any };
+  attributes: { color?: string; size?: string;[key: string]: any };
   pricing: { mrp: number; sellingPrice: number; currency: string };
   status: 'ACTIVE' | 'INACTIVE' | string;
   images?: { url: string; isPrimary?: boolean; alt?: string }[];
@@ -334,14 +334,43 @@ export interface Order {
   paymentStatus: PaymentStatus;
   transactionId?: string;
   orderStatus: OrderStatus;
+  cancelReason?: CancelReason | string;
+  cancelNote?: string;
+  paymentId?: string;
   tracking?: OrderTrackingInfo;
   notes?: string;
+  history?: OrderHistoryEntry[];
   activityHistory?: {
     timestamp: string;
     user: string;
     action: string;
     note?: string;
   }[];
+}
+
+export type CancelReason =
+  | 'CUSTOMER_REQUESTED'
+  | 'OUT_OF_STOCK'
+  | 'PAYMENT_FAILED'
+  | 'FRAUD_DETECTED'
+  | 'OTHER';
+
+export interface OrderHistoryEntry {
+  status: string;
+  note?: string;
+  reason?: string;
+  changedAt?: string;
+  changedBy?: string | { id?: string; name?: string; email?: string };
+  actorType?: string;
+  [key: string]: any;
+}
+
+export interface PaymentRefund {
+  razorpayRefundId: string;
+  amount: number; // in paise
+  status: 'PROCESSED' | 'FAILED';
+  reason: string;
+  processedAt: string;
 }
 
 // Admin Payments Ledger (Razorpay)
@@ -368,6 +397,10 @@ export interface PaymentDetail extends PaymentListItem {
   failureReason?: string;
   failureDescription?: string;
   updatedAt: string;
+  refund?: PaymentRefund | null;
+  orderStatus?: string;
+  orderPaymentStatus?: string;
+  orderPaymentMethod?: string;
 }
 
 // Returns & Exchanges

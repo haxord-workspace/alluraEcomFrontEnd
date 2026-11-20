@@ -61,6 +61,18 @@ const mapPaymentDetail = (raw: any): PaymentDetail => ({
   failureReason: raw?.failure?.reason,
   failureDescription: raw?.failure?.description,
   updatedAt: raw?.updatedAt || '',
+  refund: raw?.refund
+    ? {
+        razorpayRefundId: raw.refund.razorpayRefundId || raw.refund.refundId || '',
+        amount: num(raw.refund.amount), // in paise
+        status: (String(raw.refund.status || 'PROCESSED').toUpperCase() === 'FAILED' ? 'FAILED' : 'PROCESSED'),
+        reason: raw.refund.reason || '',
+        processedAt: raw.refund.processedAt || '',
+      }
+    : null,
+  orderStatus: raw?.order?.status || raw?.order?.orderStatus || raw?.orderStatus,
+  orderPaymentStatus: raw?.order?.paymentStatus || raw?.paymentStatus,
+  orderPaymentMethod: raw?.order?.paymentMethod || raw?.paymentMethod || raw?.method,
 });
 
 // The <input type="date"> picker gives a bare "YYYY-MM-DD", and the table displays

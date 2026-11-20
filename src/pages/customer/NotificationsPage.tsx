@@ -19,6 +19,7 @@ import {
   Share2,
 } from 'lucide-react';
 import { useShop } from '../../context/ShopContext';
+import { formatCustomerNotificationView } from '../../utils/userFacingText';
 
 export const NotificationsPage: React.FC = () => {
   const {
@@ -242,59 +243,63 @@ export const NotificationsPage: React.FC = () => {
         </div>
       ) : (
         <div className="space-y-3">
-          {filtered.map(notif => (
-            <div
-              key={notif.id}
-              className={`p-4 sm:p-5 rounded-2xl border transition-all flex items-start justify-between gap-4 ${
-                notif.isRead
-                  ? 'bg-allura-card border-allura-border/60 text-allura-muted'
-                  : 'bg-white border-allura-gold/40 shadow-xs text-allura-text'
-              }`}
-            >
-              <div className="flex items-start gap-3.5">
-                <div className="w-9 h-9 rounded-full bg-allura-bgSecondary/80 flex items-center justify-center flex-shrink-0 mt-0.5">
-                  {getIcon(notif.category)}
-                </div>
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <h4 className="font-serif text-base font-normal text-allura-text">
-                      {notif.title}
-                    </h4>
-                    {!notif.isRead && (
-                      <span className="w-2 h-2 rounded-full bg-allura-gold" />
-                    )}
+          {filtered.map(notif => {
+            const view = formatCustomerNotificationView(notif);
+            const targetUrl = view.actionUrl || notif.actionUrl;
+            return (
+              <div
+                key={notif.id}
+                className={`p-4 sm:p-5 rounded-2xl border transition-all flex items-start justify-between gap-4 ${
+                  notif.isRead
+                    ? 'bg-allura-card border-allura-border/60 text-allura-muted'
+                    : 'bg-white border-allura-gold/40 shadow-xs text-allura-text'
+                }`}
+              >
+                <div className="flex items-start gap-3.5">
+                  <div className="w-9 h-9 rounded-full bg-allura-bgSecondary/80 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    {getIcon(notif.category)}
                   </div>
-                  <p className="text-xs font-sans text-allura-muted leading-relaxed">
-                    {notif.message}
-                  </p>
-                  <div className="flex items-center gap-3 pt-1">
-                    <span className="text-[10px] font-sans text-allura-muted/70">
-                      {notif.timestamp}
-                    </span>
-                    {notif.actionUrl && (
-                      <Link
-                        to={notif.actionUrl}
-                        className="text-[11px] font-sans font-bold text-allura-goldDark hover:underline inline-flex items-center gap-1"
-                      >
-                        <span>{notif.actionLabel || 'View Details'}</span>
-                        <ArrowRight size={11} />
-                      </Link>
-                    )}
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-serif text-base font-normal text-allura-text">
+                        {view.title}
+                      </h4>
+                      {!notif.isRead && (
+                        <span className="w-2 h-2 rounded-full bg-allura-gold" />
+                      )}
+                    </div>
+                    <p className="text-xs font-sans text-allura-muted leading-relaxed">
+                      {view.message}
+                    </p>
+                    <div className="flex items-center gap-3 pt-1">
+                      <span className="text-[10px] font-sans text-allura-muted/70">
+                        {notif.timestamp}
+                      </span>
+                      {targetUrl && (
+                        <Link
+                          to={targetUrl}
+                          className="text-[11px] font-sans font-bold text-allura-goldDark hover:underline inline-flex items-center gap-1"
+                        >
+                          <span>{notif.actionLabel || 'View Details'}</span>
+                          <ArrowRight size={11} />
+                        </Link>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {!notif.isRead && (
-                <button
-                  onClick={() => markNotificationAsRead(notif.id)}
-                  title="Mark as read"
-                  className="p-1.5 text-allura-muted hover:text-emerald-700 transition-colors"
-                >
-                  <Check size={16} />
-                </button>
-              )}
-            </div>
-          ))}
+                {!notif.isRead && (
+                  <button
+                    onClick={() => markNotificationAsRead(notif.id)}
+                    title="Mark as read"
+                    className="p-1.5 text-allura-muted hover:text-emerald-700 transition-colors"
+                  >
+                    <Check size={16} />
+                  </button>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

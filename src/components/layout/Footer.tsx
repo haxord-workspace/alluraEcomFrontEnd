@@ -1,8 +1,10 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Phone, Mail, MapPin, Share2 } from 'lucide-react';
 import { AlluraLogo } from '../common/AlluraLogo';
 import { useShop } from '../../context/ShopContext';
+import { getFooterContentPages } from '../../service/cms.api';
+import type { ContentPageLink } from '../../service/cms.api';
 
 const DEFAULT_LEGAL_NAME = 'Allura Boutique';
 const DEFAULT_TAGLINE = 'WEAR YOUR STORY WITH ALLURA';
@@ -30,6 +32,18 @@ export const Footer: React.FC = () => {
   const whatsappNumber = clean(profile?.whatsappNumber);
   const address = clean(profile?.address);
   const supportEmail = clean(profile?.supportEmail);
+
+  // Published content pages for "Customer Care"; null while loading, [] when none or on error
+  const [contentPages, setContentPages] = useState<ContentPageLink[] | null>(null);
+  useEffect(() => {
+    let active = true;
+    getFooterContentPages().then((pages) => {
+      if (active) setContentPages(pages);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   return (
     <footer className="print:hidden bg-[#561C08] border-t border-[#3D1406] pt-16 pb-24 lg:pb-12 text-[#F7E6C8]">
@@ -123,6 +137,8 @@ export const Footer: React.FC = () => {
                   Track Order
                 </Link>
               </li>
+              {/* TEMPORARILY DISABLED — hardcoded dummy policy links, replaced by the
+                  dynamic content-page links rendered after FAQs below. Kept for restore.
               <li>
                 <Link to="/shipping-returns" className="hover:text-white transition-colors">
                   Shipping Policy
@@ -133,11 +149,13 @@ export const Footer: React.FC = () => {
                   Exchange & Returns
                 </Link>
               </li>
+              */}
               <li>
                 <Link to="/faq" className="hover:text-white transition-colors">
                   FAQs
                 </Link>
               </li>
+              {/* TEMPORARILY DISABLED — hardcoded dummy policy links (see note above).
               <li>
                 <Link to="/pages/privacy-policy" className="hover:text-white transition-colors">
                   Privacy Policy
@@ -148,6 +166,21 @@ export const Footer: React.FC = () => {
                   Terms & Conditions
                 </Link>
               </li>
+              */}
+              {/* Published content pages from GET /content/{slug}; skeleton while loading, nothing on error */}
+              {contentPages === null
+                ? [0, 1].map((i) => (
+                    <li key={`content-skeleton-${i}`} aria-hidden="true" className="h-4 flex items-center">
+                      <span className="block h-2.5 w-24 rounded bg-white/10 animate-pulse" />
+                    </li>
+                  ))
+                : contentPages.map((page) => (
+                    <li key={page.slug}>
+                      <Link to={`/pages/${page.slug}`} className="hover:text-white transition-colors">
+                        {page.title}
+                      </Link>
+                    </li>
+                  ))}
             </ul>
           </div>
 

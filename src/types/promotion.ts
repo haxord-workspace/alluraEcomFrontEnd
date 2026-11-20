@@ -18,11 +18,31 @@ export type PromotionStatus = 'Active' | 'Paused' | 'Draft' | 'Expired';
 
 export type PromotionDiscountType = 'Percentage' | 'Fixed';
 
+/** `applicableTo.type` enum, from the Swagger PromotionInput / PromotionUpdateInput schemas. */
+export const PROMOTION_SCOPE_TYPES = ['ALL', 'PRODUCTS', 'CATEGORIES', 'COLLECTIONS'] as const;
+export type PromotionScopeType = (typeof PROMOTION_SCOPE_TYPES)[number];
+
+export const PROMOTION_SCOPE_LABELS: Record<PromotionScopeType, string> = {
+  ALL: 'All products',
+  PRODUCTS: 'Specific products',
+  CATEGORIES: 'Specific categories',
+  COLLECTIONS: 'Specific collections',
+};
+
+/** What the promotion applies to (Swagger: `applicableTo`). Ids are strings. */
+export interface PromotionApplicableTo {
+  type: PromotionScopeType;
+  productIds: string[];
+  categoryIds: string[];
+  collectionIds: string[];
+}
+
 export interface AdminPromotion {
   id: string;
   name: string;
   /** Free-text campaign type (e.g. "Tiered Discount"); the backend's exact enum is unconfirmed. */
   type: string;
+  /** Shown as "Conditions" in the form; stored by the backend as `description`. */
   conditions: string;
   discountType: PromotionDiscountType;
   discountValue: number;
@@ -30,7 +50,13 @@ export interface AdminPromotion {
   startDate: string;
   endDate: string;
   status: PromotionStatus;
+  /** Replaced by Applies to > Categories; no longer used (the backend has no such field). */
   eligibleCategories: string[];
+  applicableTo: PromotionApplicableTo;
+  excludedProducts: string[];
+  excludedCategories: string[];
+  /** Evaluation order, higher first; qualifying promotions stack (Swagger `priority`). */
+  priority: number;
 }
 
 /** Body for POST/PATCH /admin/promotions. Only `name`, `discount`, `startsAt`,
@@ -39,8 +65,16 @@ export interface AdminPromotion {
  *  but unchallenged — no error was raised for them). */
 export interface PromotionInput {
   name: string;
+  /** Campaign Type. Not in the Swagger schema — the backend does not store it. */
   type?: string;
+  /** Not in the Swagger schema; the form's Conditions is now sent as `description`. */
   conditions?: string;
+  description?: string;
+  applicableTo?: PromotionApplicableTo;
+  excludedProducts?: string[];
+  excludedCategories?: string[];
+  /** Integer; no minimum in the spec. */
+  priority?: number;
   discount: {
     type: 'PERCENTAGE' | 'FIXED';
     value: number;
@@ -51,6 +85,7 @@ export interface PromotionInput {
   /** ISO datetime string, e.g. new Date(...).toISOString() */
   expiresAt: string;
   status?: 'DRAFT' | 'ACTIVE' | 'INACTIVE' | 'EXPIRED';
+  /** Replaced by Applies to > Categories; no longer used (no longer sent). */
   eligibleCategories?: string[];
 }
 

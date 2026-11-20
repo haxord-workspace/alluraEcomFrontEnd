@@ -2,6 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BellOff, Loader2, AlertTriangle } from 'lucide-react';
 import type { CustomerNotification } from '../../types';
+import { formatCustomerNotificationView } from '../../utils/userFacingText';
 
 interface NotificationListProps {
   notifications: CustomerNotification[];
@@ -41,8 +42,10 @@ export const NotificationList: React.FC<NotificationListProps> = ({
 
   const handleClick = (n: CustomerNotification) => {
     if (!n.isRead) onMarkAsRead(n.id);
-    if (n.actionUrl) {
-      navigate(n.actionUrl);
+    const view = formatCustomerNotificationView(n);
+    const targetUrl = view.actionUrl || n.actionUrl;
+    if (targetUrl) {
+      navigate(targetUrl);
       onAfterNavigate?.();
     }
   };
@@ -79,29 +82,32 @@ export const NotificationList: React.FC<NotificationListProps> = ({
 
   return (
     <ul className="divide-y divide-allura-border">
-      {notifications.map(n => (
-        <li key={n.id}>
-          <button
-            type="button"
-            onClick={() => handleClick(n)}
-            className={`w-full text-left px-4 py-3 flex gap-2.5 hover:bg-allura-bgSecondary/60 transition-colors ${
-              !n.isRead ? 'bg-allura-bgSecondary/30' : ''
-            }`}
-          >
-            <span
-              className={`mt-1.5 w-2 h-2 rounded-full flex-shrink-0 ${n.isRead ? 'bg-transparent' : 'bg-allura-goldDark'}`}
-              aria-hidden="true"
-            />
-            <span className="flex-1 min-w-0 space-y-0.5">
-              <span className={`block text-xs font-sans ${!n.isRead ? 'font-bold text-allura-text' : 'font-semibold text-allura-text'}`}>
-                {n.title}
+      {notifications.map(n => {
+        const view = formatCustomerNotificationView(n);
+        return (
+          <li key={n.id}>
+            <button
+              type="button"
+              onClick={() => handleClick(n)}
+              className={`w-full text-left px-4 py-3 flex gap-2.5 hover:bg-allura-bgSecondary/60 transition-colors ${
+                !n.isRead ? 'bg-allura-bgSecondary/30' : ''
+              }`}
+            >
+              <span
+                className={`mt-1.5 w-2 h-2 rounded-full flex-shrink-0 ${n.isRead ? 'bg-transparent' : 'bg-allura-goldDark'}`}
+                aria-hidden="true"
+              />
+              <span className="flex-1 min-w-0 space-y-0.5">
+                <span className={`block text-xs font-sans ${!n.isRead ? 'font-bold text-allura-text' : 'font-semibold text-allura-text'}`}>
+                  {view.title}
+                </span>
+                <span className="block text-[11px] font-sans text-allura-muted line-clamp-2">{view.message}</span>
+                <span className="block text-[10px] font-sans text-allura-muted/80">{relativeTime(n.timestamp)}</span>
               </span>
-              <span className="block text-[11px] font-sans text-allura-muted line-clamp-2">{n.message}</span>
-              <span className="block text-[10px] font-sans text-allura-muted/80">{relativeTime(n.timestamp)}</span>
-            </span>
-          </button>
-        </li>
-      ))}
+            </button>
+          </li>
+        );
+      })}
     </ul>
   );
 };

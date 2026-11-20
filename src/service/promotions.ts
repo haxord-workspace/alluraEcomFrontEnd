@@ -1,7 +1,13 @@
 import adminApi from './adminApi';
 import { getBackendErrorMessage } from '../utils/apiResponse';
 import { firstNumber } from '../utils/number';
-import type { AdminPromotion, PromotionInput, PromotionStatus } from '../types/promotion';
+import type {
+  AdminPromotion,
+  PromotionInput,
+  PromotionStatus,
+  PromotionApplicableTo,
+  PromotionScopeType,
+} from '../types/promotion';
 
 // -----------------------------------------------------------------------------
 // Admin Promotions endpoints (Swagger: "Promotions (Admin)")
@@ -31,10 +37,47 @@ const unwrap = (response: any) => response?.data?.data ?? response?.data;
 
 const num = firstNumber;
 
-const toDateOnly = (value?: string) => (value ? String(value).split('T')[0] : '');
+const pad2 = (n: number) => String(n).padStart(2, '0');
+
+/**
+ * Stored UTC datetime -> the admin's local calendar date ("YYYY-MM-DD").
+ * The form saves local midnight / local end of day, so in IST 18 Nov 00:00 is stored as
+ * 2026-11-17T18:30:00.000Z. Taking the text before "T" (the previous behavior) showed
+ * 17 Nov and moved the date back a day on every unchanged save; formatting in local
+ * time gives back the date the admin picked.
+ */
+const toDateOnly = (value?: string) => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value).split('T')[0];
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+};
 
 /** "2026-01-01" (date-only, from an <input type="date">) -> a full ISO datetime string. */
 const toIsoDateTime = (value: string): string => new Date(`${value}T00:00:00`).toISOString();
+
+/** "2026-01-01" -> ISO datetime for the end of that local day (23:59:59), same as coupons. */
+const toIsoEndOfDay = (value: string): string => new Date(`${value}T23:59:59`).toISOString();
+
+const SCOPE_TYPES: PromotionScopeType[] = ['ALL', 'PRODUCTS', 'CATEGORIES', 'COLLECTIONS'];
+
+/** Ids may come back as strings or populated objects ({ _id, name }). */
+const toIdList = (value: any): string[] =>
+  Array.isArray(value)
+    ? value.map((v: any) => (typeof v === 'string' ? v : String(v?._id || v?.id || ''))).filter(Boolean)
+    : [];
+
+/** Older promotions may have no `applicableTo` at all — treated as ALL with empty lists. */
+const mapApplicableTo = (raw: any): PromotionApplicableTo => {
+  const a = raw?.applicableTo || {};
+  const type = String(a.type || '').toUpperCase() as PromotionScopeType;
+  return {
+    type: SCOPE_TYPES.includes(type) ? type : 'ALL',
+    productIds: toIdList(a.productIds ?? a.products),
+    categoryIds: toIdList(a.categoryIds ?? a.categories),
+    collectionIds: toIdList(a.collectionIds ?? a.collections),
+  };
+};
 
 /** UI status -> the real backend enum (DRAFT|ACTIVE|INACTIVE|EXPIRED), confirmed by the
  *  backend's own validation error on POST /admin/promotions. */
@@ -64,7 +107,8 @@ export const mapPromotion = (raw: any): AdminPromotion => {
     id: raw?.id || raw?._id || '',
     name: raw?.name || raw?.title || '',
     type: raw?.type || raw?.promotionType || 'Tiered Discount',
-    conditions: raw?.conditions || raw?.description || '',
+    // The form's "Conditions" is saved as `description` (the field in the Swagger schema)
+    conditions: raw?.description || raw?.conditions || '',
     discountType: discountType === 'FIXED' ? 'Fixed' : 'Percentage',
     discountValue: num(discount.value, raw?.discountValue) ?? 0,
     maxDiscountAmount: num(discount.maxDiscountAmount, raw?.maxDiscountAmount, raw?.maxDiscount),
@@ -76,6 +120,10 @@ export const mapPromotion = (raw: any): AdminPromotion => {
       : Array.isArray(raw?.categories)
         ? raw.categories
         : [],
+    applicableTo: mapApplicableTo(raw),
+    excludedProducts: toIdList(raw?.excludedProducts),
+    excludedCategories: toIdList(raw?.excludedCategories),
+    priority: Number.isInteger(Number(raw?.priority)) ? Number(raw.priority) : 0,
   };
 };
 
@@ -136,4 +184,4 @@ export const updatePromotionStatus = async (id: string, status: PromotionStatus)
 export const promotionErrorMessage = (error: any, fallback: string): string =>
   getBackendErrorMessage(error, fallback);
 
-export { toIsoDateTime };
+export { toIsoDateTime, toIsoEndOfDay };
