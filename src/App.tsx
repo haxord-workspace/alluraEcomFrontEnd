@@ -105,6 +105,7 @@ export const AppContent: React.FC = () => {
   const location = useLocation();
   const isCheckout = location.pathname === '/checkout';
   const isProductPage = location.pathname.startsWith('/product/');
+  const isHomePage = location.pathname === '/';
   const isAdminRoute = location.pathname.startsWith('/admin');
 
   // Meta Pixel & storefront analytics: the app never reloads between pages, so send PageView/PAGE_VIEW on every route change
@@ -188,7 +189,8 @@ export const AppContent: React.FC = () => {
       )}
 
       {/* Main Content Area */}
-      <main className={`flex-1 ${isProductPage ? 'pb-0' : 'pb-16'} lg:pb-0`}>
+      {/* Home on mobile: the footer's own pb-24 already clears the fixed bottom nav, so skip the extra gap */}
+      <main className={`flex-1 ${isProductPage ? 'pb-0' : 'pb-16'} ${isHomePage ? 'max-md:pb-0' : ''} lg:pb-0`}>
         <Routes>
           {/* Core Pages */}
           <Route path="/" element={<HomePage />} />

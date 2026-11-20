@@ -446,7 +446,7 @@ export const ShopPage: React.FC = () => {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-8 sm:py-12">
       {/* Header */}
-      <div className="text-center max-w-2xl mx-auto mb-3 sm:mb-12">
+      <div className="hidden sm:block text-center max-w-2xl mx-auto sm:mb-12">
         <span className="text-[10px] sm:text-[11px] font-sans font-bold tracking-[0.28em] uppercase text-allura-goldDark block mb-1 sm:mb-2">
           THE ALLURA EDIT
         </span>

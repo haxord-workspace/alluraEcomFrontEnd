@@ -1,33 +1,42 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Phone, Mail, MapPin, Share2 } from 'lucide-react';
+import { Phone, Mail, MapPin } from 'lucide-react';
 import { AlluraLogo } from '../common/AlluraLogo';
 import { useShop } from '../../context/ShopContext';
 import { getFooterContentPages } from '../../service/cms.api';
 import type { ContentPageLink } from '../../service/cms.api';
+import { cleanProfileValue as clean, formatPhoneDisplay } from '../../utils/storeProfile';
 
 const DEFAULT_LEGAL_NAME = 'Allura Boutique';
 const DEFAULT_TAGLINE = 'WEAR YOUR STORY WITH ALLURA';
 
-/** Treats missing, blank or the backend's "string" placeholder as no value */
-const clean = (value?: string | null): string | undefined => {
-  if (typeof value !== 'string') return undefined;
-  const trimmed = value.trim();
-  return trimmed && trimmed.toLowerCase() !== 'string' ? trimmed : undefined;
-};
+const InstagramIcon: React.FC = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <rect width="20" height="20" x="2" y="2" rx="5" ry="5" />
+    <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+    <line x1="17.5" x2="17.51" y1="6.5" y2="6.5" />
+  </svg>
+);
 
-const formatPhoneDisplay = (raw?: string | null): string => {
-  if (!raw || typeof raw !== 'string') return '';
-  const digits = raw.replace(/\D/g, '');
-  const national = digits.startsWith('91') && digits.length === 12 ? digits.slice(2) : digits.length === 10 ? digits : null;
-  return national ? `+91 ${national.slice(0, 5)} ${national.slice(5)}` : raw;
-};
+// Social links for the "Follow Us" column. Add WhatsApp / Facebook / YouTube here later;
+// extra entries render as a row of icon circles with a 12px gap.
+const SOCIAL_LINKS = [
+  {
+    label: 'Instagram',
+    handle: '@alluraboutiqueofficial',
+    href: 'https://www.instagram.com/alluraboutiqueofficial',
+    Icon: InstagramIcon,
+  },
+];
+
+const HEADING_CLASS = 'text-[12px] font-heading font-bold tracking-[0.25em] text-white uppercase';
 
 export const Footer: React.FC = () => {
   const { storeSettings } = useShop();
   const profile = storeSettings?.boutiqueProfile;
 
-  const legalName = clean(profile?.legalName) || DEFAULT_LEGAL_NAME;
+  // Strip trailing periods so "Pvt. Ltd." + ". All rights reserved." doesn't render "Ltd.."
+  const legalName = (clean(profile?.legalName) || DEFAULT_LEGAL_NAME).replace(/\.+$/, '');
   const tagline = clean(profile?.tagline) || DEFAULT_TAGLINE;
   const whatsappNumber = clean(profile?.whatsappNumber);
   const address = clean(profile?.address);
@@ -46,16 +55,17 @@ export const Footer: React.FC = () => {
   }, []);
 
   return (
-    <footer className="print:hidden bg-[#561C08] border-t border-[#3D1406] pt-16 pb-24 lg:pb-12 text-[#F7E6C8]">
+    <footer className="print:hidden bg-[#561C08] border-t border-[#3D1406] pt-16 pb-24 lg:pb-12 text-[#F7E6C8] max-md:pt-7 max-md:pb-[88px]">
       <div className="max-w-7xl mx-auto px-6 lg:px-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-10 lg:gap-8 pb-14 border-b border-white/15">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1.4fr_1fr] items-start gap-10 lg:gap-12 pb-14 border-b border-white/15 max-md:gap-6 max-md:pb-6">
           {/* Col 1: Brand & Logo */}
-          <div className="lg:col-span-1 flex flex-col items-start space-y-4">
+          <div className="sm:col-span-2 lg:col-span-1 flex flex-col items-start space-y-4 max-md:space-y-2.5">
             <AlluraLogo size="md" variant="light" showTagline={false} />
-            <p className="text-xs text-[#F7E6C8]/80 font-body leading-relaxed pt-2">
+            <p className="text-xs text-[#F7E6C8]/80 font-body leading-relaxed pt-2 max-w-sm">
               A curated destination for modern women who appreciate elegance, quality and individuality.
             </p>
-            <div className="pt-2 text-xs font-heading font-bold uppercase tracking-wider text-[#F7E6C8]">
+            {/* On mobile the tagline is shown in the bottom bar instead */}
+            <div className="pt-2 text-xs font-heading font-bold uppercase tracking-wider text-[#F7E6C8] max-md:hidden">
               {tagline}
             </div>
           </div>
@@ -128,7 +138,7 @@ export const Footer: React.FC = () => {
 
           {/* Col 4: Customer Care */}
           <div className="space-y-4">
-            <h4 className="text-[12px] font-heading font-bold tracking-[0.25em] text-white uppercase">
+            <h4 className={HEADING_CLASS}>
               CUSTOMER CARE
             </h4>
             <ul className="space-y-2.5 text-xs text-[#F7E6C8]/80 font-body font-medium">
@@ -170,111 +180,108 @@ export const Footer: React.FC = () => {
               {/* Published content pages from GET /content/{slug}; skeleton while loading, nothing on error */}
               {contentPages === null
                 ? [0, 1].map((i) => (
-                    <li key={`content-skeleton-${i}`} aria-hidden="true" className="h-4 flex items-center">
-                      <span className="block h-2.5 w-24 rounded bg-white/10 animate-pulse" />
-                    </li>
-                  ))
+                  <li key={`content-skeleton-${i}`} aria-hidden="true" className="h-4 flex items-center">
+                    <span className="block h-2.5 w-24 rounded bg-white/10 animate-pulse" />
+                  </li>
+                ))
                 : contentPages.map((page) => (
-                    <li key={page.slug}>
-                      <Link to={`/pages/${page.slug}`} className="hover:text-white transition-colors">
-                        {page.title}
-                      </Link>
-                    </li>
-                  ))}
+                  <li key={page.slug}>
+                    <Link to={`/pages/${page.slug}`} className="hover:text-white transition-colors">
+                      {page.title}
+                    </Link>
+                  </li>
+                ))}
             </ul>
           </div>
 
           {/* Col 5: Get In Touch */}
           <div className="space-y-4">
-            <h4 className="text-[12px] font-heading font-bold tracking-[0.25em] text-white uppercase">
+            <h4 className={HEADING_CLASS}>
               GET IN TOUCH
             </h4>
             <ul className="space-y-3 text-xs text-[#F7E6C8]/80 font-body">
               {whatsappNumber && (
-                <li className="flex items-center gap-2.5">
-                  <Phone size={14} className="text-[#F7E6C8] flex-shrink-0" />
-                  <a href={`tel:${whatsappNumber}`} className="hover:text-white transition-colors">
+                <li className="flex items-center">
+                  <span className="w-5 flex-shrink-0 flex items-center">
+                    <Phone size={16} className="text-[#F7E6C8]" />
+                  </span>
+                  <a href={`tel:${whatsappNumber}`} className="pl-1.5 hover:text-white transition-colors">
                     {formatPhoneDisplay(whatsappNumber)}
                   </a>
                 </li>
               )}
-
               {supportEmail && (
-                <li className="flex items-center gap-2.5">
-                  <Mail size={14} className="text-[#F7E6C8] flex-shrink-0" />
-                  <a href={`mailto:${supportEmail}`} className="hover:text-white transition-colors">
+                <li className="flex items-center">
+                  <span className="w-5 flex-shrink-0 flex items-center">
+                    <Mail size={16} className="text-[#F7E6C8]" />
+                  </span>
+                  <a href={`mailto:${supportEmail}`} className="pl-1.5 break-all hover:text-white transition-colors">
                     {supportEmail}
                   </a>
                 </li>
               )}
               {address && (
-                <li className="flex items-start gap-2.5">
-                  <MapPin size={14} className="text-[#F7E6C8] flex-shrink-0 mt-0.5" />
-                  <span className="leading-snug">{address}</span>
+                <li className="flex items-start">
+                  <span className="w-5 flex-shrink-0 flex items-center pt-px">
+                    <MapPin size={16} className="text-[#F7E6C8]" />
+                  </span>
+                  <span className="pl-1.5 leading-snug">{address}</span>
                 </li>
               )}
             </ul>
+          </div>
 
-            {/* Social Icons */}
-            <div className="pt-2 flex items-center gap-3">
+          {/* Col 4: Follow Us */}
+          <div className="sm:col-span-2 lg:col-span-1 space-y-4 max-md:space-y-2.5">
+            <h4 className={HEADING_CLASS}>
+              FOLLOW US
+            </h4>
+            {SOCIAL_LINKS.length === 1 ? (
+              // Single network: icon + handle as one clickable row
               <a
-                href="https://www.instagram.com/alluraboutiqueofficial?stkn=MWl1Ymx3NTNqdTc2dg=="
+                href={SOCIAL_LINKS[0].href}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-8 h-8 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-[#F7E6C8] hover:text-white hover:bg-white/20 transition-all"
-                aria-label="Allura Boutique Instagram"
+                aria-label={SOCIAL_LINKS[0].label}
+                className="group inline-flex items-center gap-3 text-xs font-body text-[#F7E6C8]/80 hover:text-white transition-colors duration-200"
               >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect width="20" height="20" x="2" y="2" rx="5" ry="5" />
-                  <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
-                  <line x1="17.5" x2="17.51" y1="6.5" y2="6.5" />
-                </svg>
+                <span className="w-9 h-9 rounded-full border border-[#F7E6C8]/30 flex items-center justify-center text-[#F7E6C8] transition-colors duration-200 group-hover:bg-[#F7E6C8] group-hover:text-[#561C08]">
+                  {React.createElement(SOCIAL_LINKS[0].Icon)}
+                </span>
+                <span>{SOCIAL_LINKS[0].handle}</span>
               </a>
-              <a
-                href="https://facebook.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-8 h-8 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-[#F7E6C8] hover:text-white hover:bg-white/20 transition-all"
-                aria-label="Allura Boutique Facebook"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" />
-                </svg>
-              </a>
-              <a
-                href="https://youtube.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-8 h-8 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-[#F7E6C8] hover:text-white hover:bg-white/20 transition-all"
-                aria-label="Allura Boutique YouTube"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M2.5 17a24.12 24.12 0 0 1 0-10 2 2 0 0 1 1.4-1.4 49.56 49.56 0 0 1 16.2 0A2 2 0 0 1 21.5 7a24.12 24.12 0 0 1 0 10 2 2 0 0 1-1.4 1.4 49.55 49.55 0 0 1-16.2 0A2 2 0 0 1 2.5 17" />
-                  <polygon points="10 15 15 12 10 9 10 15" />
-                </svg>
-              </a>
-              <a
-                href="https://pinterest.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-8 h-8 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-[#F7E6C8] hover:text-white hover:bg-white/20 transition-all"
-                aria-label="Allura Boutique Pinterest"
-              >
-                <Share2 size={14} />
-              </a>
-            </div>
+            ) : (
+              // Multiple networks: row of icon circles
+              <div className="flex items-center gap-3">
+                {SOCIAL_LINKS.map(({ label, href, Icon }) => (
+                  <a
+                    key={label}
+                    href={href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={label}
+                    className="w-9 h-9 rounded-full border border-[#F7E6C8]/30 flex items-center justify-center text-[#F7E6C8] transition-colors duration-200 hover:bg-[#F7E6C8] hover:text-[#561C08]"
+                  >
+                    <Icon />
+                  </a>
+                ))}
+              </div>
+            )}
+            <p className="text-xs text-[#F7E6C8]/60 font-body leading-relaxed">
+              Follow us for new arrivals and festive collections.
+            </p>
           </div>
         </div>
 
-        {/* Bottom Rights Bar */}
-        <div className="pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-[11px] font-body text-[#F7E6C8]/70 tracking-wide">
+        {/* Bottom Rights Bar — mobile: centered stack; desktop: copyright left, credit right */}
+        <div className="pt-8 flex flex-col md:flex-row items-center justify-between gap-2 md:gap-4 text-[11px] max-md:pt-5 font-body text-[#F7E6C8]/70 tracking-wide text-center">
           <p>© 2026 {legalName}. All rights reserved.</p>
-          <div className="flex items-center gap-4">
-
-            <p className="flex items-center gap-1.5 font-heading font-semibold uppercase text-xs text-[#F7E6C8]">
-              {tagline}
-            </p>
-          </div>
+          <p className="font-heading font-semibold uppercase text-xs text-[#F7E6C8] md:hidden">
+            {tagline}
+          </p>
+          <p>
+            Website by <span className="font-semibold text-[#F7E6C8]">Haxord Technologies</span>
+          </p>
         </div>
       </div>
     </footer>

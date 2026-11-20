@@ -25,8 +25,8 @@ export const AlluraCircleSection: React.FC = () => {
   };
 
   return (
-    <section className="relative py-20 px-6 overflow-hidden bg-[#F7E6C8] border-y border-[#561C08]/15">
-      <div className="max-w-3xl mx-auto text-center relative z-10 space-y-6">
+    <section className="relative py-20 px-6 overflow-hidden bg-[#F7E6C8] border-y border-[#561C08]/15 max-md:py-8">
+      <div className="max-w-3xl mx-auto text-center relative z-10 space-y-6 max-md:space-y-3.5">
         {/* Eyebrow */}
         <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-white border border-[#561C08]/20 text-[#561C08] text-[11px] font-heading font-bold tracking-[0.25em] uppercase shadow-xs">
           <Sparkles size={12} className="text-[#561C08]" />
@@ -34,7 +34,7 @@ export const AlluraCircleSection: React.FC = () => {
         </div>
 
         {/* Heading */}
-        <h2 className="font-heading text-3xl sm:text-4xl lg:text-5xl font-bold text-[#000000] tracking-tight uppercase">
+        <h2 className="font-heading text-3xl sm:text-4xl lg:text-5xl font-bold text-[#000000] tracking-tight uppercase max-md:text-base max-md:font-semibold max-md:tracking-[0.06em] max-md:leading-[1.2]">
           BE PART OF ALLURA
         </h2>
 
