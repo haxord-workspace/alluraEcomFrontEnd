@@ -34,7 +34,9 @@ import { CheckoutPage } from './pages/CheckoutPage';
 import { WishlistPage } from './pages/WishlistPage';
 import { AccountPage } from './pages/AccountPage';
 import { SizeGuidePage } from './pages/SizeGuidePage';
-import { ShippingReturnsPage } from './pages/ShippingReturnsPage';
+// TEMPORARILY DISABLED — hardcoded dummy policy page; /shipping-returns now redirects to the
+// dynamic content page /pages/shipping-policy. The file is kept unchanged for restore.
+// import { ShippingReturnsPage } from './pages/ShippingReturnsPage';
 
 // Customer Flow Pages
 import { AuthPage } from './pages/customer/AuthPage';
@@ -103,6 +105,7 @@ export const AppContent: React.FC = () => {
   const location = useLocation();
   const isCheckout = location.pathname === '/checkout';
   const isProductPage = location.pathname.startsWith('/product/');
+  const isHomePage = location.pathname === '/';
   const isAdminRoute = location.pathname.startsWith('/admin');
 
   // Meta Pixel & storefront analytics: the app never reloads between pages, so send PageView/PAGE_VIEW on every route change
@@ -186,7 +189,8 @@ export const AppContent: React.FC = () => {
       )}
 
       {/* Main Content Area */}
-      <main className={`flex-1 ${isProductPage ? 'pb-0' : 'pb-16'} lg:pb-0`}>
+      {/* Home on mobile: the footer's own pb-24 already clears the fixed bottom nav, so skip the extra gap */}
+      <main className={`flex-1 ${isProductPage ? 'pb-0' : 'pb-16'} ${isHomePage ? 'max-md:pb-0' : ''} lg:pb-0`}>
         <Routes>
           {/* Core Pages */}
           <Route path="/" element={<HomePage />} />
@@ -201,7 +205,10 @@ export const AppContent: React.FC = () => {
           <Route path="/wishlist" element={<ProtectedRoute><WishlistPage /></ProtectedRoute>} />
           <Route path="/account" element={<ProtectedRoute><AccountPage /></ProtectedRoute>} />
           <Route path="/size-guide" element={<SizeGuidePage />} />
+          {/* TEMPORARILY DISABLED — dummy page replaced by a redirect to the dynamic content page.
           <Route path="/shipping-returns" element={<ShippingReturnsPage />} />
+          */}
+          <Route path="/shipping-returns" element={<Navigate to="/pages/shipping-policy" replace />} />
 
           {/* Customer Flows */}
           <Route path="/auth" element={<AuthPage />} />
@@ -222,10 +229,18 @@ export const AppContent: React.FC = () => {
 
           {/* Dynamic Storefront CMS Pages */}
           <Route path="/pages/:slug" element={<CMSPageViewer />} />
+          {/* TEMPORARILY DISABLED — legacy policy URLs rendered the viewer directly (with its
+              fallback content). They now redirect to the canonical /pages/<slug> routes.
           <Route path="/privacy-policy" element={<CMSPageViewer slugOverride="privacy-policy" />} />
           <Route path="/terms-and-conditions" element={<CMSPageViewer slugOverride="terms-and-conditions" />} />
           <Route path="/terms-conditions" element={<CMSPageViewer slugOverride="terms-conditions" />} />
           <Route path="/return-refund-policy" element={<CMSPageViewer slugOverride="return-refund-policy" />} />
+          */}
+          {/* Legacy policy URLs (may be bookmarked or indexed) → dynamic content pages */}
+          <Route path="/privacy-policy" element={<Navigate to="/pages/privacy-policy" replace />} />
+          <Route path="/terms-and-conditions" element={<Navigate to="/pages/terms-and-conditions" replace />} />
+          <Route path="/terms-conditions" element={<Navigate to="/pages/terms-and-conditions" replace />} />
+          <Route path="/return-refund-policy" element={<Navigate to="/pages/exchange-returns" replace />} />
 
           {/* Fallback */}
           <Route path="*" element={<HomePage />} />

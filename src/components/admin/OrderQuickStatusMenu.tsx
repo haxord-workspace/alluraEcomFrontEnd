@@ -41,9 +41,10 @@ interface OrderQuickStatusMenuProps {
 }
 
 // Targets handled with a small confirm dialog + direct PATCH, status only.
-// SHIPPED needs courier/tracking fields and CANCELLED needs a mandatory reason —
-// both already have a full form on the detail page, so we navigate there instead
-// of duplicating a second, divergent form here.
+// SHIPPED needs courier/tracking fields — it has a full form on the detail page,
+// so we navigate there instead of duplicating a second, divergent form here.
+// Note: CANCELLED is deliberately filtered out from quick status targets so
+// cancellation always goes through the dedicated cancel order modal and flow.
 const NAVIGATE_TARGETS = new Set(['SHIPPED', 'CANCELLED']);
 const MENU_WIDTH = 208; // px, matches w-52
 const MENU_MARGIN = 6;
@@ -59,7 +60,8 @@ export const OrderQuickStatusMenu: React.FC<OrderQuickStatusMenuProps> = ({ orde
   const menuRef = useRef<HTMLDivElement>(null);
 
   const rawStatus = (order.rawStatus || toBackendStatus(order.orderStatus)).toUpperCase();
-  const targets = ADMIN_ORDER_TRANSITIONS[rawStatus] ?? [];
+  // Filter out CANCELLED so status changes never bypass the restock/refund cancellation flow
+  const targets = (ADMIN_ORDER_TRANSITIONS[rawStatus] ?? []).filter(t => t !== 'CANCELLED');
 
   const closeMenu = () => setIsOpen(false);
   const toggleOpen = () => setIsOpen(v => !v);

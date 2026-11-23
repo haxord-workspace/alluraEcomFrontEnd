@@ -5,6 +5,7 @@ import { useShop } from '../../context/ShopContext';
 import { orderErrorMessage, type InvoiceDownload } from '../../service/orders';
 import { saveBlob } from '../../utils/download';
 import type { Order } from '../../types';
+import { toReadableText, formatUserFacingPaymentStatus } from '../../utils/userFacingText';
 
 
 const clean = (value?: string | null): string | undefined => {
@@ -29,7 +30,7 @@ interface InvoiceModalProps {
 }
 
 export const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, onClose, onDownload }) => {
-  const { showToast, storeSettings } = useShop();
+  const { formatExactPrice, showToast, storeSettings } = useShop();
   const [isDownloading, setIsDownloading] = useState(false);
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -81,18 +82,6 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, onClose, onDo
   }, [order, onClose]);
 
   if (!order) return null;
-
-  const fmtAmount = (n: number) => {
-    try {
-      return new Intl.NumberFormat('en-IN', {
-        style: 'currency',
-        currency: order.currency || 'INR',
-        maximumFractionDigits: 2,
-      }).format(n || 0);
-    } catch {
-      return `${order.currency || 'INR'} ${(n || 0).toLocaleString('en-IN')}`;
-    }
-  };
 
   const handlePrint = () => window.print();
 
@@ -275,13 +264,13 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, onClose, onDo
               <dl className="space-y-1.5">
                 <div className="flex items-center justify-between gap-3">
                   <dt className="text-stone-500">Method</dt>
-                  <dd className="font-medium text-stone-800 text-right">{order.paymentMethod || '—'}</dd>
+                  <dd className="font-medium text-stone-800 text-right">{toReadableText(order.paymentMethod) || '—'}</dd>
                 </div>
                 <div className="flex items-center justify-between gap-3">
                   <dt className="text-stone-500">Status</dt>
                   <dd>
                     <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold border ${paymentTone(order.paymentStatus)}`}>
-                      {order.paymentStatus || '—'}
+                      {formatUserFacingPaymentStatus(order.paymentStatus) || '—'}
                     </span>
                   </dd>
                 </div>
@@ -310,7 +299,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, onClose, onDo
                 <li key={idx} className="rounded-xl border border-stone-200 p-3.5">
                   <div className="flex items-start justify-between gap-3">
                     <p className="text-sm font-semibold text-stone-900 leading-snug break-words">{item.name}</p>
-                    <p className="text-sm font-bold text-stone-900 tabular-nums shrink-0">{fmtAmount(item.lineTotal)}</p>
+                    <p className="text-sm font-bold text-stone-900 tabular-nums shrink-0">{formatExactPrice(item.lineTotal)}</p>
                   </div>
                   {(item.size || item.colorName || item.sku) && (
                     <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">
@@ -329,7 +318,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, onClose, onDo
                     </div>
                   )}
                   <p className="mt-2 text-xs text-stone-500 tabular-nums">
-                    {item.qty} × {fmtAmount(item.unitPrice)}
+                    {item.qty} × {formatExactPrice(item.unitPrice)}
                   </p>
                 </li>
               ))}
@@ -373,8 +362,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, onClose, onDo
                         )}
                       </td>
                       <td className="py-3 pr-3 text-right text-stone-800 tabular-nums">{item.qty}</td>
-                      <td className="py-3 pr-3 text-right text-stone-800 tabular-nums whitespace-nowrap">{fmtAmount(item.unitPrice)}</td>
-                      <td className="py-3 text-right font-medium text-stone-900 tabular-nums whitespace-nowrap">{fmtAmount(item.lineTotal)}</td>
+                      <td className="py-3 pr-3 text-right text-stone-800 tabular-nums whitespace-nowrap">{formatExactPrice(item.unitPrice)}</td>
+                      <td className="py-3 text-right font-medium text-stone-900 tabular-nums whitespace-nowrap">{formatExactPrice(item.lineTotal)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -387,25 +376,25 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, onClose, onDo
             <dl className="w-full sm:w-72 space-y-2 text-xs font-sans rounded-xl sm:rounded-none bg-stone-50 sm:bg-transparent border border-stone-100 sm:border-0 sm:border-t sm:border-stone-200 p-4 sm:px-0 sm:pt-4 sm:pb-0">
               <div className="flex justify-between text-stone-600">
                 <dt>Subtotal</dt>
-                <dd className="tabular-nums">{fmtAmount(order.subtotal ?? 0)}</dd>
+                <dd className="tabular-nums">{formatExactPrice(order.subtotal ?? 0)}</dd>
               </div>
               {(order.discount ?? 0) > 0 && (
                 <div className="flex justify-between gap-3 text-emerald-700 font-medium">
                   <dt className="break-words">Discount{order.couponCode ? ` (${order.couponCode})` : ''}</dt>
-                  <dd className="tabular-nums shrink-0">-{fmtAmount(order.discount)}</dd>
+                  <dd className="tabular-nums shrink-0">-{formatExactPrice(order.discount)}</dd>
                 </div>
               )}
               <div className="flex justify-between text-stone-600">
                 <dt>Tax</dt>
-                <dd className="tabular-nums">{fmtAmount(order.tax ?? 0)}</dd>
+                <dd className="tabular-nums">{formatExactPrice(order.tax ?? 0)}</dd>
               </div>
               <div className="flex justify-between text-stone-600">
                 <dt>Shipping</dt>
-                <dd className="tabular-nums">{order.shippingFee === 0 ? 'Free' : fmtAmount(order.shippingFee ?? 0)}</dd>
+                <dd className="tabular-nums">{order.shippingFee === 0 ? 'Free' : formatExactPrice(order.shippingFee ?? 0)}</dd>
               </div>
               <div className="flex justify-between items-baseline text-base font-serif font-bold text-stone-900 pt-2.5 mt-1 border-t border-stone-200">
                 <dt>Total</dt>
-                <dd className="text-lg text-allura-goldDark tabular-nums">{fmtAmount(order.total ?? 0)}</dd>
+                <dd className="text-lg text-allura-goldDark tabular-nums">{formatExactPrice(order.total ?? 0)}</dd>
               </div>
             </dl>
           </div>

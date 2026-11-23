@@ -67,6 +67,7 @@ export const CheckoutPage: React.FC = () => {
     cartId,
     cartSubtotal,
     formatPrice,
+    formatExactPrice,
     appliedCoupon,
     couponDiscount,
     isApplyingCoupon,
@@ -429,7 +430,7 @@ export const CheckoutPage: React.FC = () => {
             )}
             <p><strong>Items:</strong> {s.items.reduce((a, i) => a + i.quantity, 0) || orderItems.reduce((a, i) => a + i.quantity, 0)}</p>
             <p><strong>Payment:</strong> {PAYMENT_LABELS[paymentMethod]}</p>
-            <p><strong>Total:</strong> <strong className="text-allura-darkBrown">{formatPrice(s.total)}</strong></p>
+            <p><strong>Total:</strong> <strong className="text-allura-darkBrown">{formatExactPrice(s.total)}</strong></p>
           </div>
 
           <div className="p-3 bg-allura-bgSecondary/60 rounded-lg text-xs font-sans text-allura-text flex items-center gap-2">
@@ -453,7 +454,7 @@ export const CheckoutPage: React.FC = () => {
               className="bg-allura-goldDark hover:bg-allura-darkBrown text-allura-card text-xs font-sans font-bold tracking-[0.2em] uppercase py-3.5 px-6 rounded-xl transition-all flex items-center gap-2 disabled:opacity-60"
             >
               <Lock size={14} />
-              <span>PAY NOW · {formatPrice(s.total)}</span>
+              <span>PAY NOW · {formatExactPrice(s.total)}</span>
             </button>
           )}
           <Link
@@ -818,24 +819,24 @@ export const CheckoutPage: React.FC = () => {
           <div className="space-y-2 pt-4 border-t border-allura-border text-xs font-sans text-allura-muted">
             <div className="flex justify-between">
               <span>Subtotal</span>
-              <span className="font-semibold text-allura-text">{formatPrice(display.subtotal)}</span>
+              <span className="font-semibold text-allura-text">{formatExactPrice(display.subtotal)}</span>
             </div>
             {display.productDiscount > 0 && (
               <div className="flex justify-between text-emerald-700 font-semibold">
                 <span>Product Discounts</span>
-                <span>-{formatPrice(display.productDiscount)}</span>
+                <span>-{formatExactPrice(display.productDiscount)}</span>
               </div>
             )}
             {display.promotionDiscount > 0 && (
               <div className="flex justify-between text-emerald-700 font-semibold">
                 <span>Promotion</span>
-                <span>-{formatPrice(display.promotionDiscount)}</span>
+                <span>-{formatExactPrice(display.promotionDiscount)}</span>
               </div>
             )}
             {display.couponDiscount > 0 && (
               <div className="flex justify-between text-emerald-700 font-semibold">
                 <span>Coupon{appliedCoupon ? ` (${appliedCoupon.code})` : ''}</span>
-                <span>-{formatPrice(display.couponDiscount)}</span>
+                <span>-{formatExactPrice(display.couponDiscount)}</span>
               </div>
             )}
             <div className="flex justify-between items-center">
@@ -847,12 +848,12 @@ export const CheckoutPage: React.FC = () => {
                     ? <span className="text-allura-muted">—</span>
                     : resolvedShipping === 0
                       ? <strong className="text-emerald-700 uppercase">FREE</strong>
-                      : formatPrice(resolvedShipping)}
+                      : formatExactPrice(resolvedShipping)}
               </span>
             </div>
             <div className="flex justify-between items-center text-base font-serif font-semibold text-allura-text pt-2 border-t border-allura-border">
               <span>{isEstimate ? 'Estimated Total' : 'Total Payable'}</span>
-              <span className="text-xl text-allura-goldDark">{formatPrice(display.total)}</span>
+              <span className="text-xl text-allura-goldDark">{formatExactPrice(display.total)}</span>
             </div>
             {isEstimate && !previewError && (
               <p className="text-[11px] text-allura-muted">
@@ -884,8 +885,8 @@ export const CheckoutPage: React.FC = () => {
                 : isPlacing
                   ? 'PLACING ORDER…'
                   : paymentMethod === 'cod'
-                    ? `PLACE ORDER · ${formatPrice(display.total)}`
-                    : `PLACE ORDER & PAY · ${formatPrice(display.total)}`}
+                    ? `PLACE ORDER · ${formatExactPrice(display.total)}`
+                    : `PLACE ORDER & PAY · ${formatExactPrice(display.total)}`}
             </span>
           </button>
         </div>

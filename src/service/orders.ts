@@ -3,7 +3,18 @@ import adminApi from './adminApi';
 import { mapStoreProduct, NO_COLOR } from './store';
 import { colorHex } from '../data/colorPalette';
 import { firstNumber } from '../utils/number';
-import type { Order, OrderItem, OrderStatus, PaymentStatus, SavedAddress, TrackingMilestone } from '../types';
+import type {
+  Order,
+  OrderItem,
+  OrderStatus,
+  PaymentStatus,
+  SavedAddress,
+  TrackingMilestone,
+  CancelReason,
+  OrderHistoryEntry,
+} from '../types';
+
+export type { OrderHistoryEntry };
 
 // -----------------------------------------------------------------------------
 // Order endpoints
@@ -90,6 +101,63 @@ const toPaymentMethod = (raw?: string): Order['paymentMethod'] => {
   if (v.includes('CARD')) return 'Card';
   if (v.includes('NET')) return 'NetBanking';
   return 'UPI';
+};
+
+// ── Cancellation reasons ──────────────────────────────────────────────────────
+
+export const CANCEL_REASONS: CancelReason[] = [
+  'CUSTOMER_REQUESTED',
+  'OUT_OF_STOCK',
+  'PAYMENT_FAILED',
+  'FRAUD_DETECTED',
+  'OTHER',
+];
+
+export const CANCEL_REASON_LABELS: Record<CancelReason, string> = {
+  CUSTOMER_REQUESTED: 'Customer requested',
+  OUT_OF_STOCK: 'Out of stock',
+  PAYMENT_FAILED: 'Payment failed',
+  FRAUD_DETECTED: 'Fraud detected',
+  OTHER: 'Other',
+};
+
+/**
+ * Returns the human-friendly label for a CancelReason enum value,
+ * falling back safely to the raw value for any unknown reason.
+ */
+export const getCancelReasonLabel = (reason?: string | null): string => {
+  if (!reason) return '';
+  return (CANCEL_REASON_LABELS as Record<string, string>)[reason] || reason;
+};
+
+/**
+ * Resolves an actor name safely for history and cancellation cards.
+ * Never outputs a raw user ID (e.g. mongo ObjectId) as a display name.
+ */
+export const resolveActorName = (entry?: any): string => {
+  if (!entry) return 'Admin';
+  if (typeof entry.changedByName === 'string' && entry.changedByName.trim()) {
+    return entry.changedByName.trim();
+  }
+  if (entry.changedBy) {
+    if (typeof entry.changedBy === 'object' && entry.changedBy.name) {
+      return String(entry.changedBy.name).trim();
+    }
+    if (typeof entry.changedBy === 'string') {
+      const trimmed = entry.changedBy.trim();
+      const isMongoId = /^[0-9a-fA-F]{24}$/.test(trimmed);
+      if (!isMongoId && trimmed.length > 0 && !trimmed.startsWith('usr_')) {
+        return trimmed;
+      }
+    }
+  }
+  if (entry.actorType && typeof entry.actorType === 'string') {
+    return prettyStatus(entry.actorType);
+  }
+  if (entry.actor && typeof entry.actor === 'string') {
+    return entry.actor;
+  }
+  return 'Admin';
 };
 
 // ── Mapping helpers ───────────────────────────────────────────────────────────
@@ -319,6 +387,9 @@ export const mapOrder = (raw: any): Order => {
     paymentStatus: PAYMENT_STATUS[String(payment?.status || raw?.paymentStatus || 'PENDING').toUpperCase()] || 'Pending',
     transactionId: payment?.transactionId || payment?.txnId || payment?.paymentId || payment?.referenceId || raw?.transactionId,
     orderStatus: toUiStatus(rawStatus),
+    cancelReason: raw?.cancelReason,
+    cancelNote: raw?.cancelNote,
+    paymentId: raw?.paymentId || (typeof raw?.payment === 'string' ? raw.payment : raw?.payment?._id || raw?.payment?.id) || undefined,
     tracking:
       trackingNumber || carrier || history.length
         ? {
@@ -332,9 +403,10 @@ export const mapOrder = (raw: any): Order => {
           }
         : undefined,
     notes: raw?.notes || raw?.note,
+    history: Array.isArray(history) ? history : [],
     activityHistory: history.map(h => ({
       timestamp: formatDateTime(h?.changedAt || h?.createdAt || h?.timestamp),
-      user: h?.changedByName || (h?.actorType ? prettyStatus(h.actorType) : '') || h?.actor || (h?.changedBy ? 'Admin' : 'System'),
+      user: resolveActorName(h),
       action: `Status: ${prettyStatus(h?.status || h?.to)}`,
       note: h?.note || h?.reason,
     })),
@@ -491,12 +563,41 @@ export const updateAdminOrderStatus = async (orderId: string, payload: StatusUpd
   return data && (data._id || data.id) ? mapOrder(data) : null;
 };
 
-/** POST /admin/orders/{orderId}/cancel */
-export const cancelAdminOrder = async (orderId: string, reason: string, note?: string): Promise<Order | null> => {
-  const response = await adminApi.post(`/admin/orders/${orderId}/cancel`, { reason, ...(note ? { note } : {}) });
+export interface CancelAdminOrderPayload {
+  reason: CancelReason | string;
+  note?: string;
+}
+
+/**
+ * POST /admin/orders/{orderId}/cancel
+ * Request body is STRICT: sends only `reason` and optional `note` (if non-empty).
+ * Returns the updated order from response.data.
+ */
+export async function cancelAdminOrder(
+  orderId: string,
+  payloadOrReason: CancelAdminOrderPayload | string,
+  legacyNote?: string
+): Promise<Order | null> {
+  let reason: string;
+  let note: string | undefined;
+
+  if (typeof payloadOrReason === 'object' && payloadOrReason !== null) {
+    reason = payloadOrReason.reason;
+    note = payloadOrReason.note;
+  } else {
+    reason = String(payloadOrReason);
+    note = legacyNote;
+  }
+
+  const body: { reason: string; note?: string } = { reason };
+  if (typeof note === 'string' && note.trim().length > 0) {
+    body.note = note.trim();
+  }
+
+  const response = await adminApi.post(`/admin/orders/${encodeURIComponent(orderId)}/cancel`, body);
   const data = unwrap(response);
   return data && (data._id || data.id) ? mapOrder(data) : null;
-};
+}
 
 /** GET /admin/orders/{orderId}/invoice */
 export const downloadAdminOrderInvoice = (orderId: string, invoiceNumber?: string): Promise<InvoiceDownload> =>

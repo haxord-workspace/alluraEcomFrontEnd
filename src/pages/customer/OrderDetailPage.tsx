@@ -10,7 +10,7 @@ import {
   CheckCircle,
   Clock,
   Truck,
-  // XCircle,
+  XCircle,
   Lock
 } from 'lucide-react';
 import { useShop } from '../../context/ShopContext';
@@ -22,6 +22,12 @@ import { useOrderPayment } from '../../hooks/useOrderPayment';
 import { downloadOrderInvoice } from '../../service/orders';
 import { OrderItemReviewAction } from '../../components/reviews/OrderItemReviewAction';
 import { shouldShowOrderTracking } from '../../utils/reviewEligibility';
+import {
+  getUserFacingCancelReason,
+  formatUserFacingStatus,
+  formatUserFacingPaymentStatus,
+  toReadableText,
+} from '../../utils/userFacingText';
 
 // const CANCELLABLE = ['Pending', 'Confirmed', 'Processing'];
 const CANCEL_REASONS = [
@@ -34,7 +40,7 @@ const CANCEL_REASONS = [
 
 export const OrderDetailPage: React.FC = () => {
   const { orderId } = useParams<{ orderId: string }>();
-  const { formatPrice, invoiceOrder, setInvoiceOrder, cancelCustomerOrder, customer, loadOrder, showToast } = useShop();
+  const { formatPrice, formatExactPrice, invoiceOrder, setInvoiceOrder, cancelCustomerOrder, customer, loadOrder, showToast } = useShop();
   const { order, isLoading: isLoadingOrder } = useCustomerOrder(orderId);
   const { payForOrder, isPaying } = useOrderPayment();
 
@@ -104,13 +110,26 @@ export const OrderDetailPage: React.FC = () => {
     );
   }
 
-  const milestones = [
-    { title: 'Order Placed', status: 'Order Placed & Payment Confirmed', done: true },
-    { title: 'Processing', status: 'Processing', done: order.orderStatus !== 'Pending' },
-    { title: 'Packed in Luxury Box', status: 'Packed', done: ['Packed', 'Shipped', 'Out for Delivery', 'Delivered'].includes(order.orderStatus) },
-    { title: 'Dispatched via Courier', status: 'Shipped', done: ['Shipped', 'Out for Delivery', 'Delivered'].includes(order.orderStatus) },
-    { title: 'Delivered', status: 'Delivered', done: order.orderStatus === 'Delivered' },
-  ];
+  const isCancelled = /cancell?ed/i.test(String(order.orderStatus || ''));
+
+  const cancelEntry = order.history
+    ? [...order.history].reverse().find(h => String(h.status || h.to || '').toUpperCase() === 'CANCELLED')
+    : undefined;
+
+  const orderCancelNote = (order.cancelNote || cancelEntry?.note)?.trim();
+
+  const milestones = isCancelled
+    ? [
+        { title: 'Order Placed', status: 'Order Placed & Payment Confirmed', done: true, isCancelled: false },
+        { title: 'Order Cancelled', status: 'Cancelled', done: true, isCancelled: true },
+      ]
+    : [
+        { title: 'Order Placed', status: 'Order Placed & Payment Confirmed', done: true, isCancelled: false },
+        { title: 'Processing', status: 'Processing', done: order.orderStatus !== 'Pending', isCancelled: false },
+        { title: 'Packed in Luxury Box', status: 'Packed', done: ['Packed', 'Shipped', 'Out for Delivery', 'Delivered'].includes(order.orderStatus), isCancelled: false },
+        { title: 'Dispatched via Courier', status: 'Shipped', done: ['Shipped', 'Out for Delivery', 'Delivered'].includes(order.orderStatus), isCancelled: false },
+        { title: 'Delivered', status: 'Delivered', done: order.orderStatus === 'Delivered', isCancelled: false },
+      ];
 
   return (
     <>
@@ -129,11 +148,27 @@ export const OrderDetailPage: React.FC = () => {
               <h1 className="font-serif text-2xl sm:text-3xl text-allura-text font-normal">
                 {order.orderNumber}
               </h1>
-              <StatusBadge status={order.orderStatus} />
+              <StatusBadge status={formatUserFacingStatus(order.orderStatus)} />
             </div>
             <p className="text-xs font-sans text-allura-muted mt-1">
-              Placed on {order.date} • Paid via {order.paymentMethod} ({order.paymentStatus})
+              Placed on {order.date} • Paid via {toReadableText(order.paymentMethod)} ({formatUserFacingPaymentStatus(order.paymentStatus)})
             </p>
+            {isCancelled && (
+              <div className="mt-3 p-4 bg-rose-50/80 border border-rose-200 text-rose-900 rounded-xl flex items-start gap-2.5">
+                <XCircle size={16} className="text-rose-700 shrink-0 mt-0.5" />
+                <div className="text-xs font-sans text-rose-800 space-y-1">
+                  <p>
+                    This order was <strong className="text-rose-900">Cancelled</strong>.{getUserFacingCancelReason(order.cancelReason) ? ` ${getUserFacingCancelReason(order.cancelReason)}.` : ''}
+                  </p>
+                  {orderCancelNote && (
+                    <p className="text-xs text-rose-800/95">
+                      <span className="font-semibold text-rose-900">Cancellation Note: </span>
+                      {orderCancelNote}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -173,7 +208,7 @@ export const OrderDetailPage: React.FC = () => {
                 className="px-4 py-2 bg-allura-darkBrown hover:bg-allura-goldDark text-white rounded-xl text-xs font-sans font-bold transition-colors flex items-center gap-1.5 disabled:opacity-60"
               >
                 <Lock size={14} />
-                <span>{isPaying ? 'Opening payment…' : `Pay Now · ${formatPrice(order.total)}`}</span>
+                <span>{isPaying ? 'Opening payment…' : `Pay Now · ${formatExactPrice(order.total)}`}</span>
               </button>
             )}
 
@@ -200,26 +235,48 @@ export const OrderDetailPage: React.FC = () => {
         </div>
 
         {/* Visual Stepper / Progress */}
-        <div className="bg-allura-card border border-allura-border rounded-2xl p-6 shadow-subtle space-y-4">
-          <span className="text-[10px] font-sans font-bold tracking-[0.2em] uppercase text-allura-goldDark">
-            ORDER PROGRESS
-          </span>
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-2">
+        <div className={`bg-allura-card rounded-2xl p-6 shadow-subtle space-y-4 ${
+          isCancelled ? 'border border-rose-300 ring-1 ring-rose-200/50' : 'border border-allura-border'
+        }`}>
+          <div className="flex items-center justify-between">
+            <span className={`text-[10px] font-sans font-bold tracking-[0.2em] uppercase ${
+              isCancelled ? 'text-rose-700' : 'text-allura-goldDark'
+            }`}>
+              ORDER PROGRESS
+            </span>
+            {isCancelled && (
+              <span className="text-[11px] font-sans font-semibold text-rose-700 bg-rose-100/70 px-2.5 py-0.5 rounded-full border border-rose-200">
+                Cancelled
+              </span>
+            )}
+          </div>
+          <div className={`grid gap-3 pt-2 ${isCancelled ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-2 sm:grid-cols-5'}`}>
             {milestones.map((m, idx) => (
               <div
                 key={idx}
-                className={`p-3 rounded-xl border text-left transition-all ${m.done
-                  ? 'bg-emerald-50/70 border-emerald-200 text-emerald-900'
-                  : 'bg-allura-bg/40 border-allura-border/60 text-allura-muted'
-                  }`}
+                className={`p-3 rounded-xl border text-left transition-all ${
+                  m.isCancelled
+                    ? 'bg-rose-50 border-rose-300 text-rose-900 shadow-2xs'
+                    : m.done
+                    ? 'bg-emerald-50/70 border-emerald-200 text-emerald-900'
+                    : 'bg-allura-bg/40 border-allura-border/60 text-allura-muted'
+                }`}
               >
                 <div className="flex items-center gap-1.5 mb-1">
-                  {m.done ? <CheckCircle size={14} className="text-emerald-700" /> : <Clock size={14} />}
-                  <span className="text-[10px] font-sans font-bold uppercase tracking-wider">
-                    Step 0{idx + 1}
+                  {m.isCancelled ? (
+                    <XCircle size={14} className="text-rose-700" />
+                  ) : m.done ? (
+                    <CheckCircle size={14} className="text-emerald-700" />
+                  ) : (
+                    <Clock size={14} />
+                  )}
+                  <span className={`text-[10px] font-sans font-bold uppercase tracking-wider ${
+                    m.isCancelled ? 'text-rose-700' : ''
+                  }`}>
+                    {m.isCancelled ? 'Status' : `Step 0${idx + 1}`}
                   </span>
                 </div>
-                <p className="text-xs font-serif font-medium">{m.title}</p>
+                <p className={`text-xs font-serif font-medium ${m.isCancelled ? 'text-rose-900 font-bold' : ''}`}>{m.title}</p>
               </div>
             ))}
           </div>
@@ -289,8 +346,14 @@ export const OrderDetailPage: React.FC = () => {
                 </div>
               </div>
 
-              <p className="text-xs font-sans text-emerald-800 bg-emerald-50/70 p-3 rounded-xl border border-emerald-200">
-                Current Status: <strong>{order.tracking?.currentStatus || 'Dispatched from Perinthalmanna Atelier'}</strong>
+              <p className={`text-xs font-sans p-3 rounded-xl border ${
+                isCancelled
+                  ? 'text-rose-800 bg-rose-50/80 border-rose-200'
+                  : 'text-emerald-800 bg-emerald-50/70 border-emerald-200'
+              }`}>
+                Current Status: <strong className={isCancelled ? 'text-rose-900' : ''}>
+                  {isCancelled ? 'Cancelled' : toReadableText(order.tracking?.currentStatus || 'Dispatched from Perinthalmanna Atelier')}
+                </strong>
               </p>
             </div>
 
@@ -305,18 +368,18 @@ export const OrderDetailPage: React.FC = () => {
               <div className="space-y-2.5 text-xs font-sans">
                 <div className="flex justify-between text-allura-muted">
                   <span>Items Subtotal:</span>
-                  <span className="text-allura-text font-medium">{formatPrice(order.subtotal)}</span>
+                  <span className="text-allura-text font-medium">{formatExactPrice(order.subtotal)}</span>
                 </div>
                 {order.discount > 0 && (
                   <div className="flex justify-between text-emerald-700 font-medium">
                     <span>Coupon Discount ({order.couponCode}):</span>
-                    <span>-{formatPrice(order.discount)}</span>
+                    <span>-{formatExactPrice(order.discount)}</span>
                   </div>
                 )}
                 <div className="flex justify-between text-allura-muted">
                   <span>Luxury Shipping:</span>
                   <span className="text-allura-text font-medium">
-                    {order.shippingFee === 0 ? 'Complimentary' : formatPrice(order.shippingFee)}
+                    {order.shippingFee === 0 ? 'Complimentary' : formatExactPrice(order.shippingFee)}
                   </span>
                 </div>
                 <div className="flex justify-between text-allura-muted text-[11px]">
@@ -325,14 +388,14 @@ export const OrderDetailPage: React.FC = () => {
                 </div>
                 <div className="flex justify-between text-base font-serif font-bold text-allura-text pt-3 border-t border-allura-border">
                   <span>Total Paid:</span>
-                  <span className="text-allura-goldDark">{formatPrice(order.total)}</span>
+                  <span className="text-allura-goldDark">{formatExactPrice(order.total)}</span>
                 </div>
               </div>
 
               <div className="pt-2">
                 <span className="text-[11px] font-sans text-allura-muted flex items-center gap-1.5 bg-allura-bg p-2.5 rounded-xl border border-allura-border">
                   <CreditCard size={14} className="text-allura-gold" />
-                  <span>Authorized via Razorpay ({order.paymentMethod})</span>
+                  <span>Authorized via Razorpay ({toReadableText(order.paymentMethod)})</span>
                 </span>
               </div>
             </div>

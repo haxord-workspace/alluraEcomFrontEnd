@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { 
-  ArrowRight, 
-  ChevronLeft, 
-  ChevronRight, 
+import {
+  ArrowRight,
+  ChevronLeft,
+  ChevronRight,
   ChevronDown,
-  Truck, 
-  ShieldCheck, 
-  RefreshCw, 
-  MessageSquare, 
+  Truck,
+  ShieldCheck,
+  RefreshCw,
+  MessageSquare,
   Play,
   Diamond,
   Feather,
@@ -28,6 +28,44 @@ import { getPublicFaqs, type PublicFaq } from '../service/faqs';
 import { getPublicBanners } from '../service/adminBanners';
 import type { Banner } from '../types';
 import { useCategoryCarousel } from '../hooks/useCategoryCarousel';
+import { cleanProfileValue, formatPhoneDisplay } from '../utils/storeProfile';
+
+/** Trust strip items; shipping threshold & WhatsApp number come from GET /store/settings via ShopContext */
+const TrustFeatureItems: React.FC = () => {
+  const { storeSettings, freeShippingThreshold, formatPrice } = useShop();
+  const whatsappNumber = cleanProfileValue(storeSettings?.boutiqueProfile?.whatsappNumber);
+
+  const features = [
+    {
+      icon: Truck,
+      title: 'FREE SHIPPING',
+      text: freeShippingThreshold > 0 ? `On orders above ${formatPrice(freeShippingThreshold)}` : 'Across India',
+    },
+    { icon: ShieldCheck, title: 'SECURE PAYMENTS', text: '100% safe and trusted' },
+    { icon: RefreshCw, title: 'EASY EXCHANGE', text: '7-Day doorstep swaps' },
+    {
+      icon: MessageSquare,
+      title: 'WHATSAPP SUPPORT',
+      text: whatsappNumber ? formatPhoneDisplay(whatsappNumber) : 'Chat with us anytime',
+    },
+  ];
+
+  return (
+  <>
+    {features.map(({ icon: Icon, title, text }) => (
+      <div key={title} className="flex flex-col items-center space-y-2">
+        <div className="w-11 h-11 rounded-full bg-white flex items-center justify-center text-[#561C08] shadow-xs border border-[#561C08]/15">
+          <Icon size={20} />
+        </div>
+        <h4 className="font-heading text-sm font-bold tracking-wider uppercase text-[#000000]">
+          {title}
+        </h4>
+        <p className="text-xs text-[#561C08] font-body font-medium">{text}</p>
+      </div>
+    ))}
+  </>
+  );
+};
 
 export const HomePage: React.FC = () => {
   const navigate = useNavigate();
@@ -129,9 +167,9 @@ export const HomePage: React.FC = () => {
 
   // Active Hero Banners from Admin Studio (Strictly HOME_HERO)
   const activeHeroBanners = (banners || []).filter(
-    b => (b.placement === 'HOME_HERO' || (!b.placement && b.position?.toLowerCase() === 'hero')) && 
-         isBannerActive(b) &&
-         Boolean(getBannerImage(b))
+    b => (b.placement === 'HOME_HERO' || (!b.placement && b.position?.toLowerCase() === 'hero')) &&
+      isBannerActive(b) &&
+      Boolean(getBannerImage(b))
   );
 
 
@@ -271,7 +309,7 @@ export const HomePage: React.FC = () => {
   // Dynamic slides populated strictly from active Admin Hero Banners (no dummy mock slides)
   const heroSlides = activeHeroBanners.map((b) => {
     const fullTitle = b.headline || b.title || 'ALLURA ETHNIC & MODEST COUTURE';
-    const headingLines = fullTitle.includes('\n') 
+    const headingLines = fullTitle.includes('\n')
       ? fullTitle.split('\n').filter(Boolean)
       : [fullTitle];
     const rawDesc = b.subtitle || b.description || '';
@@ -347,19 +385,19 @@ export const HomePage: React.FC = () => {
     // Store address from the boutique settings; left out of the schema until it's available
     ...(storeAddress
       ? {
-          address: {
-            '@type': 'PostalAddress',
-            streetAddress: storeAddress,
-            addressCountry: 'IN',
-          },
-        }
+        address: {
+          '@type': 'PostalAddress',
+          streetAddress: storeAddress,
+          addressCountry: 'IN',
+        },
+      }
       : {}),
     telephone: '+919037991774',
     url: 'https://alluraboutique.in',
   };
 
   return (
-    <div className="space-y-12 sm:space-y-20">
+    <div className="space-y-12 sm:space-y-20 max-md:space-y-6">
       <SEOHead
         title="Allura Boutique | Luxury Indian & Modest Couture Atelier"
         description="Discover bespoke Kasavu weaves, handcrafted celebratory lehengas, and ethereal modest silhouettes from our Perinthalmanna atelier. Free express delivery over ₹2,999."
@@ -374,7 +412,7 @@ export const HomePage: React.FC = () => {
       {isLoadingBanners && heroSlides.length === 0 ? (
         <HeroBannerSkeleton />
       ) : heroSlides.length > 0 ? (
-        <section 
+        <section
           className="relative w-full min-h-[520px] h-[78vh] sm:h-auto sm:min-h-[580px] lg:h-[84vh] lg:max-h-[820px] overflow-hidden bg-[#F7E6C8]"
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
@@ -387,9 +425,8 @@ export const HomePage: React.FC = () => {
             return (
               <div
                 key={slide.id}
-                className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${
-                  isActive ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'
-                }`}
+                className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${isActive ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'
+                  }`}
               >
                 {/* Background Model Image with subtle zoom & intelligent focal alignment */}
                 <picture className="absolute inset-0 w-full h-full">
@@ -399,11 +436,10 @@ export const HomePage: React.FC = () => {
                   <img
                     src={slide.image}
                     alt={slide.headingLines.join(' ')}
-                    className={`w-full h-full object-cover transition-transform duration-[8500ms] ease-out z-0 ${
-                      hasCustomMobileImage
+                    className={`w-full h-full object-cover transition-transform duration-[8500ms] ease-out z-0 ${hasCustomMobileImage
                         ? 'object-[center_top]'
                         : 'object-[82%_20%] sm:object-[center_top]'
-                    }`}
+                      }`}
                     style={{
                       transform: isActive ? 'scale(1.04)' : 'scale(1)',
                     }}
@@ -452,9 +488,8 @@ export const HomePage: React.FC = () => {
                 <button
                   key={idx}
                   onClick={() => setCurrentSlide(idx)}
-                  className={`h-2 rounded-full transition-all duration-300 ${
-                    currentSlide === idx ? 'w-6 bg-[#F7E6C8]' : 'w-2 bg-white/50 hover:bg-white'
-                  }`}
+                  className={`h-2 rounded-full transition-all duration-300 ${currentSlide === idx ? 'w-6 bg-[#F7E6C8]' : 'w-2 bg-white/50 hover:bg-white'
+                    }`}
                   aria-label={`Go to slide ${idx + 1}`}
                 />
               ))}
@@ -486,13 +521,13 @@ export const HomePage: React.FC = () => {
         </section>
       )}
 
-  
+
 
       {/* 2. SHOP BY CATEGORY (Smooth Couture Carousel with Arched Portals) */}
       {isLoadingProducts && categories.length === 0 ? (
         <section className="max-w-7xl mx-auto px-6 lg:px-8">
-          <div className="flex items-center justify-between mb-8 sm:mb-10 border-b border-[#561C08]/15 pb-4">
-            <h2 className="font-heading text-xl sm:text-3xl lg:text-4xl text-[#000000] font-bold uppercase tracking-tight">
+          <div className="flex items-center justify-between mb-8 sm:mb-10 border-b border-[#561C08]/15 pb-4 max-md:mb-3 max-md:pb-2.5">
+            <h2 className="font-heading text-xl sm:text-3xl lg:text-4xl text-[#000000] font-bold uppercase tracking-tight max-md:text-[15px] max-md:font-semibold max-md:tracking-[0.06em] max-md:leading-[1.2] max-md:whitespace-nowrap">
               SHOP BY CATEGORY
             </h2>
             <div className="h-4 w-28 bg-[#561C08]/10 rounded animate-pulse" />
@@ -507,18 +542,18 @@ export const HomePage: React.FC = () => {
         </section>
       ) : categories.length > 0 ? (
         <section className="max-w-7xl mx-auto px-6 lg:px-8">
-          <div className="flex items-center justify-between mb-6 sm:mb-8 border-b border-[#561C08]/15 pb-4">
-            <h2 className="font-heading text-xl sm:text-3xl lg:text-4xl text-[#000000] font-bold uppercase tracking-tight">
+          <div className="flex items-center justify-between gap-3 mb-6 sm:mb-8 border-b border-[#561C08]/15 pb-4 max-md:mb-3 max-md:pb-2.5">
+            <h2 className="font-heading text-xl sm:text-3xl lg:text-4xl text-[#000000] font-bold uppercase tracking-tight max-md:text-[15px] max-md:font-semibold max-md:tracking-[0.06em] max-md:leading-[1.2] max-md:whitespace-nowrap">
               SHOP BY CATEGORY
             </h2>
-            <div className="flex items-center gap-3 sm:gap-6">
+            <div className="flex items-center gap-3 sm:gap-6 max-md:flex-shrink-0">
               {/* Carousel navigation arrow controls */}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 max-md:gap-1.5">
                 <button
                   type="button"
                   onClick={() => { scrollCategory('left'); }}
                   aria-label="Previous categories"
-                  className="w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center border transition-all duration-300 border-[#561C08]/30 text-[#561C08] hover:bg-[#561C08] hover:text-white shadow-xs cursor-pointer hover:scale-105 active:scale-95"
+                  className="w-7 h-7 sm:w-9 sm:h-9 rounded-full flex items-center justify-center border transition-all duration-300 border-[#561C08]/30 text-[#561C08] hover:bg-[#561C08] hover:text-white shadow-xs cursor-pointer hover:scale-105 active:scale-95"
                 >
                   <ChevronLeft size={16} />
                 </button>
@@ -526,7 +561,7 @@ export const HomePage: React.FC = () => {
                   type="button"
                   onClick={() => { scrollCategory('right'); }}
                   aria-label="Next categories"
-                  className="w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center border transition-all duration-300 border-[#561C08]/30 text-[#561C08] hover:bg-[#561C08] hover:text-white shadow-xs cursor-pointer hover:scale-105 active:scale-95"
+                  className="w-7 h-7 sm:w-9 sm:h-9 rounded-full flex items-center justify-center border transition-all duration-300 border-[#561C08]/30 text-[#561C08] hover:bg-[#561C08] hover:text-white shadow-xs cursor-pointer hover:scale-105 active:scale-95"
                 >
                   <ChevronRight size={16} />
                 </button>
@@ -534,35 +569,15 @@ export const HomePage: React.FC = () => {
 
               <Link
                 to="/shop"
-                className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-heading font-bold tracking-[0.18em] text-[#561C08] hover:text-[#3D1406] transition-colors uppercase group"
+                className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-heading font-bold tracking-[0.18em] text-[#561C08] hover:text-[#3D1406] transition-colors uppercase group max-md:text-[11px] max-md:font-medium max-md:tracking-[0.12em] max-md:whitespace-nowrap"
               >
                 <span>EXPLORE ALL</span>
-                <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
+                <ArrowRight size={13} className="group-hover:translate-x-1 transition-transform" />
               </Link>
             </div>
           </div>
 
           <div className="relative group/cattrack overflow-hidden">
-            {/* Left Edge Floating Arrow (desktop hover) */}
-            <button
-              type="button"
-              onClick={() => { scrollCategory('left'); }}
-              aria-label="Scroll left"
-              className="hidden md:flex absolute -left-0 top-1/2 -translate-y-1/2 z-20 w-11 h-11 rounded-full bg-white/95 text-[#561C08] border border-[#561C08]/20 shadow-xl backdrop-blur-md items-center justify-center hover:bg-[#561C08] hover:text-white transition-all duration-300 opacity-0 group-hover/cattrack:opacity-100 hover:scale-110 active:scale-95"
-            >
-              <ChevronLeft size={20} />
-            </button>
-
-            {/* Right Edge Floating Arrow (desktop hover) */}
-            <button
-              type="button"
-              onClick={() => { scrollCategory('right'); }}
-              aria-label="Scroll right"
-              className="hidden md:flex absolute -right-0 top-1/2 -translate-y-1/2 z-20 w-11 h-11 rounded-full bg-white/95 text-[#561C08] border border-[#561C08]/20 shadow-xl backdrop-blur-md items-center justify-center hover:bg-[#561C08] hover:text-white transition-all duration-300 opacity-0 group-hover/cattrack:opacity-100 hover:scale-110 active:scale-95"
-            >
-              <ChevronRight size={20} />
-            </button>
-
             {/* Infinite-scroll track: items are duplicated for seamless looping */}
             <div
               ref={categoryTrackRef}
@@ -606,8 +621,8 @@ export const HomePage: React.FC = () => {
                     </div>
 
                     {/* Text Below the Arch */}
-                    <div className="mt-3 sm:mt-4 space-y-0.5 sm:space-y-1 w-full px-1">
-                      <h3 className="font-heading text-xs sm:text-sm font-bold tracking-[0.16em] uppercase text-stone-900 group-hover:text-[#561C08] transition-colors truncate">
+                    <div className="mt-3 sm:mt-4 space-y-0.5 sm:space-y-1 w-full px-1 max-md:mt-2">
+                      <h3 className="font-heading text-xs sm:text-sm font-bold tracking-[0.16em] uppercase text-stone-900 group-hover:text-[#561C08] transition-colors truncate max-md:whitespace-normal max-md:line-clamp-2 max-md:text-[11px] max-md:font-semibold max-md:tracking-[0.08em] max-md:leading-[1.25]">
                         {cat.name}
                       </h3>
                       <p className="text-[11px] sm:text-xs text-stone-500 font-sans tracking-normal font-normal truncate">
@@ -637,7 +652,7 @@ export const HomePage: React.FC = () => {
 
       {/* 3. SIGNATURE COLLECTIONS / EDITORIAL SHOWCASE (Two dynamic tiles with independent <> navigation) */}
       <section className="max-w-7xl mx-auto px-6 lg:px-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8 max-md:gap-4">
           {/* Tile 1 */}
           {tile1Item && (() => {
             return (
@@ -791,9 +806,9 @@ export const HomePage: React.FC = () => {
       {/* 4. BEST SELLERS PRODUCT GRID */}
       {isLoadingProducts && bestSellers.length === 0 ? (
         <section className="max-w-7xl mx-auto px-6 lg:px-8">
-          <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-8 border-b border-[#561C08]/15 pb-4">
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-8 border-b border-[#561C08]/15 pb-4 max-md:mb-3 max-md:pb-2.5">
             <div>
-              <h2 className="font-heading text-2xl sm:text-4xl text-[#000000] font-bold uppercase tracking-tight">
+              <h2 className="font-heading text-2xl sm:text-4xl text-[#000000] font-bold uppercase tracking-tight max-md:text-base max-md:font-semibold max-md:tracking-[0.06em] max-md:leading-[1.2]">
                 BEST SELLERS
               </h2>
               <p className="text-xs sm:text-sm text-[#561C08] font-body mt-0.5 font-medium">
@@ -807,80 +822,43 @@ export const HomePage: React.FC = () => {
         </section>
       ) : bestSellers.length > 0 ? (
         <section className="max-w-7xl mx-auto px-6 lg:px-8">
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-8 border-b border-[#561C08]/15 pb-4">
-          <div>
-            <h2 className="font-heading text-2xl sm:text-4xl text-[#000000] font-bold uppercase tracking-tight">
-              BEST SELLERS
-            </h2>
-            <p className="text-xs sm:text-sm text-[#561C08] font-body mt-0.5 font-medium">
-              Loved by our boutique customers
-            </p>
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-8 border-b border-[#561C08]/15 pb-4 max-md:mb-3 max-md:pb-2.5">
+            <div>
+              <h2 className="font-heading text-2xl sm:text-4xl text-[#000000] font-bold uppercase tracking-tight max-md:text-base max-md:font-semibold max-md:tracking-[0.06em] max-md:leading-[1.2]">
+                BEST SELLERS
+              </h2>
+              <p className="text-xs sm:text-sm text-[#561C08] font-body mt-0.5 font-medium">
+                Loved by our boutique customers
+              </p>
+            </div>
+            <Link
+              to="/shop"
+              className="inline-flex items-center gap-1.5 text-xs font-heading font-bold tracking-[0.2em] text-[#561C08] hover:text-[#3D1406] transition-colors mt-3 sm:mt-0 uppercase max-md:mt-2 max-md:text-[11px] max-md:font-medium max-md:tracking-[0.12em]"
+            >
+              <span>VIEW ALL</span>
+              <ArrowRight size={14} />
+            </Link>
           </div>
-          <Link
-            to="/shop"
-            className="inline-flex items-center gap-1.5 text-xs font-heading font-bold tracking-[0.2em] text-[#561C08] hover:text-[#3D1406] transition-colors mt-3 sm:mt-0 uppercase"
-          >
-            <span>VIEW ALL</span>
-            <ArrowRight size={14} />
-          </Link>
-        </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 lg:gap-8">
-          {bestSellers.map(product => (
-            <ProductCard key={product.id} product={product} />
-          ))}
-        </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 lg:gap-8">
+            {bestSellers.map(product => (
+              <ProductCard key={product.id} product={product} />
+            ))}
+          </div>
         </section>
       ) : null}
 
       {/* 5. TRUST STRIP / SERVICE FEATURES */}
-      <section className="border-y border-[#561C08]/15 bg-[#F7E6C8] py-10">
+      {/* Desktop/tablet only — on mobile this strip renders under the Allura Experience image card */}
+      <section className="hidden md:block border-y border-[#561C08]/15 bg-[#F7E6C8] py-10">
         <div className="max-w-7xl mx-auto px-6 lg:px-8 grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
-          <div className="flex flex-col items-center space-y-2">
-            <div className="w-11 h-11 rounded-full bg-white flex items-center justify-center text-[#561C08] shadow-xs border border-[#561C08]/15">
-              <Truck size={20} />
-            </div>
-            <h4 className="font-heading text-sm font-bold tracking-wider uppercase text-[#000000]">
-              FREE SHIPPING
-            </h4>
-            <p className="text-xs text-[#561C08] font-body font-medium">On orders above ₹2,999</p>
-          </div>
-
-          <div className="flex flex-col items-center space-y-2">
-            <div className="w-11 h-11 rounded-full bg-white flex items-center justify-center text-[#561C08] shadow-xs border border-[#561C08]/15">
-              <ShieldCheck size={20} />
-            </div>
-            <h4 className="font-heading text-sm font-bold tracking-wider uppercase text-[#000000]">
-              SECURE PAYMENTS
-            </h4>
-            <p className="text-xs text-[#561C08] font-body font-medium">100% safe and trusted</p>
-          </div>
-
-          <div className="flex flex-col items-center space-y-2">
-            <div className="w-11 h-11 rounded-full bg-white flex items-center justify-center text-[#561C08] shadow-xs border border-[#561C08]/15">
-              <RefreshCw size={20} />
-            </div>
-            <h4 className="font-heading text-sm font-bold tracking-wider uppercase text-[#000000]">
-              EASY EXCHANGE
-            </h4>
-            <p className="text-xs text-[#561C08] font-body font-medium">7-Day doorstep swaps</p>
-          </div>
-
-          <div className="flex flex-col items-center space-y-2">
-            <div className="w-11 h-11 rounded-full bg-white flex items-center justify-center text-[#561C08] shadow-xs border border-[#561C08]/15">
-              <MessageSquare size={20} />
-            </div>
-            <h4 className="font-heading text-sm font-bold tracking-wider uppercase text-[#000000]">
-              WHATSAPP SUPPORT
-            </h4>
-            <p className="text-xs text-[#561C08] font-body font-medium">+91 9037991774</p>
-          </div>
+          <TrustFeatureItems />
         </div>
       </section>
 
       {/* 6. THE ALLURA EXPERIENCE & BRAND STORY */}
       <section className="max-w-7xl mx-auto px-6 lg:px-8">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center max-md:gap-4">
           <div className="lg:col-span-5 relative aspect-[4/5] rounded-2xl overflow-hidden shadow-md group border border-[#561C08]/15">
             <img
               src="/images/boutique-experience/boutique-store.jpeg"
@@ -898,12 +876,17 @@ export const HomePage: React.FC = () => {
             </div>
           </div>
 
-          <div className="lg:col-span-4 space-y-5">
+          {/* Mobile only — trust strip shown under the image card */}
+          <div className="md:hidden grid grid-cols-2 gap-x-4 gap-y-5 text-center rounded-2xl border border-[#561C08]/15 bg-[#F7E6C8] py-5 px-4">
+            <TrustFeatureItems />
+          </div>
+
+          <div className="lg:col-span-4 space-y-5 max-md:space-y-3 max-md:pt-2">
             <span className="text-[11px] font-heading font-bold tracking-[0.25em] uppercase text-[#561C08]">
               WEAR YOUR STORY WITH ALLURA
             </span>
 
-            <h2 className="font-heading text-3xl sm:text-4xl text-[#000000] font-bold leading-tight uppercase">
+            <h2 className="font-heading text-3xl sm:text-4xl text-[#000000] font-bold leading-tight uppercase max-md:text-base max-md:font-semibold max-md:tracking-[0.06em] max-md:leading-[1.2]">
               THE ALLURA EXPERIENCE
             </h2>
 
@@ -922,7 +905,7 @@ export const HomePage: React.FC = () => {
             </div>
           </div>
 
-          <div className="lg:col-span-3 space-y-6 lg:border-l lg:border-[#561C08]/15 lg:pl-8">
+          <div className="lg:col-span-3 space-y-6 lg:border-l lg:border-[#561C08]/15 lg:pl-8 max-md:space-y-4 max-md:pt-1">
             <div className="flex items-start gap-4">
               <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-[#561C08] flex-shrink-0 border border-[#561C08]/15 shadow-xs">
                 <Diamond size={18} />
@@ -969,7 +952,7 @@ export const HomePage: React.FC = () => {
       </section>
 
       {/* 6.5. FREQUENTLY ASKED QUESTIONS (FAQ DROPDOWN ACCORDION) */}
-      <section className="max-w-4xl mx-auto px-5 sm:px-6 lg:px-8 space-y-8 pt-4 sm:pt-8">
+      <section className="max-w-4xl mx-auto px-5 sm:px-6 lg:px-8 space-y-8 pt-4 sm:pt-8 max-md:space-y-4 max-md:pt-0">
         <div className="text-center space-y-3">
           <span className="text-[11px] font-heading font-bold tracking-[0.28em] uppercase text-[#561C08] bg-[#F7E6C8]/60 px-3.5 py-1.5 rounded-full inline-block border border-[#561C08]/15">
             FREQUENTLY ASKED QUESTIONS
@@ -988,11 +971,10 @@ export const HomePage: React.FC = () => {
             return (
               <div
                 key={faq.id}
-                className={`bg-white/95 rounded-2xl border transition-all duration-300 overflow-hidden ${
-                  isOpen
+                className={`bg-white/95 rounded-2xl border transition-all duration-300 overflow-hidden ${isOpen
                     ? 'border-[#561C08]/40 shadow-md ring-1 ring-[#561C08]/20'
                     : 'border-[#561C08]/15 shadow-xs hover:border-[#561C08]/30'
-                }`}
+                  }`}
               >
                 <button
                   type="button"
@@ -1009,15 +991,13 @@ export const HomePage: React.FC = () => {
                     </h3>
                   </div>
                   <div
-                    className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center flex-shrink-0 transition-colors ${
-                      isOpen ? 'bg-[#561C08] text-white' : 'bg-[#F7E6C8]/60 text-[#561C08]'
-                    }`}
+                    className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center flex-shrink-0 transition-colors ${isOpen ? 'bg-[#561C08] text-white' : 'bg-[#F7E6C8]/60 text-[#561C08]'
+                      }`}
                   >
                     <ChevronDown
                       size={16}
-                      className={`transition-transform duration-300 ${
-                        isOpen ? 'rotate-180' : ''
-                      }`}
+                      className={`transition-transform duration-300 ${isOpen ? 'rotate-180' : ''
+                        }`}
                     />
                   </div>
                 </button>

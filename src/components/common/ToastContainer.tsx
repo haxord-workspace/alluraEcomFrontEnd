@@ -43,11 +43,6 @@ export const ToastContainer: React.FC = () => {
               )}
 
               <div className="flex-1 min-w-0">
-                {isError && (
-                  <p className="text-[10px] font-mono font-bold tracking-wider uppercase text-rose-400 mb-0.5">
-                    Backend Error
-                  </p>
-                )}
                 <p
                   className={`text-xs sm:text-sm font-medium leading-relaxed break-words ${
                     isError ? 'text-rose-100 font-sans' : 'text-allura-text'

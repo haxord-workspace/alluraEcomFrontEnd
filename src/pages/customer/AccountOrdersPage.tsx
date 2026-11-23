@@ -7,9 +7,10 @@ import { InvoiceModal } from '../../components/common/InvoiceModal';
 import { downloadOrderInvoice } from '../../service/orders';
 import { OrderCardSkeleton } from '../../components/ui/OrderCardSkeleton';
 import { OrderCardReviewSwap } from '../../components/reviews/OrderCardReviewSwap';
+import { formatUserFacingStatus, formatUserFacingPaymentStatus } from '../../utils/userFacingText';
 
 export const AccountOrdersPage: React.FC = () => {
-  const { orders, formatPrice, invoiceOrder, setInvoiceOrder, addToCart, refreshOrders, isLoadingOrders } = useShop();
+  const { orders, formatPrice, formatExactPrice, invoiceOrder, setInvoiceOrder, addToCart, refreshOrders, isLoadingOrders } = useShop();
 
   useEffect(() => {
     refreshOrders();
@@ -103,68 +104,80 @@ export const AccountOrdersPage: React.FC = () => {
         </div>
       ) : (
         <div className="space-y-6">
-          {filteredOrders.map(order => (
-            <div
-              key={order.id}
-              className="bg-allura-card border border-allura-border rounded-2xl p-5 sm:p-6 shadow-subtle space-y-5 hover:border-allura-gold/60 transition-colors"
-            >
-              {/* Order Card Header */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-allura-border/60 text-xs font-sans">
-                <div className="flex flex-wrap items-center gap-3">
-                  <span className="font-serif text-base font-bold text-allura-darkBrown">
-                    {order.orderNumber}
-                  </span>
-                  <span className="text-stone-300">•</span>
-                  <span className="text-allura-muted">{order.date}</span>
-                  <span className="text-stone-300">•</span>
-                  <StatusBadge status={order.orderStatus} />
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <span className="text-allura-muted">Total:</span>
-                  <span className="font-serif text-base font-bold text-allura-darkBrown">
-                    {formatPrice(order.total)}
-                  </span>
-                  <span className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded font-medium border border-emerald-200">
-                    {order.paymentStatus}
-                  </span>
-                </div>
-              </div>
-
-              {/* Order Items */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {order.items.map((item, idx) => (
-                  <div key={idx} className="flex items-center gap-4 bg-allura-bg/40 p-3 rounded-xl border border-allura-border/40">
-                    <img
-                      src={item.product.images.primary}
-                      alt={item.product.name}
-                      className="w-16 h-20 object-cover rounded-lg bg-allura-bgSecondary flex-shrink-0"
-                    />
-                    <div className="flex-1 min-w-0 space-y-1">
-                      <h4 className="font-serif text-sm font-normal text-allura-text truncate">
-                        {item.product.name}
-                      </h4>
-                      <p className="text-xs text-allura-muted font-sans">
-                        Size: <strong className="text-allura-text">{item.selectedSize}</strong> • Color: {item.selectedColor.name}
-                      </p>
-                      <p className="text-xs font-sans font-bold text-allura-darkBrown">
-                        {formatPrice(item.unitPrice)} {item.quantity > 1 && `× ${item.quantity}`}
-                      </p>
-                    </div>
+          {filteredOrders.map(order => {
+            const isCancelled = /cancell?ed/i.test(String(order.orderStatus || ''));
+            return (
+              <div
+                key={order.id}
+                className={`bg-allura-card rounded-2xl p-5 sm:p-6 shadow-subtle space-y-5 transition-colors ${
+                  isCancelled
+                    ? 'border border-rose-300 ring-1 ring-rose-200/50 hover:border-rose-400'
+                    : 'border border-allura-border hover:border-allura-gold/60'
+                }`}
+              >
+                {/* Order Card Header */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-allura-border/60 text-xs font-sans">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className="font-serif text-base font-bold text-allura-darkBrown">
+                      {order.orderNumber}
+                    </span>
+                    <span className="text-stone-300">•</span>
+                    <span className="text-allura-muted">{order.date}</span>
+                    <span className="text-stone-300">•</span>
+                    <StatusBadge status={formatUserFacingStatus(order.orderStatus)} />
                   </div>
-                ))}
-              </div>
 
-              {/* Order Actions */}
-              <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-allura-border/60">
-                <div className="text-xs font-sans text-allura-muted flex items-center gap-1.5">
-                  <Package size={14} className="text-allura-goldDark" />
-                  <span>
-                    Courier:{' '}
-                    <strong>{order.tracking?.courier || 'Delhivery Luxury Express'}</strong> (AWB:{' '}
-                    {order.tracking?.awb || 'Assigned on Dispatch'})
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-allura-muted">Total:</span>
+                    <span className="font-serif text-base font-bold text-allura-darkBrown">
+                      {formatExactPrice(order.total)}
+                    </span>
+                    <span className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded font-medium border border-emerald-200">
+                      {formatUserFacingPaymentStatus(order.paymentStatus)}
+                    </span>
+                  </div>
                 </div>
+
+                {/* Order Items */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {order.items.map((item, idx) => (
+                    <div key={idx} className="flex items-center gap-4 bg-allura-bg/40 p-3 rounded-xl border border-allura-border/40">
+                      <img
+                        src={item.product.images.primary}
+                        alt={item.product.name}
+                        className="w-16 h-20 object-cover rounded-lg bg-allura-bgSecondary flex-shrink-0"
+                      />
+                      <div className="flex-1 min-w-0 space-y-1">
+                        <h4 className="font-serif text-sm font-normal text-allura-text truncate">
+                          {item.product.name}
+                        </h4>
+                        <p className="text-xs text-allura-muted font-sans">
+                          Size: <strong className="text-allura-text">{item.selectedSize}</strong> • Color: {item.selectedColor.name}
+                        </p>
+                        <p className="text-xs font-sans font-bold text-allura-darkBrown">
+                          {formatPrice(item.unitPrice)} {item.quantity > 1 && `× ${item.quantity}`}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Order Actions */}
+                <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-allura-border/60">
+                  <div className="text-xs font-sans text-allura-muted flex items-center gap-1.5">
+                    <Package size={14} className={isCancelled ? 'text-rose-600' : 'text-allura-goldDark'} />
+                    <span>
+                      {isCancelled ? (
+                        <span className="text-rose-700 font-semibold">Order was cancelled</span>
+                      ) : (
+                        <>
+                          Courier:{' '}
+                          <strong>{order.tracking?.courier || 'Delhivery Luxury Express'}</strong> (AWB:{' '}
+                          {order.tracking?.awb || 'Assigned on Dispatch'})
+                        </>
+                      )}
+                    </span>
+                  </div>
 
                 <div className="flex flex-wrap items-center gap-2">
                   <Link
@@ -218,7 +231,8 @@ export const AccountOrdersPage: React.FC = () => {
                 </div>
               </div>
             </div>
-          ))}
+          );
+        })}
         </div>
       )}
 

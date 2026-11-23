@@ -2,22 +2,34 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   FileText,
-  Clock,
-  Calendar,
-  Share2,
-  Check,
+  // TEMPORARILY DISABLED — only used by the commented-out meta bar (date / reading time / share)
+  // Clock,
+  // Calendar,
+  // Share2,
+  // Check,
   ChevronRight,
   Home,
   ArrowLeft,
   Sparkles,
   HelpCircle,
   PhoneCall,
-  Info,
+  // Info, // TEMPORARILY DISABLED — only used by the disabled "Boutique Default Policy" badge
+  AlertCircle,
+  RefreshCw,
 } from 'lucide-react';
 import { getCMSPageBySlug } from '../../service/cms.api';
 import type { CMSPage } from '../../service/cms.api';
 import { SEOHead } from '../../components/common/SEOHead';
+// Replaced by prepareCmsHtml (same sanitizer, plus new-tab links and scrollable tables)
+// import { sanitizeHtml } from '../../utils/sanitizeHtml';
+import { CMS_PROSE_CSS, prepareCmsHtml } from '../../styles/cmsProse';
+import { CmsContentCards } from '../../components/content/CmsContentCards';
 
+/*
+ * TEMPORARILY DISABLED — hardcoded fallback policy content. Pages now come only from
+ * GET /content/{slug}; a missing page shows the 404 card and a failed request shows the
+ * error card with Retry, so no dummy content is ever displayed. Kept for restore.
+ *
 // Fallback contents for standard store policies in case the backend database has not yet seeded them
 const FALLBACK_PAGES: Record<string, { title: string; excerpt: string; content: string }> = {
   'privacy-policy': {
@@ -94,6 +106,7 @@ const FALLBACK_PAGES: Record<string, { title: string; excerpt: string; content: 
     `,
   },
 };
+*/
 
 interface CMSPageViewerProps {
   slugOverride?: string;
@@ -108,7 +121,50 @@ export const CMSPageViewer: React.FC<CMSPageViewerProps> = ({ slugOverride }) =>
   const [page, setPage] = useState<CMSPage | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
-  const [isCopied, setIsCopied] = useState(false);
+  // TEMPORARILY DISABLED — only used by the commented-out meta bar (share button)
+  // const [isCopied, setIsCopied] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    setPage(null);
+    setLoadError(false);
+    setNotFound(false);
+
+    if (!slug) {
+      setNotFound(true);
+      setLoading(false);
+      return;
+    }
+
+    let isMounted = true;
+    setLoading(true);
+
+    getCMSPageBySlug(slug)
+      .then((data) => {
+        if (!isMounted) return;
+        if (data) setPage(data);
+        else setNotFound(true); // 404 — missing, draft or not public
+      })
+      .catch((err) => {
+        if (!isMounted) return;
+        console.error('Error fetching CMS page:', err);
+        setLoadError(true); // network / 5xx — offer a retry
+      })
+      .finally(() => {
+        if (isMounted) setLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [slug, reloadKey]);
+
+  /*
+   * TEMPORARILY DISABLED — previous fetch logic that substituted FALLBACK_PAGES content
+   * when the API returned nothing or failed. Replaced by the effect above (404 → 404 card,
+   * other errors → error card with Retry). Kept for restore.
+   *
   const [isFallback, setIsFallback] = useState(false);
 
   useEffect(() => {
@@ -179,15 +235,26 @@ export const CMSPageViewer: React.FC<CMSPageViewerProps> = ({ slugOverride }) =>
       isMounted = false;
     };
   }, [slug]);
+  */
 
+  // API HTML is always sanitized before rendering
+  // Previously: sanitizeHtml(page?.content). prepareCmsHtml runs the same sanitizer with
+  // allowTarget (keeps "open in new tab" links, rel forced to noopener noreferrer, only
+  // http/https/mailto/tel links) and wraps tables so they scroll inside the card on mobile.
+  // The admin editor's Preview uses the same function.
+  const safeContent = useMemo(() => prepareCmsHtml(page?.content), [page?.content]);
+
+  /*
+   * TEMPORARILY DISABLED — reading time and share, only used by the commented-out meta bar
+   * in the page header. Restore together with that bar.
+   *
   // Estimate reading time from content
-  const content = page?.content;
   const readingTime = useMemo(() => {
-    if (!content) return 1;
-    const textOnly = content.replace(/<[^>]*>/g, ' ');
+    if (!safeContent) return 1;
+    const textOnly = safeContent.replace(/<[^>]*>/g, ' ');
     const words = textOnly.trim().split(/\s+/).length;
     return Math.max(1, Math.ceil(words / 180));
-  }, [content]);
+  }, [safeContent]);
 
   // Handle Share / Copy Link
   const handleCopyLink = () => {
@@ -195,6 +262,7 @@ export const CMSPageViewer: React.FC<CMSPageViewerProps> = ({ slugOverride }) =>
     setIsCopied(true);
     setTimeout(() => setIsCopied(false), 2500);
   };
+  */
 
   // ─── Loading Skeleton View ───────────────────────────────────────────────────
   if (loading) {
@@ -225,6 +293,52 @@ export const CMSPageViewer: React.FC<CMSPageViewerProps> = ({ slugOverride }) =>
           <div className="h-28 w-full bg-stone-100 rounded-2xl my-6" />
           <div className="h-4 w-full bg-stone-200/60 rounded-md" />
           <div className="h-4 w-5/6 bg-stone-200/60 rounded-md" />
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Error View (network / server) ───────────────────────────────────────────
+  if (loadError) {
+    return (
+      <div className="min-h-[75vh] flex items-center justify-center px-4 py-16 sm:py-24">
+        <SEOHead
+          title="Something Went Wrong"
+          robots={{ index: false, follow: false }}
+        />
+        <div className="max-w-lg w-full bg-allura-card rounded-3xl border border-allura-border/80 p-8 sm:p-12 shadow-luxury text-center space-y-6">
+          <div className="w-16 h-16 mx-auto rounded-full bg-allura-bgSecondary border border-allura-border flex items-center justify-center text-allura-goldDark">
+            <AlertCircle size={28} />
+          </div>
+
+          <div className="space-y-2">
+            <span className="text-[11px] font-sans font-bold tracking-[0.25em] uppercase text-allura-goldDark">
+              STOREFRONT DIRECTORY
+            </span>
+            <h1 className="font-serif text-2xl sm:text-3xl text-allura-text font-normal">
+              We Couldn't Load This Page
+            </h1>
+            <p className="text-xs sm:text-sm text-allura-muted font-sans leading-relaxed">
+              Please check your connection and try again.
+            </p>
+          </div>
+
+          <div className="pt-4 flex flex-col sm:flex-row items-center justify-center gap-3">
+            <Link
+              to="/"
+              className="w-full sm:w-auto px-5 py-2.5 rounded-xl border border-allura-border text-xs font-sans font-semibold text-allura-text hover:bg-allura-bgSecondary transition-all flex items-center justify-center gap-2"
+            >
+              <Home size={14} />
+              <span>Back to Home</span>
+            </Link>
+            <button
+              onClick={() => setReloadKey((key) => key + 1)}
+              className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-allura-darkBrown text-white text-xs font-sans font-semibold hover:bg-opacity-90 transition-all flex items-center justify-center gap-2 shadow-sm"
+            >
+              <RefreshCw size={14} />
+              <span>Retry</span>
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -263,11 +377,20 @@ export const CMSPageViewer: React.FC<CMSPageViewerProps> = ({ slugOverride }) =>
               <ArrowLeft size={14} />
               <span>Go Back</span>
             </button>
+            {/* TEMPORARILY DISABLED — replaced by the "Back to Home" button below (404 must offer Home).
             <Link
               to="/shop"
               className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-allura-darkBrown text-white text-xs font-sans font-semibold hover:bg-opacity-90 transition-all flex items-center justify-center gap-2 shadow-sm"
             >
               <span>Explore Collection</span>
+            </Link>
+            */}
+            <Link
+              to="/"
+              className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-allura-darkBrown text-white text-xs font-sans font-semibold hover:bg-opacity-90 transition-all flex items-center justify-center gap-2 shadow-sm"
+            >
+              <Home size={14} />
+              <span>Back to Home</span>
             </Link>
           </div>
 
@@ -287,18 +410,22 @@ export const CMSPageViewer: React.FC<CMSPageViewerProps> = ({ slugOverride }) =>
     );
   }
 
+  /*
+   * TEMPORARILY DISABLED — publication date, only used by the commented-out meta bar.
+   *
   // Format publication date
   const displayDate = page.publishedAt || page.updatedAt;
   const formattedDate = displayDate
     ? new Date(displayDate).toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-      })
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    })
     : null;
+  */
 
   return (
-    <div className="min-h-[80vh] py-10 sm:py-16">
+    <div className="min-h-[80vh] py-8 sm:py-16">
       <SEOHead
         title={page.title}
         description={page.excerpt || `Read ${page.title} on Allura Boutique.`}
@@ -313,8 +440,8 @@ export const CMSPageViewer: React.FC<CMSPageViewerProps> = ({ slugOverride }) =>
         }}
       />
       {/* Container */}
-      <article className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 space-y-10">
-        
+      <article className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 space-y-7 sm:space-y-10">
+
         {/* Navigation Breadcrumb */}
         <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-xs font-sans text-allura-muted">
           <Link to="/" className="hover:text-allura-text transition-colors flex items-center gap-1">
@@ -330,21 +457,23 @@ export const CMSPageViewer: React.FC<CMSPageViewerProps> = ({ slugOverride }) =>
         </nav>
 
         {/* Page Header */}
-        <header className="space-y-4 border-b border-allura-border pb-8">
+        <header className="space-y-4 border-b border-allura-border pb-6 sm:pb-8">
           <div className="flex flex-wrap items-center gap-2">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-allura-bgSecondary border border-allura-border text-allura-goldDark text-[10px] font-sans font-bold tracking-[0.25em] uppercase shadow-xs">
               <Sparkles size={11} />
               <span>ALLURA EDITORIAL & POLICIES</span>
             </div>
+            {/* TEMPORARILY DISABLED — badge for fallback content, which is no longer shown.
             {isFallback && (
               <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-stone-100 border border-stone-200 text-stone-600 text-[10px] font-sans font-medium">
                 <Info size={11} />
                 <span>Boutique Default Policy</span>
               </div>
             )}
+            */}
           </div>
 
-          <h1 className="font-serif text-3xl sm:text-5xl font-normal text-allura-text tracking-tight uppercase leading-tight">
+          <h1 className="font-serif text-[1.75rem] sm:text-5xl font-normal text-allura-text tracking-tight uppercase leading-tight [overflow-wrap:anywhere]">
             {page.title}
           </h1>
 
@@ -356,7 +485,7 @@ export const CMSPageViewer: React.FC<CMSPageViewerProps> = ({ slugOverride }) =>
           )}
 
           {/* Meta Bar: Date, Read Time, Copy Link */}
-          <div className="pt-2 flex flex-wrap items-center justify-between gap-4 text-xs font-sans text-stone-500">
+          {/* <div className="pt-2 flex flex-wrap items-center justify-between gap-4 text-xs font-sans text-stone-500">
             <div className="flex items-center gap-4 sm:gap-6">
               {formattedDate && (
                 <div className="flex items-center gap-1.5">
@@ -387,21 +516,26 @@ export const CMSPageViewer: React.FC<CMSPageViewerProps> = ({ slugOverride }) =>
                 </>
               )}
             </button>
-          </div>
+          </div> */}
         </header>
 
-        {/* Dynamic HTML Content */}
+        {/* Dynamic HTML Content — each section / point is its own card, in the FAQ card style */}
+        <CmsContentCards html={safeContent} pageTitle={page.title} idPrefix="cms-page" />
+        {/* TEMPORARILY DISABLED — the previous single content card, replaced by the cards above.
         <div
           className="cms-content-wrapper bg-allura-card rounded-2xl border border-allura-border/70 p-6 sm:p-10 shadow-xs"
         >
           <div
-            className="cms-prose text-sm sm:text-base font-sans text-stone-800 leading-relaxed"
-            dangerouslySetInnerHTML={{ __html: page.content }}
+            // Previously "text-sm sm:text-base": now 16px at every width (readable on phones)
+            className="cms-prose text-base font-sans text-stone-800 leading-relaxed"
+            // Previously: dangerouslySetInnerHTML={{ __html: page.content }} (unsanitized)
+            dangerouslySetInnerHTML={{ __html: safeContent }}
           />
         </div>
+        */}
 
         {/* Footer Atelier Note */}
-        <div className="border-t border-allura-border/70 pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs font-sans text-stone-500">
+        <div className="border-t border-allura-border/70 pt-6 sm:pt-8 flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4 text-xs font-sans text-stone-500 text-center sm:text-left">
           <p>
             Have questions regarding this policy or document? Reach out to our customer care team anytime.
           </p>
@@ -417,7 +551,11 @@ export const CMSPageViewer: React.FC<CMSPageViewerProps> = ({ slugOverride }) =>
 
       </article>
 
-      {/* Scoped CSS for CMS HTML tags rendering */}
+      {/* Scoped CSS for CMS HTML tags rendering — moved unchanged to src/styles/cmsProse.ts
+          (CMS_PROSE_BASE_CSS) and shared with the admin editor's Preview; CMS_PROSE_CSS adds
+          the rules for editor formatting (nested/styled lists, hr, highlight, alignment, mobile). */}
+      <style>{CMS_PROSE_CSS}</style>
+      {/* TEMPORARILY DISABLED — the original inline block, kept for reference (same rules as CMS_PROSE_BASE_CSS).
       <style>{`
         .cms-prose h1, .cms-prose h2, .cms-prose h3, .cms-prose h4 {
           font-family: 'Quicksand', sans-serif;
@@ -503,6 +641,7 @@ export const CMSPageViewer: React.FC<CMSPageViewerProps> = ({ slugOverride }) =>
           color: #561C08;
         }
       `}</style>
+      */}
     </div>
   );
 };

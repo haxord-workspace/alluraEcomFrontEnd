@@ -683,7 +683,7 @@ export const AdminSettingsPage: React.FC = () => {
                   <BoutiqueFieldError field="standardShippingFee" />
                 </div>
 
-                <div>
+                {/* <div>
                   <label className="block text-xs font-semibold uppercase tracking-wider text-primary-700 mb-1.5">
                     Express Air Courier (₹)
                   </label>
@@ -700,7 +700,7 @@ export const AdminSettingsPage: React.FC = () => {
                     aria-describedby={boutiqueErrors.expressShippingFee ? boutiqueErrorId('expressShippingFee') : undefined}
                   />
                   <BoutiqueFieldError field="expressShippingFee" />
-                </div>
+                </div> */}
               </div>
             </div>
 

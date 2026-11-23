@@ -1,5 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Save, Plus, Trash2, Search, Loader2, Globe, EyeOff } from 'lucide-react';
+import { Save, Plus, Trash2, Search, Loader2, Globe, EyeOff, ArrowLeft, TriangleAlert, X } from 'lucide-react';
+import { RichTextEditor } from '../../components/admin/richtext/RichTextEditor';
+import { detectStrippedFormatting, strippedFormattingMessage } from '../../components/admin/richtext/normalizeHtml';
+import { getBackendFieldErrors } from '../../utils/apiResponse';
 import { useAdmin } from '../../context/AdminContext';
 import { useShop } from '../../context/ShopContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
@@ -82,6 +85,38 @@ export const AdminContentPage: React.FC = () => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [confirmUnpublishOpen, setConfirmUnpublishOpen] = useState(false);
 
+  // Rich text editor
+  const [contentError, setContentError] = useState<string | null>(null); // backend error for the content field (edit)
+  const [createContentError, setCreateContentError] = useState<string | null>(null); // same, for New Page
+  const [formatWarning, setFormatWarning] = useState<string | null>(null); // server stripped formatting on save
+  const [pendingNav, setPendingNav] = useState<(() => void) | null>(null); // waits for "discard unsaved changes?"
+  const [mobileShowList, setMobileShowList] = useState(true); // below lg: list or editor, with "Back to pages"
+
+  // Unsaved changes: the editor reports the original string back while the content is unchanged
+  const isEditDirty =
+    !!detail && !isCreating && (editTitle !== detail.title || editSlug !== detail.slug || editContent !== detail.content);
+  const isCreateDirty = isCreating && (createTitle.trim() !== '' || createSlug.trim() !== '' || createContent.trim() !== '');
+  const hasUnsavedChanges = isEditDirty || isCreateDirty;
+
+  /** Runs `action` now, or after the admin confirms discarding unsaved changes. */
+  const guardUnsaved = (action: () => void) => {
+    if (hasUnsavedChanges) setPendingNav(() => action);
+    else action();
+  };
+
+  // Warn before closing or reloading the tab with unsaved edits
+  useEffect(() => {
+    if (!hasUnsavedChanges) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [hasUnsavedChanges]);
+
+  const showEditorOnMobile = (isCreating || !!selectedId) && !mobileShowList;
+
   // Search is sent to the server; wait until typing pauses
   useEffect(() => {
     const t = setTimeout(() => {
@@ -126,6 +161,9 @@ export const AdminContentPage: React.FC = () => {
     setDetailError(null);
     setSaveError(null);
     setIsConflict(false);
+    setContentError(null);
+    setFormatWarning(null);
+    setMobileShowList(false);
     setIsDetailLoading(true);
     try {
       const d = await getAdminContentById(id);
@@ -151,6 +189,9 @@ export const AdminContentPage: React.FC = () => {
     setCreateStatus('DRAFT');
     setCreateContent('');
     setCreateError(null);
+    setCreateContentError(null);
+    setFormatWarning(null);
+    setMobileShowList(false);
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -159,6 +200,9 @@ export const AdminContentPage: React.FC = () => {
     setIsSaving(true);
     setSaveError(null);
     setIsConflict(false);
+    setContentError(null);
+    setFormatWarning(null);
+    const sentContent = editContent;
     try {
       const updated = await updateAdminContent(detail.id, {
         title: editTitle.trim(),
@@ -166,6 +210,9 @@ export const AdminContentPage: React.FC = () => {
         content: editContent,
         updatedAt: detail.updatedAt,
       });
+      // Non-blocking: tell the admin when the server's sanitizer removed formatting
+      const lost = updated.content ? detectStrippedFormatting(sentContent, updated.content) : [];
+      if (lost.length) setFormatWarning(strippedFormattingMessage(lost));
       setDetail(updated);
       setEditTitle(updated.title);
       setEditSlug(updated.slug);
@@ -178,6 +225,7 @@ export const AdminContentPage: React.FC = () => {
         setSaveError('This page was updated by another admin. Reload to get the latest version.');
       } else {
         setSaveError(contentErrorMessage(err, 'Failed to save page'));
+        setContentError(getBackendFieldErrors(err).content || null);
       }
     } finally {
       setIsSaving(false);
@@ -222,8 +270,11 @@ export const AdminContentPage: React.FC = () => {
     if (!createContent.trim()) return setCreateError('Content is required.');
 
     setIsCreatingSubmit(true);
+    setCreateContentError(null);
     try {
       const created = await createAdminContent({ title, slug, type: createType, status: createStatus, content: createContent });
+      const lost = created.content ? detectStrippedFormatting(createContent, created.content) : [];
+      setFormatWarning(lost.length ? strippedFormattingMessage(lost) : null);
       showToast('Page created', 'success');
       setIsCreating(false);
       setPage(1);
@@ -239,6 +290,7 @@ export const AdminContentPage: React.FC = () => {
     } catch (err: any) {
       if (err?.response?.status === 409) setCreateError('A page with this slug already exists.');
       else setCreateError(contentErrorMessage(err, 'Failed to create page'));
+      setCreateContentError(getBackendFieldErrors(err).content || null);
     } finally {
       setIsCreatingSubmit(false);
     }
@@ -267,6 +319,39 @@ export const AdminContentPage: React.FC = () => {
     }
   };
 
+  // Publish / Save buttons of the editor (markup moved here unchanged from the editor header)
+  const renderEditActions = (detail: ContentDetail) => (
+    <>
+      {canPublish && (
+        <button
+          type="button"
+          onClick={handleToggleStatus}
+          disabled={isPublishing}
+          className="px-3.5 py-2 border border-stone-200 bg-white hover:bg-stone-50 text-stone-700 rounded-xl font-bold text-xs uppercase tracking-wider transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
+        >
+          {isPublishing ? (
+            <Loader2 size={13} className="animate-spin" />
+          ) : detail.status === 'PUBLISHED' ? (
+            <EyeOff size={13} />
+          ) : (
+            <Globe size={13} />
+          )}
+          <span>{detail.status === 'PUBLISHED' ? 'Unpublish' : 'Publish'}</span>
+        </button>
+      )}
+      {canEdit && (
+        <button
+          onClick={handleSave}
+          disabled={isSaving}
+          className="px-5 py-2 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-xl font-bold uppercase tracking-wider transition-colors flex items-center justify-center gap-1.5 shadow-sm disabled:opacity-50"
+        >
+          {isSaving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+          <span>{isSaving ? 'Saving…' : 'Save Page'}</span>
+        </button>
+      )}
+    </>
+  );
+
   return (
     <div className="space-y-6 pb-12">
       {/* Header */}
@@ -284,7 +369,8 @@ export const AdminContentPage: React.FC = () => {
         </div>
         {canCreate && (
           <button
-            onClick={startCreate}
+            // Previously: onClick={startCreate} — now asks first when there are unsaved changes
+            onClick={() => guardUnsaved(startCreate)}
             className="px-4 py-2 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-xl font-bold text-xs uppercase tracking-wider shadow-xs flex items-center gap-1.5 self-start sm:self-center"
           >
             <Plus size={14} />
@@ -303,8 +389,12 @@ export const AdminContentPage: React.FC = () => {
       {/* Grid: Pages list & Editor */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
 
-        {/* Pages List (1 Col) */}
-        <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-xs space-y-3 text-xs font-sans">
+        {/* Pages List (1 Col) — below lg it is hidden while a page is open in the editor ("Back to pages" shows it) */}
+        <div
+          className={`bg-white border border-stone-200 rounded-2xl p-5 shadow-xs space-y-3 text-xs font-sans ${
+            showEditorOnMobile ? 'hidden lg:block' : ''
+          }`}
+        >
           <span className="text-[10px] font-bold uppercase tracking-wider text-stone-400">STORE PAGES</span>
 
           <div className="relative">
@@ -346,7 +436,12 @@ export const AdminContentPage: React.FC = () => {
               items.map(p => (
                 <div
                   key={p.id}
-                  onClick={() => openDetail(p.id)}
+                  // Previously: onClick={() => openDetail(p.id)} — now asks first when there are unsaved
+                  // changes; re-selecting the open page only switches back to the editor on mobile
+                  onClick={() => {
+                    if (p.id === selectedId && !isCreating && detail) setMobileShowList(false);
+                    else guardUnsaved(() => openDetail(p.id));
+                  }}
                   className={`p-3.5 rounded-xl border cursor-pointer transition-all ${
                     selectedId === p.id ? 'border-stone-900 bg-stone-50 shadow-xs' : 'border-stone-100 hover:border-stone-200'
                   }`}
@@ -380,8 +475,25 @@ export const AdminContentPage: React.FC = () => {
           <AdminPagination currentPage={page} totalItems={total} pageSize={PAGE_SIZE} onPageChange={setPage} />
         </div>
 
-        {/* Content Editor (2 Cols) */}
-        <div className="lg:col-span-2 bg-white border border-stone-200 rounded-2xl p-6 shadow-xs space-y-5 text-xs font-sans">
+        {/* Content Editor (2 Cols) — below lg it replaces the list while a page is open */}
+        <div
+          className={`lg:col-span-2 min-w-0 bg-white border border-stone-200 rounded-2xl p-4 sm:p-6 shadow-xs space-y-5 text-xs font-sans ${
+            showEditorOnMobile ? '' : 'hidden lg:block'
+          }`}
+        >
+          {showEditorOnMobile && (
+            <button
+              type="button"
+              onClick={() => {
+                setMobileShowList(true);
+                window.scrollTo({ top: 0 });
+              }}
+              className="lg:hidden -mt-1 inline-flex items-center gap-1.5 min-h-11 pr-3 text-xs font-bold uppercase tracking-wider text-stone-600 hover:text-stone-900"
+            >
+              <ArrowLeft size={15} />
+              Back to pages
+            </button>
+          )}
           {isCreating ? (
             <>
               <div className="flex justify-between items-center border-b border-stone-100 pb-3">
@@ -443,16 +555,31 @@ export const AdminContentPage: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-bold uppercase text-stone-400 mb-1">Editorial Content</label>
+                  <label id="cms-create-content-label" htmlFor="cms-create-content" className="block text-[10px] font-bold uppercase text-stone-400 mb-1">
+                    Editorial Content
+                  </label>
+                  {/* Replaced by the rich text editor (same createContent state; falls back to this textarea if the editor cannot load):
                   <textarea
                     rows={10}
                     value={createContent}
                     onChange={e => setCreateContent(e.target.value)}
                     className="w-full p-4 bg-stone-50 border border-stone-200 rounded-xl text-xs font-sans leading-relaxed text-stone-800"
                   />
+                  */}
+                  <RichTextEditor
+                    id="cms-create-content"
+                    labelledBy="cms-create-content-label"
+                    resetKey="create"
+                    value={createContent}
+                    onChange={setCreateContent}
+                    error={createContentError}
+                    previewTitle={createTitle}
+                    placeholder="Write the page content…"
+                  />
                 </div>
 
-                <div className="flex items-center gap-2">
+                {/* Below lg the buttons stick to the bottom of the screen */}
+                <div className="flex items-center gap-2 max-lg:sticky max-lg:bottom-0 max-lg:z-20 max-lg:-mx-4 sm:max-lg:-mx-6 max-lg:px-4 sm:max-lg:px-6 max-lg:py-3 max-lg:bg-white/95 max-lg:backdrop-blur-sm max-lg:border-t max-lg:border-stone-100 max-lg:[&>button]:min-h-11">
                   <button
                     type="submit"
                     disabled={isCreatingSubmit}
@@ -463,7 +590,13 @@ export const AdminContentPage: React.FC = () => {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setIsCreating(false)}
+                    // Previously: onClick={() => setIsCreating(false)} — now asks first when there are unsaved changes
+                    onClick={() =>
+                      guardUnsaved(() => {
+                        setIsCreating(false);
+                        setMobileShowList(true);
+                      })
+                    }
                     className="px-5 py-2 border border-stone-200 bg-white hover:bg-stone-50 text-stone-700 rounded-xl font-bold uppercase tracking-wider transition-colors"
                   >
                     Cancel
@@ -487,43 +620,22 @@ export const AdminContentPage: React.FC = () => {
             <>
               <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 border-b border-stone-100 pb-3">
                 <div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <h3 className="font-serif text-xl font-normal text-stone-900">Page Content Editor</h3>
                     <StatusBadge status={detail.status} size="sm" />
                     <span className="text-[10px] font-sans font-semibold text-stone-400 uppercase">{detail.type}</span>
+                    {isEditDirty && (
+                      <span className="px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-[10px] font-bold uppercase tracking-wider">
+                        Unsaved changes
+                      </span>
+                    )}
                   </div>
                   <p className="text-stone-400 font-mono text-[11px]">/{detail.slug}</p>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  {canPublish && (
-                    <button
-                      type="button"
-                      onClick={handleToggleStatus}
-                      disabled={isPublishing}
-                      className="px-3.5 py-2 border border-stone-200 bg-white hover:bg-stone-50 text-stone-700 rounded-xl font-bold text-xs uppercase tracking-wider transition-colors flex items-center gap-1.5 disabled:opacity-50"
-                    >
-                      {isPublishing ? (
-                        <Loader2 size={13} className="animate-spin" />
-                      ) : detail.status === 'PUBLISHED' ? (
-                        <EyeOff size={13} />
-                      ) : (
-                        <Globe size={13} />
-                      )}
-                      <span>{detail.status === 'PUBLISHED' ? 'Unpublish' : 'Publish'}</span>
-                    </button>
-                  )}
-                  {canEdit && (
-                    <button
-                      onClick={handleSave}
-                      disabled={isSaving}
-                      className="px-5 py-2 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-xl font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 shadow-sm disabled:opacity-50"
-                    >
-                      {isSaving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
-                      <span>{isSaving ? 'Saving…' : 'Save Page'}</span>
-                    </button>
-                  )}
-                </div>
+                {/* Publish / Save — the button markup is unchanged, moved into renderEditActions() so the
+                    same buttons can also be shown in the sticky bottom bar below lg */}
+                <div className="hidden lg:flex items-center gap-2">{renderEditActions(detail)}</div>
               </div>
 
               {saveError && (
@@ -536,7 +648,8 @@ export const AdminContentPage: React.FC = () => {
               )}
 
               <form onSubmit={handleSave} className="space-y-4">
-                <fieldset disabled={!canEdit} className="space-y-4">
+                {/* min-w-0: a fieldset is min-content wide by default, which would stop the editor toolbar from scrolling on phones */}
+                <fieldset disabled={!canEdit} className="space-y-4 min-w-0">
                   <div>
                     <label className="block text-[10px] font-bold uppercase text-stone-400 mb-1">Page Title</label>
                     <input
@@ -559,20 +672,60 @@ export const AdminContentPage: React.FC = () => {
                   </div>
 
                   <div>
-                    <label className="block text-[10px] font-bold uppercase text-stone-400 mb-1">Editorial Content</label>
+                    <label id="cms-edit-content-label" htmlFor="cms-edit-content" className="block text-[10px] font-bold uppercase text-stone-400 mb-1">
+                      Editorial Content
+                    </label>
+                    {/* Replaced by the rich text editor (same editContent state; falls back to this textarea if the editor cannot load):
                     <textarea
                       rows={10}
                       value={editContent}
                       onChange={e => setEditContent(e.target.value)}
                       className="w-full p-4 bg-stone-50 border border-stone-200 rounded-xl text-xs font-sans leading-relaxed text-stone-800"
                     />
+                    */}
+                    <RichTextEditor
+                      id="cms-edit-content"
+                      labelledBy="cms-edit-content-label"
+                      // A different page, or the version returned by a save, loads fresh (no leftover undo history)
+                      resetKey={`${detail.id}:${detail.updatedAt}`}
+                      value={editContent}
+                      onChange={setEditContent}
+                      disabled={!canEdit}
+                      error={contentError}
+                      previewTitle={editTitle}
+                    />
                   </div>
                 </fieldset>
               </form>
 
+              {formatWarning && (
+                <div role="status" className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 flex items-start justify-between gap-3">
+                  <span className="flex items-start gap-1.5">
+                    <TriangleAlert size={14} className="shrink-0 mt-px" />
+                    {formatWarning}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setFormatWarning(null)}
+                    aria-label="Dismiss"
+                    className="shrink-0 p-1 -m-1 rounded-md hover:bg-amber-100"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              )}
+
               <p className="text-[10px] text-stone-400">
                 Created {formatDateTime(detail.createdAt)} · Last updated {formatDateTime(detail.updatedAt)}
               </p>
+
+              {/* Below lg: Publish / Save stay at the bottom of the screen */}
+              {(canPublish || canEdit) && (
+                <div className="lg:hidden sticky bottom-0 z-20 -mx-4 sm:-mx-6 -mb-4 sm:-mb-6 px-4 sm:px-6 py-3 bg-white/95 backdrop-blur-sm border-t border-stone-100 rounded-b-2xl flex items-center justify-end gap-2 [&>button]:min-h-11 [&>button]:flex-1 sm:[&>button]:flex-none">
+                  {isEditDirty && <span className="sr-only">Unsaved changes</span>}
+                  {renderEditActions(detail)}
+                </div>
+              )}
             </>
           ) : (
             <div className="flex flex-col items-center justify-center py-16 text-stone-400 gap-2">
@@ -599,6 +752,17 @@ export const AdminContentPage: React.FC = () => {
         title="Unpublish this page?"
         message="This page will stop showing on the live storefront until it's published again."
         confirmLabel="Unpublish"
+        isDestructive
+      />
+
+      <ConfirmModal
+        isOpen={!!pendingNav}
+        onClose={() => setPendingNav(null)}
+        onConfirm={() => pendingNav?.()}
+        title="Discard unsaved changes?"
+        message="You have changes on this page that have not been saved. If you continue, they will be lost."
+        confirmLabel="Discard changes"
+        cancelLabel="Keep editing"
         isDestructive
       />
     </div>

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Search, RefreshCw, ChevronLeft, ChevronRight, Eye, X, SlidersHorizontal } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import { Search, RefreshCw, ChevronLeft, ChevronRight, Eye, X, SlidersHorizontal, Copy, Check } from 'lucide-react';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import {
   getAdminPayments,
@@ -8,6 +9,7 @@ import {
   type PaymentListParams,
   type PaymentsSummary,
 } from '../../service/adminPayments';
+import { getAdminOrder, getCancelReasonLabel } from '../../service/orders';
 import type { PaymentDetail, PaymentLedgerMethod, PaymentLedgerStatus, PaymentListItem } from '../../types';
 
 const PAGE_SIZE = 20;
@@ -31,6 +33,9 @@ const formatDateTime = (value?: string) => {
 };
 
 export const AdminPaymentsPage: React.FC = () => {
+  const [searchParams] = useSearchParams();
+  const initialSearch = searchParams.get('search') || searchParams.get('order') || '';
+
   const [payments, setPayments] = useState<PaymentListItem[]>([]);
   const [summary, setSummary] = useState<PaymentsSummary | null>(null);
   const [total, setTotal] = useState(0);
@@ -38,8 +43,8 @@ export const AdminPaymentsPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [searchInput, setSearchInput] = useState('');
-  const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState(initialSearch);
+  const [search, setSearch] = useState(initialSearch);
   const [statusFilter, setStatusFilter] = useState<'All' | PaymentLedgerStatus>('All');
 
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -57,6 +62,7 @@ export const AdminPaymentsPage: React.FC = () => {
   const [detail, setDetail] = useState<PaymentDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
+  const [copiedRefundId, setCopiedRefundId] = useState(false);
 
   const hasActiveFilters = method !== 'All' || !!from || !!to || sort !== '-createdAt';
 
@@ -124,6 +130,19 @@ export const AdminPaymentsPage: React.FC = () => {
     setDetailLoading(true);
     try {
       const data = await getAdminPayment(paymentId);
+      // If the backend didn't populate the related order's status, enrich it
+      if (data.orderId && !data.orderStatus) {
+        try {
+          const ord = await getAdminOrder(data.orderId);
+          if (ord) {
+            data.orderStatus = ord.rawStatus || ord.orderStatus;
+            data.orderPaymentStatus = ord.paymentStatus;
+            data.orderPaymentMethod = ord.paymentMethod;
+          }
+        } catch {
+          // ignore background enrichment error
+        }
+      }
       setDetail(data);
     } catch (err) {
       setDetailError(paymentLedgerErrorMessage(err, 'Failed to load payment detail'));
@@ -132,10 +151,27 @@ export const AdminPaymentsPage: React.FC = () => {
     }
   };
 
+  // Open detail directly if paymentId or id is provided in the query string
+  useEffect(() => {
+    const urlPaymentId = searchParams.get('paymentId') || searchParams.get('id');
+    if (urlPaymentId) {
+      openDetail(urlPaymentId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleCopyRefundId = (id: string) => {
+    if (!id) return;
+    navigator.clipboard.writeText(id);
+    setCopiedRefundId(true);
+    setTimeout(() => setCopiedRefundId(false), 2000);
+  };
+
   const closeDetail = () => {
     setSelectedId(null);
     setDetail(null);
     setDetailError(null);
+    setCopiedRefundId(false);
   };
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -440,13 +476,26 @@ export const AdminPaymentsPage: React.FC = () => {
                 </span>
                 <h2 className="font-serif text-xl text-black font-semibold mt-0.5">{selectedId}</h2>
               </div>
-              <button
-                onClick={closeDetail}
-                className="p-1.5 text-black hover:text-stone-700 hover:bg-stone-100 rounded-lg transition-colors"
-                aria-label="Close"
-              >
-                <X size={16} />
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => selectedId && openDetail(selectedId)}
+                  disabled={detailLoading}
+                  className="px-2.5 py-1.5 border border-stone-200 text-stone-700 hover:text-stone-900 hover:bg-stone-50 rounded-lg transition-colors flex items-center gap-1.5 text-xs font-sans disabled:opacity-50"
+                  title="Refresh payment details"
+                  aria-label="Refresh payment details"
+                >
+                  <RefreshCw size={12} className={detailLoading ? 'animate-spin' : ''} />
+                  <span>Refresh</span>
+                </button>
+                <button
+                  onClick={closeDetail}
+                  className="p-1.5 text-black hover:text-stone-700 hover:bg-stone-100 rounded-lg transition-colors"
+                  aria-label="Close"
+                >
+                  <X size={16} />
+                </button>
+              </div>
             </div>
 
             {detailLoading ? (
@@ -504,6 +553,90 @@ export const AdminPaymentsPage: React.FC = () => {
                     )}
                   </div>
                 )}
+
+                {(() => {
+                  const isOrderCancelled = String(detail.orderStatus || '').toUpperCase().includes('CANCEL');
+                  const isOnlineMethod = detail.method !== 'COD' && String(detail.orderPaymentMethod || '').toUpperCase() !== 'COD';
+                  const isCapturedOrPaid = detail.status === 'PAID' || ['Paid', 'Captured'].includes(String(detail.orderPaymentStatus || ''));
+                  const isAlreadyRefunded = detail.status === 'REFUNDED' || detail.orderPaymentStatus === 'Refunded';
+
+                  // Show "Refund pending" ONLY when: order is Cancelled AND method is not COD AND status is Paid/Captured AND refund is null AND not already in refunded status
+                  const showRefundPending = !detail.refund && isOrderCancelled && isOnlineMethod && isCapturedOrPaid && !isAlreadyRefunded;
+                  const showRefundSection = Boolean(detail.refund || showRefundPending);
+
+                  if (!showRefundSection) return null;
+
+                  return (
+                    <div className="pt-3 border-t border-stone-100 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-sans font-bold tracking-[0.15em] text-[#191616] uppercase">
+                          REFUND INFORMATION
+                        </span>
+                        {detail.refund ? (
+                          detail.refund.status === 'PROCESSED' ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
+                              Refunded ₹{(detail.refund.amount / 100).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-rose-50 text-rose-800 border border-rose-200">
+                              <span className="w-1.5 h-1.5 rounded-full bg-rose-600" />
+                              Refund failed
+                            </span>
+                          )
+                        ) : showRefundPending ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-stone-100 text-stone-700 border border-stone-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-stone-500 animate-pulse" />
+                            Refund pending
+                          </span>
+                        ) : null}
+                      </div>
+
+                      {detail.refund ? (
+                        <div className="space-y-2 text-xs">
+                          {detail.refund.status === 'FAILED' && (
+                            <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-xs">
+                              <p className="font-semibold text-rose-900 text-[11px]">This refund needs a manual follow-up.</p>
+                              <p className="text-[11px] text-rose-700 mt-0.5">Please check Razorpay dashboard or contact support.</p>
+                            </div>
+                          )}
+
+                          <dl className="grid grid-cols-2 gap-y-2 gap-x-4 bg-stone-50/70 p-3 rounded-xl border border-stone-100">
+                            <dt className="text-stone-500 font-medium">Refund ID</dt>
+                            <dd className="text-stone-900 font-mono text-[11px] text-right flex items-center justify-end gap-1.5">
+                              <span>{detail.refund.razorpayRefundId || '—'}</span>
+                              {detail.refund.razorpayRefundId && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleCopyRefundId(detail.refund!.razorpayRefundId)}
+                                  className="p-1 hover:bg-stone-200/60 rounded text-stone-500 hover:text-stone-800 transition-colors"
+                                  title="Copy Refund ID"
+                                  aria-label="Copy Refund ID"
+                                >
+                                  {copiedRefundId ? <Check size={12} className="text-emerald-600" /> : <Copy size={12} />}
+                                </button>
+                              )}
+                            </dd>
+
+                            <dt className="text-stone-500 font-medium">Reason</dt>
+                            <dd className="text-stone-900 font-medium text-right">
+                              {getCancelReasonLabel(detail.refund.reason) || '—'}
+                            </dd>
+
+                            <dt className="text-stone-500 font-medium">Processed At</dt>
+                            <dd className="text-stone-900 text-right">
+                              {formatDateTime(detail.refund.processedAt)}
+                            </dd>
+                          </dl>
+                        </div>
+                      ) : showRefundPending ? (
+                        <p className="text-[11px] text-stone-500 bg-stone-50 p-2.5 rounded-xl border border-stone-100">
+                          Order was cancelled. The refund is being processed asynchronously. Use <strong>Refresh</strong> above to check status updates.
+                        </p>
+                      ) : null}
+                    </div>
+                  );
+                })()}
               </div>
             ) : null}
           </div>

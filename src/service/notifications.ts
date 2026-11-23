@@ -1,6 +1,11 @@
 import api from './api';
 import adminApi from './adminApi';
 import { getBackendErrorMessage } from '../utils/apiResponse';
+import {
+  isOrderCancellationNotification,
+  extractNotificationOrderRef,
+  sanitizeNotificationText,
+} from '../utils/userFacingText';
 import type { CustomerNotification } from '../types';
 import type {
   Notification,
@@ -32,16 +37,39 @@ export const notificationErrorMessage = (error: any, fallback: string): string =
 
 // ── Customer ─────────────────────────────────────────────────────────────────
 
-const mapNotification = (raw: any): CustomerNotification => ({
-  id: raw?.id || raw?._id || '',
-  title: raw?.title || '',
-  message: raw?.message || '',
-  category: raw?.category || 'Account',
-  timestamp: raw?.timestamp || raw?.createdAt || '',
-  isRead: !!raw?.isRead,
-  actionUrl: raw?.actionUrl ?? undefined,
-  actionLabel: raw?.actionLabel ?? undefined,
-});
+const mapNotification = (raw: any): CustomerNotification => {
+  const isCancelled = isOrderCancellationNotification(raw);
+
+  let title = raw?.title || raw?.displayTitle || '';
+  let message = raw?.message || raw?.displayMessage || '';
+  let actionUrl = raw?.actionUrl ?? undefined;
+
+  if (isCancelled) {
+    const { orderNumber, orderId } = extractNotificationOrderRef(raw);
+    const ref = orderNumber || orderId;
+    title = 'Order cancelled';
+    message = ref
+      ? `Your order #${ref.replace(/^#/, '')} has been cancelled.`
+      : 'Your order has been cancelled.';
+    if (!actionUrl && (orderId || orderNumber)) {
+      actionUrl = `/account/orders/${orderId || orderNumber}`;
+    }
+  } else {
+    title = sanitizeNotificationText(title);
+    message = sanitizeNotificationText(message);
+  }
+
+  return {
+    id: raw?.id || raw?._id || '',
+    title,
+    message,
+    category: raw?.category || (isCancelled ? 'Orders' : 'Account'),
+    timestamp: raw?.timestamp || raw?.createdAt || '',
+    isRead: !!raw?.isRead,
+    actionUrl,
+    actionLabel: raw?.actionLabel ?? (actionUrl ? 'View Order' : undefined),
+  };
+};
 
 export interface NotificationListParams {
   page?: number;

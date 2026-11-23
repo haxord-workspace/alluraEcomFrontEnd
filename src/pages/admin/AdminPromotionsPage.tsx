@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Plus, RefreshCw, Search, Loader2, Power, Edit3, Trash2, Calendar } from 'lucide-react';
+import { Plus, RefreshCw, Search, Loader2, Power, Edit3, Trash2, Calendar, ChevronDown } from 'lucide-react';
 import { useAdmin } from '../../context/AdminContext';
 import { useShop } from '../../context/ShopContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
@@ -14,14 +14,55 @@ import {
   updatePromotionStatus,
   promotionErrorMessage,
   toIsoDateTime,
+  toIsoEndOfDay,
   toBackendPromotionStatus,
 } from '../../service/promotions';
 import { getCategories } from '../../service/category';
-import { PROMOTION_TYPES, PROMOTION_STATUSES } from '../../types/promotion';
-import type { AdminPromotion, PromotionInput, PromotionStatus, PromotionDiscountType } from '../../types/promotion';
+import { PROMOTION_TYPES, PROMOTION_STATUSES, PROMOTION_SCOPE_TYPES, PROMOTION_SCOPE_LABELS } from '../../types/promotion';
+import type {
+  AdminPromotion,
+  PromotionInput,
+  PromotionStatus,
+  PromotionDiscountType,
+  PromotionScopeType,
+} from '../../types/promotion';
 import type { Category } from '../../types';
+import { PromotionItemPicker } from '../../components/admin/promotions/PromotionItemPicker';
+import {
+  useProductPickerOptions,
+  useCategoryPickerOptions,
+  useCollectionPickerOptions,
+} from '../../hooks/usePromotionPickerOptions';
+import { validatePromotionScope, scopeAllowsExclusions } from '../../utils/promotionValidation';
+import { getBackendFieldErrors } from '../../utils/apiResponse';
 
 const PAGE_SIZE = 10;
+
+/** Replaced by Applies to > Categories; no longer used. Keeps the old Eligible Categories
+ *  picker (and its category fetch) in the file without rendering or running it. */
+const SHOW_LEGACY_ELIGIBLE_CATEGORIES = false;
+
+/** "All products" / "3 products" / "2 categories" (+ "Excludes 1") for the list. */
+const scopeSummary = (promo: AdminPromotion) => {
+  const { type, productIds, categoryIds, collectionIds } = promo.applicableTo;
+  const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+  const scope =
+    type === 'PRODUCTS'
+      ? plural(productIds.length, 'product', 'products')
+      : type === 'CATEGORIES'
+        ? plural(categoryIds.length, 'category', 'categories')
+        : type === 'COLLECTIONS'
+          ? plural(collectionIds.length, 'collection', 'collections')
+          : 'All products';
+  const excluded = promo.excludedProducts.length + promo.excludedCategories.length;
+  return { scope, excluded };
+};
+
+const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <h4 className="text-[11px] font-bold uppercase tracking-[0.15em] text-allura-goldDark border-b border-stone-100 pb-1.5">
+    {children}
+  </h4>
+);
 // Sized to fit the longest status label ("Expired") — same fixed-pill pattern used on the orders list.
 const STATUS_PILL_SIZE = 'w-[92px] h-7';
 
@@ -42,7 +83,16 @@ interface FormState {
   startDate: string;
   endDate: string;
   status: PromotionStatus;
+  /** Replaced by Applies to > Categories; no longer used (not sent). */
   eligibleCategories: string[];
+  scopeType: PromotionScopeType;
+  productIds: string[];
+  categoryIds: string[];
+  collectionIds: string[];
+  excludedProducts: string[];
+  excludedCategories: string[];
+  /** Raw input text; integer */
+  priority: string;
 }
 
 const EMPTY_FORM: FormState = {
@@ -56,6 +106,13 @@ const EMPTY_FORM: FormState = {
   endDate: inDays(30),
   status: 'Active',
   eligibleCategories: [],
+  scopeType: 'ALL',
+  productIds: [],
+  categoryIds: [],
+  collectionIds: [],
+  excludedProducts: [],
+  excludedCategories: [],
+  priority: '0',
 };
 
 export const AdminPromotionsPage: React.FC = () => {
@@ -86,6 +143,35 @@ export const AdminPromotionsPage: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  /** Inline errors keyed by payload path (frontend rules and backend validation details) */
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  /** Status as loaded for edit; the status endpoint is called only when it changes */
+  const [loadedStatus, setLoadedStatus] = useState<PromotionStatus | null>(null);
+  const [showExclusions, setShowExclusions] = useState(false);
+
+  // Picker data loads only when the modal needs it; categories/collections are cached per session
+  const exclusionsAllowed = scopeAllowsExclusions(form.scopeType);
+  const wantsExclusions = exclusionsAllowed && (showExclusions || form.excludedProducts.length > 0 || form.excludedCategories.length > 0);
+  const productOptions = useProductPickerOptions(isFormOpen && (form.scopeType === 'PRODUCTS' || wantsExclusions));
+  const categoryOptions = useCategoryPickerOptions(isFormOpen && (form.scopeType === 'CATEGORIES' || wantsExclusions));
+  const collectionOptions = useCollectionPickerOptions(isFormOpen && form.scopeType === 'COLLECTIONS');
+
+  /** First error whose key is `key` or starts with `key.` (e.g. "applicableTo.productIds") */
+  const errorFor = (...keys: string[]) => {
+    for (const key of keys) {
+      const match = Object.keys(fieldErrors).find(k => k === key || k.startsWith(`${key}.`) || k.startsWith(`${key}[`));
+      if (match) return fieldErrors[match];
+    }
+    return undefined;
+  };
+
+  const clearFieldError = (...keys: string[]) =>
+    setFieldErrors(prev => {
+      const next = Object.fromEntries(
+        Object.entries(prev).filter(([k]) => !keys.some(key => k === key || k.startsWith(`${key}.`) || k.startsWith(`${key}[`)))
+      );
+      return Object.keys(next).length === Object.keys(prev).length ? prev : next;
+    });
 
   // Search is sent to the server; wait until typing pauses
   useEffect(() => {
@@ -120,6 +206,8 @@ export const AdminPromotionsPage: React.FC = () => {
   }, [fetchPromotions]);
 
   useEffect(() => {
+    // Replaced by Applies to > Categories; no longer used — skip the fetch for the hidden picker
+    if (!SHOW_LEGACY_ELIGIBLE_CATEGORIES) return;
     getCategories().then(setCategories).catch(() => {
       // Non-fatal: the eligible-categories picker just shows no options.
     });
@@ -128,6 +216,9 @@ export const AdminPromotionsPage: React.FC = () => {
   const openCreate = () => {
     setEditingId(null);
     setFormError(null);
+    setFieldErrors({});
+    setLoadedStatus(null);
+    setShowExclusions(false);
     setForm({ ...EMPTY_FORM, startDate: today(), endDate: inDays(30) });
     setIsFormOpen(true);
   };
@@ -146,7 +237,18 @@ export const AdminPromotionsPage: React.FC = () => {
       endDate: promo.endDate || inDays(30),
       status: promo.status,
       eligibleCategories: promo.eligibleCategories,
+      // Older promotions without these fields map to ALL / [] / 0 (see mapPromotion)
+      scopeType: promo.applicableTo.type,
+      productIds: promo.applicableTo.productIds,
+      categoryIds: promo.applicableTo.categoryIds,
+      collectionIds: promo.applicableTo.collectionIds,
+      excludedProducts: promo.excludedProducts,
+      excludedCategories: promo.excludedCategories,
+      priority: String(promo.priority),
     });
+    setFieldErrors({});
+    setLoadedStatus(promo.status);
+    setShowExclusions(promo.excludedProducts.length > 0 || promo.excludedCategories.length > 0);
     setIsFormOpen(true);
   };
 
@@ -218,27 +320,73 @@ export const AdminPromotionsPage: React.FC = () => {
       return;
     }
 
+    // Applies to / Exclusions / Priority rules (src/utils/promotionValidation.ts — confirm with backend)
+    const scopeErrors = validatePromotionScope(form);
+    if (Object.keys(scopeErrors).length > 0) {
+      setFieldErrors(scopeErrors as Record<string, string>);
+      showToast(Object.values(scopeErrors)[0] as string, 'error');
+      return;
+    }
+    setFieldErrors({});
+
+    // Only the list for the selected type is sent, so switching type never sends stale ids
+    const scope = form.scopeType;
+    const applicableTo = {
+      type: scope,
+      productIds: scope === 'PRODUCTS' ? form.productIds : [],
+      categoryIds: scope === 'CATEGORIES' ? form.categoryIds : [],
+      collectionIds: scope === 'COLLECTIONS' ? form.collectionIds : [],
+    };
+    const allowsExclusions = scopeAllowsExclusions(scope);
+    const priorityText = form.priority.trim();
+
     const input: PromotionInput = {
       name: form.name.trim(),
+      // Campaign Type: the backend does not store it (not in the Swagger schema). Sent as before.
       type: form.type,
-      conditions: form.conditions.trim() || undefined,
+      // "Conditions" is saved as `description`, the field the backend actually stores
+      description: form.conditions.trim() || undefined,
       discount: {
         type: form.discountType === 'Fixed' ? 'FIXED' : 'PERCENTAGE',
         value: discountValue,
         ...(maxDiscountAmount !== undefined ? { maxDiscountAmount } : {}),
       },
       startsAt: toIsoDateTime(form.startDate),
-      expiresAt: toIsoDateTime(form.endDate),
+      // End of the chosen local day (23:59:59), same as coupons
+      expiresAt: toIsoEndOfDay(form.endDate),
       status: toBackendPromotionStatus(form.status),
-      eligibleCategories: form.eligibleCategories,
+      // eligibleCategories: replaced by Applies to > Categories; no longer sent
+      applicableTo,
+      excludedProducts: allowsExclusions ? form.excludedProducts : [],
+      excludedCategories: allowsExclusions
+        ? form.excludedCategories.filter(id => !applicableTo.categoryIds.includes(id))
+        : [],
+      ...(priorityText !== '' ? { priority: Number(priorityText) } : {}),
     };
 
     setIsSaving(true);
     try {
       if (editingId) {
-        const updated = await updatePromotion(editingId, input);
+        // PATCH /admin/promotions/{id} has no `status` field; status goes through the status endpoint
+        const { status: _status, ...details } = input;
+        const updated = await updatePromotion(editingId, details);
         if (updated) replacePromotion(updated);
-        else await fetchPromotions();
+
+        if (loadedStatus !== null && form.status !== loadedStatus) {
+          try {
+            const withStatus = await updatePromotionStatus(editingId, form.status);
+            if (withStatus) replacePromotion(withStatus);
+            setLoadedStatus(form.status);
+          } catch (statusErr) {
+            if (!updated) await fetchPromotions();
+            const message = 'Promotion saved, but status could not be updated';
+            setFormError(`${message}. ${promotionErrorMessage(statusErr, '')}`.trim());
+            showToast(message, 'error');
+            return; // keep the modal open with the admin's data
+          }
+        }
+
+        if (!updated) await fetchPromotions();
         showToast(`Promotion "${input.name}" updated`, 'success');
       } else {
         await createPromotion(input);
@@ -249,6 +397,7 @@ export const AdminPromotionsPage: React.FC = () => {
       setEditingId(null);
     } catch (err) {
       const errText = promotionErrorMessage(err, editingId ? 'Failed to update promotion' : 'Failed to create promotion');
+      setFieldErrors(getBackendFieldErrors(err));
       setFormError(errText);
       showToast(errText, 'error');
     } finally {
@@ -374,6 +523,15 @@ export const AdminPromotionsPage: React.FC = () => {
                     </td>
                     <td className="p-4 font-bold text-[#561C08]">
                       {promo.discountValue ? formatDiscount(promo.discountType, promo.discountValue) : '—'}
+                      {(() => {
+                        const { scope, excluded } = scopeSummary(promo);
+                        return (
+                          <p className="text-[11px] font-normal text-stone-500 mt-0.5">
+                            {scope}
+                            {excluded > 0 && <span className="text-stone-400"> · Excludes {excluded}</span>}
+                          </p>
+                        );
+                      })()}
                     </td>
                     <td className="p-4 text-stone-600 whitespace-nowrap">
                       <span className="flex items-center gap-1">
@@ -451,7 +609,10 @@ export const AdminPromotionsPage: React.FC = () => {
       {/* Create / Edit modal */}
       {isFormOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white border border-stone-200 rounded-2xl w-full max-w-xl p-6 sm:p-8 space-y-6 shadow-2xl animate-slide-up text-xs font-sans max-h-[92vh] overflow-y-auto">
+          <div className="bg-white border border-stone-200 rounded-2xl w-full max-w-xl shadow-2xl animate-slide-up text-xs font-sans max-h-[92vh] flex flex-col overflow-hidden">
+            <form onSubmit={handleSubmit} className="flex flex-col min-h-0 flex-1">
+            {/* Scrollable body; the Cancel / Save footer below stays visible */}
+            <div className="flex-1 min-h-0 overflow-y-auto p-6 sm:p-8 space-y-6">
             <h3 className="font-serif text-2xl text-stone-900 font-normal">
               {editingId ? 'Edit Promotion' : 'Create Promotion'}
             </h3>
@@ -464,7 +625,8 @@ export const AdminPromotionsPage: React.FC = () => {
               />
             )}
 
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-4">
+              <SectionTitle>Basics</SectionTitle>
               <div>
                 <label htmlFor="promo-name" className="block text-[10px] font-bold uppercase text-stone-500 mb-1">
                   Title *
@@ -480,6 +642,7 @@ export const AdminPromotionsPage: React.FC = () => {
                   disabled={isSaving}
                   className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-stone-800"
                 />
+                {errorFor('name') && <p className="mt-1 text-[11px] text-rose-600">{errorFor('name')}</p>}
               </div>
 
               <div>
@@ -497,6 +660,23 @@ export const AdminPromotionsPage: React.FC = () => {
                 </select>
               </div>
 
+              <div>
+                <label htmlFor="promo-conditions" className="block text-[10px] font-bold uppercase text-stone-500 mb-1">
+                  Conditions
+                </label>
+                <input
+                  id="promo-conditions"
+                  type="text"
+                  placeholder="E.g. Shop above ₹9,999 and receive a complimentary gift"
+                  value={form.conditions}
+                  onChange={e => setForm({ ...form, conditions: e.target.value })}
+                  disabled={isSaving}
+                  className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl"
+                />
+                {errorFor('description') && <p className="mt-1 text-[11px] text-rose-600">{errorFor('description')}</p>}
+              </div>
+
+              <SectionTitle>Discount</SectionTitle>
               <div className="grid grid-cols-3 gap-4">
                 <div>
                   <label htmlFor="promo-discount-type" className="block text-[10px] font-bold uppercase text-stone-500 mb-1">
@@ -548,22 +728,129 @@ export const AdminPromotionsPage: React.FC = () => {
                   </div>
                 )}
               </div>
+              {errorFor('discount') && <p className="-mt-2 text-[11px] text-rose-600">{errorFor('discount')}</p>}
 
-              <div>
-                <label htmlFor="promo-conditions" className="block text-[10px] font-bold uppercase text-stone-500 mb-1">
-                  Conditions
-                </label>
-                <input
-                  id="promo-conditions"
-                  type="text"
-                  placeholder="E.g. Shop above ₹9,999 and receive a complimentary gift"
-                  value={form.conditions}
-                  onChange={e => setForm({ ...form, conditions: e.target.value })}
-                  disabled={isSaving}
-                  className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl"
-                />
+              {/* ─── Applies to ─────────────────────────────────────────────── */}
+              <SectionTitle>Applies to</SectionTitle>
+              <div className="space-y-3">
+                <div>
+                  <label htmlFor="promo-scope" className="block text-[10px] font-bold uppercase text-stone-500 mb-1">
+                    Applies to
+                  </label>
+                  <select
+                    id="promo-scope"
+                    value={form.scopeType}
+                    onChange={e => {
+                      setForm({ ...form, scopeType: e.target.value as PromotionScopeType });
+                      clearFieldError('applicableTo', 'excludedCategories');
+                    }}
+                    disabled={isSaving}
+                    className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl"
+                  >
+                    {PROMOTION_SCOPE_TYPES.map(t => <option key={t} value={t}>{PROMOTION_SCOPE_LABELS[t]}</option>)}
+                  </select>
+                  {form.scopeType === 'ALL' && errorFor('applicableTo') && (
+                    <p className="mt-1 text-[11px] text-rose-600">{errorFor('applicableTo')}</p>
+                  )}
+                </div>
+
+                {form.scopeType === 'PRODUCTS' && (
+                  <PromotionItemPicker
+                    id="promo-products"
+                    label="Products *"
+                    noun={{ one: 'product', many: 'products' }}
+                    options={productOptions.options}
+                    status={productOptions.status}
+                    onRetry={productOptions.retry}
+                    selectedIds={form.productIds}
+                    onChange={ids => { setForm(f => ({ ...f, productIds: ids })); clearFieldError('applicableTo'); }}
+                    error={errorFor('applicableTo')}
+                    disabled={isSaving}
+                  />
+                )}
+                {form.scopeType === 'CATEGORIES' && (
+                  <PromotionItemPicker
+                    id="promo-categories"
+                    label="Categories *"
+                    noun={{ one: 'category', many: 'categories' }}
+                    options={categoryOptions.options}
+                    status={categoryOptions.status}
+                    onRetry={categoryOptions.retry}
+                    selectedIds={form.categoryIds}
+                    hiddenIds={form.excludedCategories}
+                    onChange={ids => { setForm(f => ({ ...f, categoryIds: ids })); clearFieldError('applicableTo', 'excludedCategories'); }}
+                    error={errorFor('applicableTo')}
+                    disabled={isSaving}
+                  />
+                )}
+                {form.scopeType === 'COLLECTIONS' && (
+                  <PromotionItemPicker
+                    id="promo-collections"
+                    label="Collections *"
+                    noun={{ one: 'collection', many: 'collections' }}
+                    options={collectionOptions.options}
+                    status={collectionOptions.status}
+                    onRetry={collectionOptions.retry}
+                    selectedIds={form.collectionIds}
+                    onChange={ids => { setForm(f => ({ ...f, collectionIds: ids })); clearFieldError('applicableTo'); }}
+                    error={errorFor('applicableTo')}
+                    disabled={isSaving}
+                  />
+                )}
               </div>
 
+              {/* ─── Exclusions (only for ALL / CATEGORIES / COLLECTIONS) ──────── */}
+              {exclusionsAllowed && (
+                <div className="space-y-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowExclusions(s => !s)}
+                    aria-expanded={showExclusions}
+                    className="w-full flex items-center justify-between text-[11px] font-bold uppercase tracking-[0.15em] text-allura-goldDark border-b border-stone-100 pb-1.5"
+                  >
+                    <span>
+                      Exclusions (optional)
+                      {form.excludedProducts.length + form.excludedCategories.length > 0 && (
+                        <span className="ml-1.5 normal-case tracking-normal font-semibold text-stone-500">
+                          · {form.excludedProducts.length + form.excludedCategories.length} excluded
+                        </span>
+                      )}
+                    </span>
+                    <ChevronDown size={14} className={`transition-transform ${showExclusions ? 'rotate-180' : ''}`} />
+                  </button>
+                  {showExclusions && (
+                    <>
+                      <PromotionItemPicker
+                        id="promo-excluded-products"
+                        label="Exclude products"
+                        noun={{ one: 'product', many: 'products' }}
+                        options={productOptions.options}
+                        status={productOptions.status}
+                        onRetry={productOptions.retry}
+                        selectedIds={form.excludedProducts}
+                        onChange={ids => { setForm(f => ({ ...f, excludedProducts: ids })); clearFieldError('excludedProducts'); }}
+                        error={errorFor('excludedProducts')}
+                        disabled={isSaving}
+                      />
+                      <PromotionItemPicker
+                        id="promo-excluded-categories"
+                        label="Exclude categories"
+                        noun={{ one: 'category', many: 'categories' }}
+                        options={categoryOptions.options}
+                        status={categoryOptions.status}
+                        onRetry={categoryOptions.retry}
+                        selectedIds={form.excludedCategories}
+                        hiddenIds={form.scopeType === 'CATEGORIES' ? form.categoryIds : undefined}
+                        onChange={ids => { setForm(f => ({ ...f, excludedCategories: ids })); clearFieldError('excludedCategories'); }}
+                        error={errorFor('excludedCategories')}
+                        disabled={isSaving}
+                      />
+                    </>
+                  )}
+                </div>
+              )}
+
+              <SectionTitle>Schedule</SectionTitle>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label htmlFor="promo-start" className="block text-[10px] font-bold uppercase text-stone-500 mb-1">
@@ -595,7 +882,36 @@ export const AdminPromotionsPage: React.FC = () => {
                   />
                 </div>
               </div>
+              {errorFor('startsAt', 'expiresAt') && (
+                <p className="-mt-2 text-[11px] text-rose-600">{errorFor('startsAt', 'expiresAt')}</p>
+              )}
 
+              <div>
+                <label htmlFor="promo-priority" className="block text-[10px] font-bold uppercase text-stone-500 mb-1">
+                  Priority
+                </label>
+                <input
+                  id="promo-priority"
+                  type="number"
+                  step={1}
+                  placeholder="0"
+                  value={form.priority}
+                  onChange={e => { setForm({ ...form, priority: e.target.value }); clearFieldError('priority'); }}
+                  disabled={isSaving}
+                  aria-describedby="promo-priority-help"
+                  className={`w-full p-2.5 bg-stone-50 border rounded-xl ${errorFor('priority') ? 'border-rose-300' : 'border-stone-200'}`}
+                />
+                {errorFor('priority') ? (
+                  <p className="mt-1 text-[11px] text-rose-600">{errorFor('priority')}</p>
+                ) : (
+                  <p id="promo-priority-help" className="mt-1 text-[11px] text-stone-400">
+                    Whole number, default 0. Promotions with a higher priority are evaluated first; when several
+                    promotions qualify they currently stack rather than replace each other.
+                  </p>
+                )}
+              </div>
+
+              <SectionTitle>Status</SectionTitle>
               <div>
                 <span className="block text-[10px] font-bold uppercase text-stone-500 mb-1">Status</span>
                 <div className="grid grid-cols-4 gap-2">
@@ -615,7 +931,8 @@ export const AdminPromotionsPage: React.FC = () => {
                 </div>
               </div>
 
-              {categories.length > 0 && (
+              {/* Replaced by Applies to > Categories; no longer used (not rendered, not sent) */}
+              {SHOW_LEGACY_ELIGIBLE_CATEGORIES && categories.length > 0 && (
                 <div>
                   <span className="block text-[10px] font-bold uppercase text-stone-500 mb-1">Eligible Categories</span>
                   <div className="flex flex-wrap gap-1.5">
@@ -637,8 +954,11 @@ export const AdminPromotionsPage: React.FC = () => {
                   </div>
                 </div>
               )}
+            </div>
+            </div>
 
-              <div className="flex justify-end gap-2 pt-2">
+              {/* Sticky footer */}
+              <div className="flex justify-end gap-2 px-6 sm:px-8 py-4 border-t border-stone-100 bg-white">
                 <button
                   type="button"
                   onClick={() => { setIsFormOpen(false); setEditingId(null); }}

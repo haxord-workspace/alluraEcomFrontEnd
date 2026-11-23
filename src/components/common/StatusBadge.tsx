@@ -35,7 +35,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, className = ''
     style = 'bg-amber-50 text-amber-800 border-amber-200';
   } else if (normalized.includes('pending') || normalized.includes('review') || normalized.includes('draft')) {
     style = 'bg-blue-50 text-blue-800 border-blue-200';
-  } else if (normalized.includes('cancelled') || normalized.includes('failed') || normalized.includes('rejected') || normalized.includes('out of stock')) {
+  } else if (normalized.includes('cancelled') || normalized.includes('canceled') || normalized.includes('failed') || normalized.includes('rejected') || normalized.includes('out of stock')) {
     style = 'bg-rose-50 text-rose-800 border-rose-200';
   } else if (normalized.includes('returned') || normalized.includes('refunded') || normalized.includes('low stock')) {
     style = 'bg-orange-50 text-orange-800 border-orange-200';

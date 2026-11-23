@@ -21,12 +21,14 @@ import {
   CreditCard,
   Banknote,
   ExternalLink,
+  ArrowRight,
 } from 'lucide-react';
 import { usePermissions } from '../../hooks/usePermissions';
 import { useShop } from '../../context/ShopContext';
 import { useConfirm } from '../../context/ConfirmContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { InvoiceModal } from '../../components/common/InvoiceModal';
+import { OrderCancelModal } from '../../components/admin/OrderCancelModal';
 import {
   getAdminOrder,
   updateAdminOrderStatus,
@@ -34,6 +36,8 @@ import {
   downloadAdminOrderInvoice,
   toBackendStatus,
   orderErrorMessage,
+  getCancelReasonLabel,
+  resolveActorName,
 } from '../../service/orders';
 import type { Order, OrderStatus } from '../../types';
 import { useAdminOrderCatalog } from '../../hooks/useAdminOrderCatalog';
@@ -94,11 +98,13 @@ const inr = (n: number) => `₹ ${n.toLocaleString('en-IN')}`;
 
 export const AdminOrderDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const { can } = usePermissions();
+  const { can, role } = usePermissions();
   const { showToast } = useShop();
   const confirm = useConfirm();
   const canEdit = can('order_processing', 'edit');
   const canCancel = can('order_processing', 'cancel');
+  // Backend strictly limits cancellations to ADMIN and SUPER_ADMIN
+  const isAdminOrSuperAdmin = role === 'ADMIN' || role === 'SUPER_ADMIN';
 
   const [rawOrder, setOrder] = useState<Order | null>(null);
   const withCatalog = useAdminOrderCatalog();
@@ -115,6 +121,9 @@ export const AdminOrderDetailPage: React.FC = () => {
   const [trackingNumber, setTrackingNumber] = useState('');
 
   // Cancel dialog
+  const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+  const cancelButtonRef = React.useRef<HTMLButtonElement>(null);
+  // Legacy cancel dialog state (retained in place so no code is removed)
   const [isCancelOpen, setIsCancelOpen] = useState(false);
   const [isInvoiceOpen, setIsInvoiceOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState(CANCEL_REASONS[0]);
@@ -250,6 +259,49 @@ export const AdminOrderDetailPage: React.FC = () => {
     }
   };
 
+  // Preserved legacy state & handlers (now unused, kept for safety without breaking TypeScript)
+  void canCancel;
+  void isCancelOpen;
+  void setIsCancelOpen;
+  void cancelReason;
+  void setCancelReason;
+  void cancelNote;
+  void setCancelNote;
+  void cancelError;
+  void setCancelError;
+  void handleCancel;
+
+  const cancelDetails = React.useMemo(() => {
+    if (!order) return { reasonLabel: '', note: '', cancelledBy: 'Admin', cancelledAt: '' };
+
+    const historyEntries = order.history || [];
+    const cancelEntry = [...historyEntries]
+      .reverse()
+      .find(h => String(h.status || h.to || '').toUpperCase() === 'CANCELLED');
+
+    const rawReason = order.cancelReason || cancelEntry?.reason || cancelEntry?.note;
+    const reasonLabel = getCancelReasonLabel(order.cancelReason || cancelEntry?.reason) || rawReason || '';
+    const note = order.cancelNote || (cancelEntry?.reason && cancelEntry?.note ? cancelEntry.note : '');
+    const cancelledBy = resolveActorName(cancelEntry);
+    const changedAt = cancelEntry?.changedAt || cancelEntry?.createdAt || cancelEntry?.timestamp;
+    const cancelledAt = changedAt
+      ? new Date(changedAt).toLocaleString('en-IN', {
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        })
+      : order.date;
+
+    return {
+      reasonLabel,
+      note,
+      cancelledBy,
+      cancelledAt,
+    };
+  }, [order]);
+
   if (isLoading && !order) {
     return (
       <div className="p-12 flex flex-col items-center gap-3 text-stone-500">
@@ -282,6 +334,7 @@ export const AdminOrderDetailPage: React.FC = () => {
   const isCancelled = status === 'Cancelled';
   const isReturned = status === 'Returned' || status === 'Refunded';
   const isClosed = isCancelled || isReturned || status === 'Delivered';
+  void isClosed;
   const next = NEXT_ACTION[status];
   const currentStepIndex = STEPS.findIndex(s => s.status === status);
   const history = order.activityHistory || [];
@@ -292,6 +345,16 @@ export const AdminOrderDetailPage: React.FC = () => {
 
   const shipFormValid = !!trackingNumber.trim() && (carrier !== 'Other' || !!customCarrier.trim());
   const itemCount = order.items.reduce((sum, i) => sum + i.quantity, 0);
+
+  const isPaidOnline = !isCod && ['Paid', 'Captured'].includes(order.paymentStatus);
+
+  const canCancelOrder =
+    (status === 'Pending' || status === 'Confirmed' || status === 'Processing') &&
+    isAdminOrSuperAdmin;
+
+  const showShippedReturnedHint =
+    (status === 'Shipped' || status === 'Delivered') &&
+    isAdminOrSuperAdmin;
 
   const paymentBadge = isPaid
     ? { label: 'Paid', className: 'bg-emerald-50 text-emerald-800 border-emerald-200' }
@@ -341,17 +404,20 @@ export const AdminOrderDetailPage: React.FC = () => {
             <Printer size={14} />
             <span>Packing Slip</span>
           </button>
-          {canCancel && !isClosed && !(ENABLE_MANUAL_ORDER_STATUS && status === 'Shipped') && (
+          {canCancelOrder && (
             <button
-              onClick={() => {
-                setCancelError(null);
-                setIsCancelOpen(true);
-              }}
-              className="px-3.5 py-2 border border-rose-200 bg-white text-rose-700 hover:bg-rose-50 rounded-xl text-xs font-sans font-semibold flex items-center gap-1.5"
+              ref={cancelButtonRef}
+              onClick={() => setIsCancelModalOpen(true)}
+              className="px-3.5 py-2 border border-rose-200 bg-white text-rose-700 hover:bg-rose-50 active:bg-rose-100 rounded-xl text-xs font-sans font-semibold flex items-center gap-1.5 transition-colors shadow-2xs"
             >
               <XCircle size={14} />
               <span>Cancel Order</span>
             </button>
+          )}
+          {showShippedReturnedHint && (
+            <span className="text-[11px] text-stone-400 italic hidden sm:inline ml-1">
+              Shipped or delivered orders can't be cancelled. Use the returns flow.
+            </span>
           )}
         </div>
       </div>
@@ -521,6 +587,77 @@ export const AdminOrderDetailPage: React.FC = () => {
                       Mark as Returned
                     </button>
                   )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Cancellation card */}
+          {isCancelled && (
+            <div className="bg-rose-50/70 border border-rose-200 rounded-2xl p-6 shadow-xs space-y-4 text-xs font-sans">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-rose-100 border border-rose-200 flex items-center justify-center text-rose-700 shrink-0">
+                    <XCircle size={18} />
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-rose-700">
+                      Order Cancelled
+                    </span>
+                    <h3 className="font-serif text-xl text-stone-900 font-medium">Cancellation</h3>
+                  </div>
+                </div>
+                <StatusBadge status="Cancelled" size="sm" />
+              </div>
+
+              <dl className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-6 pt-2 border-t border-rose-100">
+                <div>
+                  <dt className="text-[10px] font-bold uppercase text-stone-500">Reason</dt>
+                  <dd className="text-stone-900 font-semibold mt-0.5 text-sm">
+                    {cancelDetails.reasonLabel || 'Not specified'}
+                  </dd>
+                </div>
+
+                <div>
+                  <dt className="text-[10px] font-bold uppercase text-stone-500">Cancelled By</dt>
+                  <dd className="text-stone-900 font-medium mt-0.5">
+                    {cancelDetails.cancelledBy}
+                  </dd>
+                </div>
+
+                <div>
+                  <dt className="text-[10px] font-bold uppercase text-stone-500">Date & Time</dt>
+                  <dd className="text-stone-700 mt-0.5">
+                    {cancelDetails.cancelledAt || order.date || '—'}
+                  </dd>
+                </div>
+
+                {cancelDetails.note && (
+                  <div className="sm:col-span-2">
+                    <dt className="text-[10px] font-bold uppercase text-stone-500">Note</dt>
+                    <dd className="text-stone-800 bg-white/80 p-3 rounded-xl border border-rose-100 mt-1 whitespace-pre-wrap leading-relaxed">
+                      {cancelDetails.note}
+                    </dd>
+                  </div>
+                )}
+              </dl>
+
+              {/* Refund notice for online payments */}
+              {isPaidOnline && (
+                <div className="p-3 bg-white/90 border border-rose-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
+                  <div className="text-stone-600">
+                    <p className="font-medium text-stone-900">Refund Notice</p>
+                    <p className="text-stone-500 text-[11px] mt-0.5">
+                      Refund is processed in the background. Check the payment details for the refund status.
+                    </p>
+                  </div>
+                  <Link
+                    to={`/admin/payments?search=${encodeURIComponent(order.orderNumber)}`}
+                    className="inline-flex items-center gap-1 text-[#561C08] font-bold text-xs hover:underline shrink-0"
+                  >
+                    <span>View payment</span>
+                    <ArrowRight size={13} />
+                  </Link>
                 </div>
               )}
             </div>
@@ -704,7 +841,8 @@ export const AdminOrderDetailPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Cancel dialog */}
+      {/* Replaced by OrderCancelModal - legacy dialog commented out to preserve file contents */}
+      {/*
       {isCancelOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-sm" onClick={() => setIsCancelOpen(false)}>
           <div
@@ -756,7 +894,19 @@ export const AdminOrderDetailPage: React.FC = () => {
           </div>
         </div>
       )}
+      */}
     </div>
+
+    <OrderCancelModal
+      isOpen={isCancelModalOpen}
+      order={order}
+      onClose={() => setIsCancelModalOpen(false)}
+      onSuccess={updated => {
+        setOrder(updated);
+      }}
+      onRefetchOrder={fetchOrder}
+      triggerRef={cancelButtonRef}
+    />
 
     <InvoiceModal
       order={isInvoiceOpen ? order : null}

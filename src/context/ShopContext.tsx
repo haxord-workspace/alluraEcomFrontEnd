@@ -44,6 +44,11 @@ import {
 } from '../service/notifications';
 import { requestPushToken, onForegroundPush } from '../service/firebase';
 import { getBackendErrorMessage } from '../utils/apiResponse';
+import {
+  isOrderCancellationNotification,
+  extractNotificationOrderRef,
+  sanitizeNotificationText,
+} from '../utils/userFacingText';
 
 interface ToastNotification {
   id: string;
@@ -170,6 +175,7 @@ interface ShopContextType {
 
   // Currency & Utility Formatters
   formatPrice: (price: number) => string;
+  formatExactPrice: (price: number) => string;
 }
 
 const ShopContext = createContext<ShopContextType | undefined>(undefined);
@@ -371,7 +377,7 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
   const [invoiceOrder, setInvoiceOrder] = useState<Order | null>(null);
   const [toasts, setToasts] = useState<ToastNotification[]>([]);
-  
+
   const isAuthenticated = !!customer;
   const customerId: string | null = customer ? customer.id || customer.email || 'signed-in' : null;
 
@@ -402,13 +408,13 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setCustomer(prev =>
         prev
           ? {
-              ...prev,
-              id: prev.id && !prev.id.startsWith('usr-') ? prev.id : p.id || prev.id,
-              name: profileDisplayName(p) || prev.name,
-              email: p.email || prev.email,
-              phone: profilePhone(p) || prev.phone,
-              avatar: p.avatarUrl || prev.avatar,
-            }
+            ...prev,
+            id: prev.id && !prev.id.startsWith('usr-') ? prev.id : p.id || prev.id,
+            name: profileDisplayName(p) || prev.name,
+            email: p.email || prev.email,
+            phone: profilePhone(p) || prev.phone,
+            avatar: p.avatarUrl || prev.avatar,
+          }
           : prev
       );
     } catch (e) {
@@ -514,7 +520,16 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     if (!customer || isAdminRoute) return;
     return onForegroundPush(({ title, body }) => {
-      showToast(title ? (body ? `${title}: ${body}` : title) : 'New notification', 'gold');
+      if (isOrderCancellationNotification({ title, message: body })) {
+        const { orderNumber, orderId } = extractNotificationOrderRef({ title, message: body });
+        const ref = orderNumber || orderId;
+        const msg = ref ? `Your order #${ref.replace(/^#/, '')} has been cancelled.` : 'Your order has been cancelled.';
+        showToast(msg, 'info');
+      } else {
+        const cleanTitle = sanitizeNotificationText(title || '');
+        const cleanBody = sanitizeNotificationText(body || '');
+        showToast(cleanTitle ? (cleanBody ? `${cleanTitle}: ${cleanBody}` : cleanTitle) : 'New notification', 'gold');
+      }
       refreshNotifications();
       refreshUnreadNotificationCount();
     });
@@ -928,7 +943,7 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
             showToast(`Coupon ${appliedCouponCode} removed: ${result.message}`, 'info');
           }
         })
-        .catch(() => {});
+        .catch(() => { });
     }, 400);
     return () => { cancelled = true; clearTimeout(timer); };
   }, [appliedCouponCode, cartId, cartSubtotal, cart.length, customerId, clearCoupon, showToast]);
@@ -938,7 +953,7 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const response = await login(data);
       storeCustomerTokens(response);
-      
+
       const userProfile: CustomerProfile = response.user || {
         id: `usr-${Date.now()}`,
         name: data.email.split('@')[0],
@@ -965,7 +980,7 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const response = await googleLogin(data);
       storeCustomerTokens(response);
-      
+
       const userProfile: CustomerProfile = response.user || {
         id: `usr-${Date.now()}`,
         name: 'Google User',
@@ -994,7 +1009,7 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const response = await register(data, metaHeaders(metaEventId));
       trackMetaEvent('CompleteRegistration', { status: true }, metaEventId);
       storeCustomerTokens(response);
-      
+
       const userProfile: CustomerProfile = response.user || {
         id: `usr-${Date.now()}`,
         name: data.name || data.email.split('@')[0],
@@ -1321,7 +1336,8 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUnreadNotificationCount(0);
     try {
       await markAllNotificationsRead();
-      showToast('All notifications marked as read', 'info');
+      // Removed on request: no success toast — the cleared unread badge already shows the result.
+      // showToast('All notifications marked as read', 'info');
     } catch (err) {
       setNotifications(prevNotifications);
       setUnreadNotificationCount(prevCount);
@@ -1433,6 +1449,15 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return '₹ ' + Math.round(price).toLocaleString('en-IN');
   };
 
+  const formatExactPrice = useCallback(
+    (price: number) =>
+      '₹ ' + (Number(price) || 0).toLocaleString('en-IN', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }),
+    []
+  );
+
   return (
     <ShopContext.Provider
       value={{
@@ -1522,6 +1547,7 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
         showToast,
         removeToast,
         formatPrice,
+        formatExactPrice,
       }}
     >
       {children}

@@ -21,6 +21,7 @@ import { downloadOrderInvoice } from '../service/orders';
 import { OrderCardSkeleton } from '../components/ui/OrderCardSkeleton';
 import { MyReviewsAccountTab } from '../components/reviews/MyReviewsAccountTab';
 import { OrderCardReviewSwap } from '../components/reviews/OrderCardReviewSwap';
+import { formatUserFacingStatus } from '../utils/userFacingText';
 
 export const AccountPage: React.FC = () => {
   const {
@@ -210,7 +211,7 @@ export const AccountPage: React.FC = () => {
                   <span className="text-[10px] font-sans font-bold tracking-[0.2em] text-allura-goldDark uppercase">
                     MOST RECENT ATELIER ORDER
                   </span>
-                  <StatusBadge status={recentOrder.orderStatus} />
+                  <StatusBadge status={formatUserFacingStatus(recentOrder.orderStatus)} />
                 </div>
                 <Link
                   to={`/account/orders/${recentOrder.id}`}
@@ -298,7 +299,7 @@ export const AccountPage: React.FC = () => {
                     <span className="text-stone-300">•</span>
                     <span className="text-allura-muted">{order.date}</span>
                     <span className="text-stone-300">•</span>
-                    <StatusBadge status={order.orderStatus} />
+                    <StatusBadge status={formatUserFacingStatus(order.orderStatus)} />
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="font-serif text-base font-bold text-allura-darkBrown">{formatPrice(order.total)}</span>
