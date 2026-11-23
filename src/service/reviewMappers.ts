@@ -320,6 +320,8 @@ export const mapCustomerReview = (raw: unknown): CustomerReview => {
       imageUrlOf(product.image) ||                     // [ASSUMED]
       imageUrlOf(productImages[0]) ||                  // [ASSUMED] images[0] (string or { url })
       imageUrlOf(product.thumbnail) ||                 // [ASSUMED]
+      imageUrlOf(populatedProduct.image) ||            // [ASSUMED]
+      imageUrlOf(populatedProduct.thumbnail) ||        // [ASSUMED]
       imageUrlOf(r.productImage),                      // [ASSUMED]
     productSlug: firstText(product.slug, populatedProduct.slug, r.productSlug), // [ASSUMED]
     orderId: idOf(r.orderId) || idOf(r.order),         // [ASSUMED] (orderId is a documented POST field)

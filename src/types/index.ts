@@ -1,3 +1,6 @@
+import type { CollectionStatus } from '../constants/collectionStatus';
+import type { ActiveStatus } from '../constants/status';
+
 export type ProductCategory =
   | 'Ethnic Wear'
   | 'Modest Wear'
@@ -18,7 +21,8 @@ export interface Category {
   id: string;
   name: string;
   slug: string;
-  status: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED' | string;
+  /** Backend accepts only ACTIVE / INACTIVE; admin service normalises loaded values */
+  status: ActiveStatus;
   image?: { url: string } | string; // backend sends object {url}, keep string fallback for local presets
   order?: number;
 }
@@ -28,7 +32,8 @@ export interface AdminCollection {
   id: string;
   name: string;
   slug?: string;
-  status: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED' | string;
+  /** Normalised by service/collection.ts — always ACTIVE or INACTIVE */
+  status: CollectionStatus;
   createdAt?: string;
   updatedAt?: string;
   [key: string]: any;
@@ -234,6 +239,7 @@ export interface CustomerProfile {
   };
   totalSpent?: number;
   ordersCount?: number;
+  currency?: string;
   createdDate?: string;
   lastOrderDate?: string;
 }
@@ -281,6 +287,8 @@ export interface OrderItem {
   selectedColor: ProductColor;
   quantity: number;
   unitPrice: number;
+  /** Backend `finalPrice` for this line (after discounts), when the order API sends it */
+  finalPrice?: number;
   mrp: number;
   sku: string;
 }
@@ -333,6 +341,10 @@ export interface Order {
   paymentMethod: 'UPI' | 'Card' | 'COD' | 'NetBanking';
   paymentStatus: PaymentStatus;
   transactionId?: string;
+  /** Gateway payment id from the order API (e.g. Razorpay "pay_..."), shown to the customer as Payment ID */
+  paymentTransactionId?: string;
+  /** ISO timestamp the order was delivered, when the backend sends it directly */
+  deliveredAt?: string;
   orderStatus: OrderStatus;
   cancelReason?: CancelReason | string;
   cancelNote?: string;

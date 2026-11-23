@@ -16,8 +16,30 @@ import { resizeImageSource, slugify } from '../../utils/image';
 import { getBackendErrorMessage, getBackendSuccessMessage } from '../../utils/apiResponse';
 import { AdminErrorBanner } from '../../components/admin/AdminErrorBanner';
 import type { AdminCollection, AdminProduct } from '../../types';
+import {
+  COLLECTION_STATUSES,
+  COLLECTION_STATUS_LABELS,
+  isCollectionStatus,
+  normalizeCollectionStatus,
+  type CollectionStatus,
+} from '../../constants/collectionStatus';
 
-const EMPTY_FORM = {
+type CollectionForm = {
+  name: string;
+  slug: string;
+  description: string;
+  imageUrl: string;
+  imageAlt: string;
+  productIds: string[];
+  seoTitle: string;
+  seoDescription: string;
+  seoKeywords: string;
+  sortOrder: number;
+  isFeatured: boolean;
+  status: CollectionStatus;
+};
+
+const EMPTY_FORM: CollectionForm = {
   name: '',
   slug: '',
   description: '',
@@ -32,7 +54,10 @@ const EMPTY_FORM = {
   status: 'ACTIVE',
 };
 
-type CollectionForm = typeof EMPTY_FORM;
+// List filter tabs: the two valid statuses plus "All" and "Featured" (no Archived)
+const FILTER_TABS = ['ALL', ...COLLECTION_STATUSES, 'FEATURED'] as const;
+type FilterTab = (typeof FILTER_TABS)[number];
+const FILTER_LABELS: Record<FilterTab, string> = { ALL: 'All', ...COLLECTION_STATUS_LABELS, FEATURED: 'Featured' };
 
 const MAIN_IMAGE_MAX = 1600;
 const THUMBNAIL_MAX = 400;
@@ -51,7 +76,7 @@ export const AdminCollectionsPage: React.FC = () => {
 
   // Search, Filter, Sort & Pagination State
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE' | 'FEATURED'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<FilterTab>('ALL');
   const [sortBy, setSortBy] = useState<'order' | 'name-asc' | 'name-desc' | 'newest'>('order');
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -120,7 +145,8 @@ export const AdminCollectionsPage: React.FC = () => {
       seoKeywords: Array.isArray(col.seo?.keywords) ? col.seo.keywords.join(', ') : '',
       sortOrder: typeof col.sortOrder === 'number' ? col.sortOrder : 0,
       isFeatured: !!col.isFeatured,
-      status: col.status || 'ACTIVE',
+      // Any legacy / unexpected value opens as INACTIVE so the admin can still save
+      status: normalizeCollectionStatus(col.status),
     });
     setSlugTouched(true);
     setShowSeo(!!(col.seo?.title || col.seo?.description || col.seo?.keywords?.length));
@@ -186,12 +212,12 @@ export const AdminCollectionsPage: React.FC = () => {
         products: formData.productIds,
         ...(hasSeo
           ? {
-              seo: {
-                ...(formData.seoTitle.trim() ? { title: formData.seoTitle.trim() } : {}),
-                ...(formData.seoDescription.trim() ? { description: formData.seoDescription.trim() } : {}),
-                ...(keywords.length ? { keywords } : {}),
-              },
-            }
+            seo: {
+              ...(formData.seoTitle.trim() ? { title: formData.seoTitle.trim() } : {}),
+              ...(formData.seoDescription.trim() ? { description: formData.seoDescription.trim() } : {}),
+              ...(keywords.length ? { keywords } : {}),
+            },
+          }
           : {}),
         sortOrder: Number(formData.sortOrder) || 0,
         isFeatured: formData.isFeatured,
@@ -210,7 +236,11 @@ export const AdminCollectionsPage: React.FC = () => {
       setIsModalOpen(false);
     } catch (error: any) {
       console.error('Failed to save collection:', error);
-      const errText = getBackendErrorMessage(error, 'Failed to save collection');
+      const backendText = getBackendErrorMessage(error, 'Failed to save collection');
+      // Clear message if the API ever rejects the status value
+      const errText = /\bstatus\b/i.test(backendText)
+        ? `Invalid collection status. Please choose ${COLLECTION_STATUSES.map(s => COLLECTION_STATUS_LABELS[s]).join(' or ')}.`
+        : backendText;
       setFormError(errText);
       showToast(errText, 'error');
     } finally {
@@ -258,10 +288,8 @@ export const AdminCollectionsPage: React.FC = () => {
     }
 
     // Filter
-    if (statusFilter === 'ACTIVE') {
-      list = list.filter(c => c.status === 'ACTIVE');
-    } else if (statusFilter === 'INACTIVE') {
-      list = list.filter(c => c.status === 'INACTIVE' || c.status === 'ARCHIVED');
+    if (isCollectionStatus(statusFilter)) {
+      list = list.filter(c => normalizeCollectionStatus(c.status) === statusFilter);
     } else if (statusFilter === 'FEATURED') {
       list = list.filter(c => !!c.isFeatured);
     }
@@ -346,17 +374,16 @@ export const AdminCollectionsPage: React.FC = () => {
         <div className="flex flex-wrap items-center gap-2 w-full md:w-auto justify-between md:justify-end">
           {/* Status Filter Buttons */}
           <div className="flex items-center gap-1.5 bg-stone-100 p-1 rounded-xl">
-            {(['ALL', 'ACTIVE', 'INACTIVE', 'FEATURED'] as const).map(tab => (
+            {FILTER_TABS.map(tab => (
               <button
                 key={tab}
                 onClick={() => setStatusFilter(tab)}
-                className={`px-3 py-1 rounded-lg text-xs font-sans font-medium transition-colors ${
-                  statusFilter === tab
+                className={`px-3 py-1 rounded-lg text-xs font-sans font-medium transition-colors ${statusFilter === tab
                     ? 'bg-white text-stone-900 shadow-xs font-bold'
                     : 'text-stone-600 hover:text-stone-900'
-                }`}
+                  }`}
               >
-                {tab === 'ALL' ? 'All' : tab === 'ACTIVE' ? 'Active' : tab === 'INACTIVE' ? 'Inactive' : 'Featured'}
+                {FILTER_LABELS[tab]}
               </button>
             ))}
           </div>
@@ -670,14 +697,12 @@ export const AdminCollectionsPage: React.FC = () => {
                         <div
                           key={p.id}
                           onClick={() => toggleProductSelection(p.id)}
-                          className={`flex items-center gap-3 p-2.5 cursor-pointer transition-colors text-xs ${
-                            isSelected ? 'bg-stone-50' : 'hover:bg-stone-50/60'
-                          }`}
+                          className={`flex items-center gap-3 p-2.5 cursor-pointer transition-colors text-xs ${isSelected ? 'bg-stone-50' : 'hover:bg-stone-50/60'
+                            }`}
                         >
                           <div
-                            className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
-                              isSelected ? 'bg-[#561C08] border-[#561C08] text-white' : 'border-stone-300 bg-white'
-                            }`}
+                            className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${isSelected ? 'bg-[#561C08] border-[#561C08] text-white' : 'border-stone-300 bg-white'
+                              }`}
                           >
                             {isSelected && <Check size={11} strokeWidth={3} />}
                           </div>
@@ -699,7 +724,7 @@ export const AdminCollectionsPage: React.FC = () => {
 
                           {p.pricing?.sellingPrice !== undefined && (
                             <span className="font-mono text-[11px] text-stone-700 font-medium shrink-0">
-                              ${Number(p.pricing.sellingPrice).toFixed(2)}
+                              ₹{Number(p.pricing.sellingPrice).toFixed(2)}
                             </span>
                           )}
                         </div>
@@ -714,12 +739,12 @@ export const AdminCollectionsPage: React.FC = () => {
                   <label className="block text-[10px] uppercase font-bold text-stone-500 mb-1">Status</label>
                   <select
                     value={formData.status}
-                    onChange={e => setFormData({ ...formData, status: e.target.value })}
+                    onChange={e => setFormData({ ...formData, status: normalizeCollectionStatus(e.target.value) })}
                     className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-stone-800"
                   >
-                    <option value="ACTIVE">Active</option>
-                    <option value="INACTIVE">Inactive</option>
-                    <option value="ARCHIVED">Archived</option>
+                    {COLLECTION_STATUSES.map(status => (
+                      <option key={status} value={status}>{COLLECTION_STATUS_LABELS[status]}</option>
+                    ))}
                   </select>
                 </div>
                 <div>
@@ -738,9 +763,8 @@ export const AdminCollectionsPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setFormData({ ...formData, isFeatured: !formData.isFeatured })}
-                    className={`w-full p-2.5 rounded-xl border flex items-center gap-2 transition-colors ${
-                      formData.isFeatured ? 'border-amber-300 bg-amber-50 text-amber-900' : 'border-stone-200 bg-stone-50 text-stone-500'
-                    }`}
+                    className={`w-full p-2.5 rounded-xl border flex items-center gap-2 transition-colors ${formData.isFeatured ? 'border-amber-300 bg-amber-50 text-amber-900' : 'border-stone-200 bg-stone-50 text-stone-500'
+                      }`}
                   >
                     <Star size={13} className={formData.isFeatured ? 'fill-current' : ''} />
                     {formData.isFeatured ? 'Featured on storefront' : 'Not featured'}

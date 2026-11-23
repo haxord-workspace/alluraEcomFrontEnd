@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { collectionsData } from '../data/collections';
 import { useShop } from '../context/ShopContext';
 import { useAdmin } from '../context/AdminContext';
 import { ProductCard } from '../components/ui/ProductCard';
@@ -16,12 +15,16 @@ import {
   RotateCcw
 } from 'lucide-react';
 import { 
-  getStoreCollections, 
+  getStoreCollections,
+  getStoreCollectionBySlug,
+  getStoreProduct,
+  mapStoreProduct,
   searchProducts,
   isRequestCanceled,
   type StoreCollection,
   type ProductSearchPagination 
 } from '../service/store';
+import { collectionsData } from '../data/collections';
 import type { Product } from '../types';
 
 export const CollectionPage: React.FC = () => {
@@ -57,52 +60,123 @@ export const CollectionPage: React.FC = () => {
   // this, so we don't fire an unfiltered request first and a collection request second.
   const [collectionResolved, setCollectionResolved] = useState(false);
 
-  // 1. Fetch store collections to resolve current collection
+  const [collectionLoadError, setCollectionLoadError] = useState(false);
+  const [collectionAttempt, setCollectionAttempt] = useState(0);
+
+  // Helper to resolve products belonging to a collection
+  const resolveCollectionProducts = async (
+    rawProducts: any[],
+    catalog: Product[],
+    signal?: AbortSignal
+  ): Promise<Product[]> => {
+    if (!rawProducts || rawProducts.length === 0) return [];
+
+    // If already populated product objects
+    if (typeof rawProducts[0] === 'object' && rawProducts[0] !== null && (rawProducts[0].name || rawProducts[0].pricing)) {
+      return rawProducts.map((p: any) => (p.name ? mapStoreProduct(p) : p));
+    }
+
+    const ids = rawProducts.map(p => String(typeof p === 'string' ? p : p?._id || p?.id || '').trim()).filter(Boolean);
+    const productMap = new Map<string, Product>();
+
+    // Match with catalog from ShopContext
+    for (const p of catalog) {
+      if (p.id) productMap.set(p.id, p);
+      if ((p as any)._id) productMap.set((p as any)._id, p);
+    }
+
+    // Any missing IDs, fetch concurrently
+    const missing = ids.filter(id => !productMap.has(id));
+    if (missing.length > 0 && !signal?.aborted) {
+      try {
+        const fetched = await Promise.all(
+          missing.map(id => getStoreProduct(id).catch(() => null))
+        );
+        for (const p of fetched) {
+          if (p && p.id) {
+            productMap.set(p.id, p);
+            if ((p as any)._id) productMap.set((p as any)._id, p);
+          }
+        }
+      } catch (e) {
+        console.warn('Failed fetching missing collection products:', e);
+      }
+    }
+
+    return ids.map(id => productMap.get(id)).filter((p): p is Product => Boolean(p));
+  };
+
+  // 1a. Resolve the current collection: GET /store/collections/{slug} (with list & local fallbacks)
   useEffect(() => {
     let active = true;
     setCollectionResolved(false);
+    setCollectionLoadError(false);
     setActiveCollection(null);
-    const fetchCols = async () => {
-      try {
-        const cols = await getStoreCollections();
-        if (active && Array.isArray(cols) && cols.length > 0) {
-          setStoreCollections(cols);
-          const matched = cols.find(c => c.slug === slug || c.id === slug);
-          if (matched) setActiveCollection(matched);
-        }
-      } catch (err) {
-        console.warn('Failed to fetch store collections in CollectionPage:', err);
-      } finally {
-        if (active) setCollectionResolved(true);
-      }
-    };
-    fetchCols();
-    return () => { active = false; };
-  }, [slug]);
-
-  // Fallback to local collection meta if API hasn't loaded it yet
-  const currentCollectionMeta = useMemo(() => {
-    if (activeCollection) {
-      const rawImg = typeof activeCollection.image === 'string'
-        ? activeCollection.image
-        : (activeCollection.image?.url || activeCollection.image?.thumbnailUrl);
-      return {
-        id: activeCollection.id,
-        title: activeCollection.name,
-        tagline: 'CURATED COLLECTION',
-        description: activeCollection.description || 'Handcrafted luxury silhouettes designed with timeless elegance.',
-        image: rawImg || '/images/editorial-banners/allura-collection.jpeg',
-      };
+    if (!slug) {
+      setCollectionResolved(true);
+      return;
     }
-    const local = collectionsData.find(c => c.slug === slug) || collectionsData[0];
+    getStoreCollectionBySlug(slug)
+      .then(col => {
+        if (!active) return;
+        if (col) {
+          setActiveCollection(col);
+        } else {
+          // Check local collectionsData fallback
+          const target = slug.toLowerCase();
+          const localMatch = collectionsData.find(
+            c =>
+              c.slug?.toLowerCase() === target ||
+              c.id?.toLowerCase() === target ||
+              c.title?.toLowerCase() === slug.replace(/-/g, ' ').toLowerCase()
+          );
+          if (localMatch) {
+            setActiveCollection({
+              id: localMatch.id,
+              name: localMatch.title,
+              slug: localMatch.slug,
+              description: localMatch.description,
+              image: localMatch.image,
+              products: [],
+            });
+          } else {
+            setActiveCollection(null);
+          }
+        }
+        setCollectionResolved(true);
+      })
+      .catch(err => {
+        if (!active) return;
+        console.warn('Failed to load collection in CollectionPage:', err);
+        setCollectionLoadError(true);
+      });
+    return () => { active = false; };
+  }, [slug, collectionAttempt]);
+
+  // 1b. Other ACTIVE collections for the "Explore other edits" section
+  useEffect(() => {
+    let active = true;
+    getStoreCollections().then(cols => {
+      if (active) setStoreCollections(cols);
+    });
+    return () => { active = false; };
+  }, []);
+
+  // Banner content from the API collection (neutral text while it loads, no dummy data)
+  const currentCollectionMeta = useMemo(() => {
+    const rawImg = activeCollection
+      ? typeof activeCollection.image === 'string'
+        ? activeCollection.image
+        : (activeCollection.image?.url || activeCollection.image?.thumbnailUrl)
+      : undefined;
     return {
-      id: local.id,
-      title: local.title,
-      tagline: local.tagline,
-      description: local.description,
-      image: local.image,
+      id: activeCollection?.id || '',
+      title: activeCollection?.name || '',
+      tagline: 'CURATED COLLECTION',
+      description: activeCollection?.description || '',
+      image: rawImg || '/images/editorial-banners/allura-collection.jpeg',
     };
-  }, [activeCollection, slug]);
+  }, [activeCollection]);
 
   // Debounce search input
   useEffect(() => {
@@ -113,8 +187,7 @@ export const CollectionPage: React.FC = () => {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // Local catalogue is only an offline fallback on request failure; kept in a ref so the
-  // catalogue finishing loading doesn't trigger another /products/search request.
+  // Local catalogue is also an offline fallback on request failure
   const localFallbackRef = useRef(localFallbackProducts);
   localFallbackRef.current = localFallbackProducts;
 
@@ -123,64 +196,128 @@ export const CollectionPage: React.FC = () => {
     setCurrentPage(1);
   }, [sortBy, priceFilter, slug]);
 
-  // 2. Fetch products using GET /products/search with search, filter, sort & pagination
+  // The slug doesn't match any ACTIVE collection (inactive, archived or unknown)
+  const isUnavailable = collectionResolved && !activeCollection;
+
+  // 2. Fetch products for this collection: resolves collection.products, search, filter, sort & pagination
   useEffect(() => {
     if (!collectionResolved) return;
+    if (!activeCollection) {
+      setCollectionProducts([]);
+      setIsLoading(false);
+      return;
+    }
     const controller = new AbortController();
     const loadProducts = async () => {
       setIsLoading(true);
 
-      let minPrice: number | undefined;
-      let maxPrice: number | undefined;
-      if (priceFilter === 'under1k') {
-        maxPrice = 1000;
-      } else if (priceFilter === '1k-2k') {
-        minPrice = 1000;
-        maxPrice = 2000;
-      } else if (priceFilter === 'above2k') {
-        minPrice = 2000;
-      }
-
       try {
-        // Query /products/search with collectionId, query, sort, price, page, limit
-        // An empty collection now shows the empty state instead of silently showing all store products
-        const res = await searchProducts(
-          {
-            collectionId: activeCollection?.id,
-            q: debouncedQuery || undefined,
-            sort: sortBy,
-            minPrice,
-            maxPrice,
-            page: currentPage,
-            limit: PAGE_LIMIT,
-          },
-          undefined,
-          controller.signal
-        );
+        let baseProducts: Product[] = [];
 
-        if (!controller.signal.aborted) {
-          setCollectionProducts(res.products || []);
-          setPagination(res.pagination);
+        // 1. Direct products attached to the collection document
+        if (Array.isArray(activeCollection.products) && activeCollection.products.length > 0) {
+          baseProducts = await resolveCollectionProducts(
+            activeCollection.products,
+            localFallbackProducts,
+            controller.signal
+          );
         }
+
+        // 2. If no products yet and it's a backend collection, try searchProducts with collectionId
+        if (baseProducts.length === 0 && activeCollection.id && !activeCollection.id.startsWith('col-')) {
+          try {
+            const res = await searchProducts(
+              {
+                collectionId: activeCollection.id,
+                page: 1,
+                limit: 100,
+              },
+              undefined,
+              controller.signal
+            );
+            if (res.products && res.products.length > 0) {
+              baseProducts = res.products;
+            }
+          } catch {
+            // searchProducts with collectionId might not be supported, ignore
+          }
+        }
+
+        // 3. Fallback for theme/occasion collections
+        if (baseProducts.length === 0) {
+          const normSlug = (activeCollection.slug || activeCollection.name || '').toLowerCase();
+          const matched = localFallbackProducts.filter(p => {
+            const occ = (p.occasion || '').toLowerCase();
+            const cat = (p.category || '').toLowerCase();
+            if (normSlug.includes('festive') && (occ.includes('festive') || cat.includes('ethnic'))) return true;
+            if (normSlug.includes('bridal') && (occ.includes('bridal') || occ.includes('wedding'))) return true;
+            if (normSlug.includes('modest') && (occ.includes('modest') || cat.includes('modest'))) return true;
+            if (normSlug.includes('party') && (occ.includes('party') || occ.includes('evening'))) return true;
+            if (normSlug.includes('ethnic') && (occ.includes('ethnic') || cat.includes('ethnic'))) return true;
+            return false;
+          });
+          if (matched.length > 0) {
+            baseProducts = matched;
+          }
+        }
+
+        if (controller.signal.aborted) return;
+
+        // Apply Search Query filter
+        let filtered = [...baseProducts];
+        if (debouncedQuery) {
+          const q = debouncedQuery.toLowerCase();
+          filtered = filtered.filter(
+            p =>
+              p.name.toLowerCase().includes(q) ||
+              p.description?.toLowerCase().includes(q) ||
+              p.category?.toString().toLowerCase().includes(q)
+          );
+        }
+
+        // Apply Price filter
+        if (priceFilter === 'under1k') {
+          filtered = filtered.filter(p => p.price < 1000);
+        } else if (priceFilter === '1k-2k') {
+          filtered = filtered.filter(p => p.price >= 1000 && p.price <= 2000);
+        } else if (priceFilter === 'above2k') {
+          filtered = filtered.filter(p => p.price > 2000);
+        }
+
+        // Apply Sort
+        if (sortBy === 'price_asc') {
+          filtered.sort((a, b) => a.price - b.price);
+        } else if (sortBy === 'price_desc') {
+          filtered.sort((a, b) => b.price - a.price);
+        } else if (sortBy === 'featured') {
+          filtered.sort((a, b) => (b.isFeatured ? 1 : 0) - (a.isFeatured ? 1 : 0));
+        } else if (sortBy === 'newest') {
+          filtered.sort((a, b) => {
+            if (a.createdAt && b.createdAt) {
+              return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+            }
+            return (b.isNewArrival ? 1 : 0) - (a.isNewArrival ? 1 : 0);
+          });
+        }
+
+        // Pagination
+        const total = filtered.length;
+        const totalPages = Math.max(1, Math.ceil(total / PAGE_LIMIT));
+        const paginated = filtered.slice((currentPage - 1) * PAGE_LIMIT, currentPage * PAGE_LIMIT);
+
+        setCollectionProducts(paginated);
+        setPagination({
+          page: currentPage,
+          limit: PAGE_LIMIT,
+          total,
+          totalPages,
+          hasNextPage: currentPage < totalPages,
+          hasPreviousPage: currentPage > 1,
+        });
       } catch (err) {
         if (controller.signal.aborted || isRequestCanceled(err)) return;
-        console.warn('Failed to load products from /products/search in CollectionPage:', err);
-        // Fallback to local products (only when the request itself failed)
-        if (!controller.signal.aborted) {
-          const local = localFallbackRef.current.filter(p => {
-            if (debouncedQuery && !p.name.toLowerCase().includes(debouncedQuery.toLowerCase())) return false;
-            return true;
-          });
-          setCollectionProducts(local);
-          setPagination({
-            page: 1,
-            limit: PAGE_LIMIT,
-            total: local.length,
-            totalPages: Math.ceil(local.length / PAGE_LIMIT) || 1,
-            hasNextPage: false,
-            hasPreviousPage: false,
-          });
-        }
+        console.warn('Failed to load products in CollectionPage:', err);
+        setCollectionProducts([]);
       } finally {
         if (!controller.signal.aborted) setIsLoading(false);
       }
@@ -188,7 +325,7 @@ export const CollectionPage: React.FC = () => {
 
     loadProducts();
     return () => controller.abort();
-  }, [collectionResolved, activeCollection, debouncedQuery, sortBy, priceFilter, currentPage]);
+  }, [collectionResolved, activeCollection, debouncedQuery, sortBy, priceFilter, currentPage, localFallbackProducts]);
 
   // Check for live collection banner configured in Admin Studio
   const liveCollectionBanner = (banners || []).find(
@@ -221,6 +358,61 @@ export const CollectionPage: React.FC = () => {
   };
 
   const hasActiveFilters = searchQuery !== '' || priceFilter !== 'all' || sortBy !== 'newest';
+
+  if (collectionLoadError) {
+    return (
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-20 sm:py-28 text-center space-y-5">
+        <h1 className="font-serif text-2xl sm:text-3xl text-allura-text font-normal">We couldn't load this collection</h1>
+        <p className="text-xs sm:text-sm font-sans text-allura-muted">Please check your connection and try again.</p>
+        <button
+          type="button"
+          onClick={() => setCollectionAttempt(a => a + 1)}
+          className="inline-flex items-center gap-2 min-h-11 px-6 bg-allura-darkBrown hover:bg-allura-softBrown text-white text-xs font-sans font-bold tracking-wider uppercase rounded-xl transition-colors"
+        >
+          <RotateCcw size={14} />
+          <span>Retry</span>
+        </button>
+      </div>
+    );
+  }
+
+  if (isUnavailable) {
+    return (
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-20 sm:py-28 text-center space-y-5">
+        <span className="text-[11px] font-sans font-bold tracking-[0.25em] uppercase text-allura-goldDark block">
+          COLLECTION UNAVAILABLE
+        </span>
+        <h1 className="font-serif text-2xl sm:text-4xl text-allura-text font-normal">
+          This collection is no longer available
+        </h1>
+        <p className="text-xs sm:text-sm font-sans text-allura-muted max-w-md mx-auto">
+          It may have been retired or is not live yet. Explore our latest pieces in the shop instead.
+        </p>
+        <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+          <Link
+            to="/shop"
+            className="inline-flex items-center gap-2 min-h-11 px-6 bg-allura-darkBrown hover:bg-allura-softBrown text-white text-xs font-sans font-bold tracking-wider uppercase rounded-xl transition-colors"
+          >
+            <span>Shop all</span>
+            <ArrowRight size={14} />
+          </Link>
+        </div>
+        {storeCollections.length > 0 && (
+          <div className="flex flex-wrap justify-center gap-2.5 pt-6">
+            {storeCollections.slice(0, 6).map(col => (
+              <Link
+                key={col.id}
+                to={`/collections/${col.slug || col.id}`}
+                className="px-4 py-2 rounded-full border border-allura-border bg-allura-bg hover:border-allura-gold hover:bg-allura-bgSecondary text-xs font-sans text-allura-text transition-colors"
+              >
+                {col.name}
+              </Link>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 sm:space-y-12 pb-16">
@@ -451,8 +643,8 @@ export const CollectionPage: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          {(storeCollections.length > 0 ? storeCollections : collectionsData)
-            .filter(c => c.slug !== slug)
+          {storeCollections
+            .filter(c => c.slug !== slug && c.id !== slug && (!activeCollection || c.name?.toLowerCase() !== activeCollection.name?.toLowerCase()))
             .slice(0, 4)
             .map(col => {
               const rawImg = typeof (col as any).image === 'string'
@@ -462,7 +654,7 @@ export const CollectionPage: React.FC = () => {
               return (
                 <Link
                   key={col.id}
-                  to={`/collections/${col.slug}`}
+                  to={`/collections/${col.slug || col.id}`}
                   className="group relative aspect-[4/3] rounded-lg overflow-hidden border border-allura-border/60 shadow-xs"
                 >
                   <img

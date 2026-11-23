@@ -47,6 +47,8 @@ export const NotificationBell: React.FC = () => {
   // Close when the page is scrolled while open (scrolling the list itself keeps it open)
   useCloseOnScroll(isOpen, containerRef, close);
 
+  const unreadNotifications = notifications.filter(n => !n.isRead);
+
   return (
     <div className="relative" ref={containerRef}>
       <button
@@ -86,9 +88,10 @@ export const NotificationBell: React.FC = () => {
 
           <div className="max-h-96 overflow-y-auto">
             <NotificationList
-              notifications={notifications}
+              notifications={unreadNotifications}
               isLoading={isLoadingNotifications}
               error={notificationsError}
+              emptyMessage="You're all caught up"
               onRetry={refreshNotifications}
               onMarkAsRead={markNotificationAsRead}
               onAfterNavigate={close}
@@ -100,7 +103,7 @@ export const NotificationBell: React.FC = () => {
             onClick={close}
             className="block text-center py-2.5 text-xs font-sans font-bold text-allura-goldDark hover:bg-allura-bgSecondary/60 border-t border-allura-border transition-colors"
           >
-            View all
+            View all notifications
           </Link>
         </div>
       )}

@@ -103,6 +103,7 @@ export const AdminCustomerDetailPage: React.FC = () => {
           </div>
           <p className="text-xs font-sans text-stone-500 mt-1">
             Patron since {customer.createdDate || '—'} • Total Lifetime Orders: {customer.ordersCount ?? 0}
+            {customer.lastOrderDate ? ` • Last Order: ${customer.lastOrderDate}` : ''}
           </p>
         </div>
 
@@ -132,14 +133,16 @@ export const AdminCustomerDetailPage: React.FC = () => {
         <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-xs space-y-1">
           <span className="text-[10px] font-sans font-bold uppercase text-stone-400">Total Lifetime Spend</span>
           <p className="font-serif text-2xl font-bold text-[#561C08]">
-            ₹ {(customer.totalSpent ?? 0).toLocaleString('en-IN')}
+            {customer.currency === 'USD' ? '$' : '₹'}{' '}
+            {(customer.totalSpent ?? 0).toLocaleString('en-IN', {
+              minimumFractionDigits: Number.isInteger(customer.totalSpent ?? 0) ? 0 : 2,
+              maximumFractionDigits: 2,
+            })}
           </p>
         </div>
         <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-xs space-y-1">
-          <span className="text-[10px] font-sans font-bold uppercase text-stone-400">Preferred Size</span>
-          <p className="font-serif text-2xl font-bold text-allura-goldDark">
-            {customer.sizePreferences?.preferredSize || '—'}
-          </p>
+          <span className="text-[10px] font-sans font-bold uppercase text-stone-400">Email Address</span>
+          <p className="text-xs font-medium text-stone-800 truncate" title={customer.email}>{customer.email || '—'}</p>
         </div>
         <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-xs space-y-1">
           <span className="text-[10px] font-sans font-bold uppercase text-stone-400">Primary Contact</span>

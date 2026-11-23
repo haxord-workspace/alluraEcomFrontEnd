@@ -25,14 +25,28 @@ const formatPatronDate = (value?: string | null): string => {
   if (!value) return '';
   const d = new Date(value);
   return Number.isNaN(d.getTime())
-    ? ''
+    ? String(value)
     : d.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
 };
 
-const circleTierLabel = (tier: 'PLATINUM' | 'GOLD' | null | undefined): CustomerProfile['circleTier'] => {
-  if (tier === 'PLATINUM') return 'Platinum';
-  if (tier === 'GOLD') return 'Gold';
-  return undefined;
+const circleTierLabel = (tier: unknown): CustomerProfile['circleTier'] => {
+  if (!tier || typeof tier !== 'string') return undefined;
+  const upper = tier.trim().toUpperCase();
+  if (upper === 'PLATINUM') return 'Platinum';
+  if (upper === 'GOLD') return 'Gold';
+  if (upper === 'PRIVILEGE') return 'Privilege';
+  if (upper === 'NONE' || upper === 'NULL') return undefined;
+  return (tier.charAt(0).toUpperCase() + tier.slice(1).toLowerCase()) as CustomerProfile['circleTier'];
+};
+
+const formatCustomerPhone = (phone: any): string => {
+  if (!phone) return '';
+  if (typeof phone === 'string') return phone;
+  if (typeof phone === 'object' && phone.number) {
+    const code = phone.countryCode || '+91';
+    return `${code}${phone.number}`.trim();
+  }
+  return '';
 };
 
 /**
@@ -44,17 +58,19 @@ const circleTierLabel = (tier: 'PLATINUM' | 'GOLD' | null | undefined): Customer
 export const mapAdminCustomer = (raw: any): CustomerProfile => {
   const circleTier = raw?.circleTier ?? null;
   const addresses: SavedAddress[] = Array.isArray(raw?.addresses) ? raw.addresses.map(mapAddress) : [];
+  const isCircleMember = Boolean(circleTier && String(circleTier).toUpperCase() !== 'NONE');
   return {
     id: raw?.id || raw?._id || '',
     name: raw?.name || '',
     email: raw?.email || '',
-    phone: raw?.phone || '',
-    isCircleMember: circleTier !== null,
+    phone: formatCustomerPhone(raw?.phone),
+    isCircleMember,
     circleTier: circleTierLabel(circleTier),
     addresses,
-    totalSpent: firstNumber(raw?.lifetimeSpend) ?? 0,
+    totalSpent: firstNumber(raw?.lifetimeSpend, raw?.totalSpent) ?? 0,
     ordersCount: firstNumber(raw?.ordersCount) ?? 0,
-    createdDate: formatPatronDate(raw?.patronSince),
+    currency: raw?.currency || 'INR',
+    createdDate: formatPatronDate(raw?.patronSince || raw?.createdAt),
     lastOrderDate: formatPatronDate(raw?.lastOrderDate),
   };
 };
@@ -77,7 +93,19 @@ export const getAdminCustomers = async (
     signal,
   });
   const data = unwrap(response);
-  const list = Array.isArray(data) ? data : data?.customers || data?.items || [];
+  const list = Array.isArray(data)
+    ? data
+    : Array.isArray(data?.customers)
+    ? data.customers
+    : Array.isArray(data?.items)
+    ? data.items
+    : Array.isArray(data?.data)
+    ? data.data
+    : Array.isArray(data?.results)
+    ? data.results
+    : Array.isArray(data?.patrons)
+    ? data.patrons
+    : [];
   const customers = (Array.isArray(list) ? list : []).map(mapAdminCustomer);
 
   // The documented response has no total/page/totalPages — but if the backend
@@ -114,8 +142,9 @@ export const getAdminCustomerStats = async (days?: number): Promise<AdminCustome
 export const getAdminCustomer = async (id: string): Promise<CustomerProfile & { recentOrders: AdminCustomerRecentOrder[] }> => {
   const response = await adminApi.get(`/admin/customers/${id}`);
   const data = unwrap(response);
+  const root = data?.customer || data?.user || data;
   return {
-    ...mapAdminCustomer(data),
-    recentOrders: Array.isArray(data?.recentOrders) ? data.recentOrders : [],
+    ...mapAdminCustomer(root),
+    recentOrders: Array.isArray(root?.recentOrders) ? root.recentOrders : Array.isArray(data?.recentOrders) ? data.recentOrders : [],
   };
 };

@@ -8,7 +8,6 @@ import { invalidateMyReviews } from '../../hooks/useMyReviews';
 import { deleteMyReview } from '../../service/reviews';
 import { toReviewApiError } from '../../service/reviewErrors';
 import { MyReviewCard } from '../../components/reviews/MyReviewCard';
-import { ReviewCardsSkeleton } from '../../components/reviews/ProductReviewsSkeleton';
 import { ReviewsUnavailable } from '../../components/reviews/ReviewsUnavailable';
 import { ReviewImageLightbox } from '../../components/reviews/ReviewImageLightbox';
 import { LazyReviewFormModal } from '../../components/reviews/LazyReviewFormModal';
@@ -16,6 +15,29 @@ import type { ReviewFormTarget } from '../../components/reviews/ReviewFormModal'
 import type { CustomerReview, ReviewImage } from '../../types/reviews';
 
 const PAGE_SIZE = 10;
+
+/** Loading placeholder shaped like MyReviewCard (thumbnail, text, action bar) */
+const MyReviewCardsSkeleton: React.FC<{ count?: number }> = ({ count = 3 }) => (
+  <div className="space-y-4 sm:space-y-5" role="status" aria-label="Loading your reviews">
+    {[...Array(count)].map((_, idx) => (
+      <div key={idx} className="bg-allura-card border border-allura-border rounded-2xl shadow-subtle overflow-hidden animate-pulse" aria-hidden="true">
+        <div className="flex items-start gap-3.5 sm:gap-5 p-4 sm:p-6">
+          <div className="w-20 h-24 sm:w-24 sm:h-28 rounded-xl bg-stone-200 flex-shrink-0" />
+          <div className="flex-1 space-y-2.5 pt-1">
+            <div className="h-2.5 w-16 bg-stone-200 rounded" />
+            <div className="h-4 w-3/4 bg-stone-300/80 rounded" />
+            <div className="h-3 w-1/2 bg-stone-200 rounded" />
+          </div>
+        </div>
+        <div className="px-4 sm:px-6 pb-5 space-y-2">
+          <div className="h-3 w-full bg-stone-200 rounded" />
+          <div className="h-3 w-5/6 bg-stone-200 rounded" />
+        </div>
+        <div className="h-[68px] bg-allura-bg/40 border-t border-allura-border/60" />
+      </div>
+    ))}
+  </div>
+);
 
 const readPage = (value: string | null): number => {
   const n = Number(value);
@@ -96,22 +118,29 @@ const MyReviewsPage: React.FC = () => {
   const onOpenImage = useCallback((images: ReviewImage[], index: number) => setLightbox({ images, index }), []);
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-16 space-y-8">
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-14 space-y-6 sm:space-y-8">
       {/* Header */}
-      <div className="border-b border-allura-border/60 pb-6">
-        <Link to="/account" className="inline-flex items-center gap-1 min-h-11 text-xs font-sans text-allura-muted hover:text-allura-text transition-colors">
+      <div className="border-b border-allura-border/60 pb-5 sm:pb-6 space-y-3">
+        <Link to="/account" className="inline-flex items-center gap-1 min-h-11 -ml-1 px-1 text-xs font-sans text-allura-muted hover:text-allura-text transition-colors">
           <ArrowLeft size={13} />
           <span>Back to Account</span>
         </Link>
-        <h1 className="font-serif text-3xl sm:text-4xl text-allura-text font-normal">My Reviews</h1>
-        <p className="text-xs font-sans text-allura-muted mt-1">
-          Reviews you've written. You can edit or delete them at any time.
-        </p>
+        <div className="flex items-center gap-3 sm:gap-4">
+          <span className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-allura-bgSecondary text-allura-goldDark border border-allura-border flex items-center justify-center flex-shrink-0">
+            <MessageSquareText size={20} />
+          </span>
+          <div className="min-w-0">
+            <h1 className="font-serif text-2xl sm:text-4xl text-allura-text font-normal leading-tight">My Reviews</h1>
+            <p className="text-xs font-sans text-allura-muted mt-0.5">
+              Reviews you've written. You can edit or delete them at any time.
+            </p>
+          </div>
+        </div>
       </div>
 
       <div aria-live="polite" aria-busy={data.status === 'loading'}>
         {data.status === 'loading' ? (
-          <ReviewCardsSkeleton count={3} />
+          <MyReviewCardsSkeleton count={3} />
         ) : data.status === 'error' ? (
           // 401 is handled by the existing session flow (ProtectedRoute redirects once signed out)
           <ReviewsUnavailable message={data.error?.message} onRetry={reload} />
@@ -133,11 +162,17 @@ const MyReviewsPage: React.FC = () => {
             </Link>
           </div>
         ) : (
-          <div className="space-y-5">
-            <p className="text-[11px] font-sans text-allura-muted">
-              {total} {total === 1 ? 'review' : 'reviews'}
-              {totalPages > 1 && ` · Page ${Math.min(page, totalPages)} of ${totalPages}`}
-            </p>
+          <div className="space-y-4 sm:space-y-5">
+            <div className="flex flex-wrap items-center gap-2 text-[11px] font-sans">
+              <span className="inline-flex items-center px-3 py-1 rounded-full bg-allura-bgSecondary border border-allura-border text-allura-darkBrown font-bold">
+                {total} {total === 1 ? 'review' : 'reviews'}
+              </span>
+              {totalPages > 1 && (
+                <span className="text-allura-muted">
+                  Page {Math.min(page, totalPages)} of {totalPages}
+                </span>
+              )}
+            </div>
             {data.reviews.map(review => (
               <MyReviewCard
                 key={review.id}

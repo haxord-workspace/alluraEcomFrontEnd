@@ -6,10 +6,15 @@ import { Provider } from 'react-redux'
 import { store } from './store'
 import { GoogleOAuthProvider } from '@react-oauth/google'
 
+const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+if (!googleClientId) {
+  console.error('VITE_GOOGLE_CLIENT_ID is not set — Google sign-in disabled');
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <Provider store={store}>
-      <GoogleOAuthProvider clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID || "YOUR_GOOGLE_CLIENT_ID"}>
+      <GoogleOAuthProvider clientId={googleClientId ?? ''}>
         <App />
       </GoogleOAuthProvider>
     </Provider>

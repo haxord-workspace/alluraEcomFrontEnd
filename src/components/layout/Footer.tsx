@@ -87,7 +87,7 @@ export const Footer: React.FC = () => {
                 </Link>
               </li>
               <li>
-                <Link to="/collections/festive-edit" className="hover:text-white transition-colors">
+                <Link to="/collections" className="hover:text-white transition-colors">
                   Collections
                 </Link>
               </li>
@@ -96,6 +96,7 @@ export const Footer: React.FC = () => {
                   Size Guide
                 </Link>
               </li>
+              LOOKBOOK DISABLED (already inside this commented-out column; no nested comment markers)
               <li>
                 <Link to="/lookbook" className="hover:text-white transition-colors">
                   Lookbook
@@ -280,7 +281,7 @@ export const Footer: React.FC = () => {
             {tagline}
           </p>
           <p>
-            Website by <span className="font-semibold text-[#F7E6C8]">Haxord Technologies</span>
+            Developed by <span className="font-semibold text-[#F7E6C8]">Haxord Technologies</span>
           </p>
         </div>
       </div>

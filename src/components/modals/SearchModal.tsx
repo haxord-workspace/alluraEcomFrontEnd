@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { Search, X, ArrowRight, TrendingUp, Loader2, Layers, RotateCcw } from 'lucide-react';
 import { useShop } from '../../context/ShopContext';
 import { searchProducts, isRequestCanceled, getStoreCollections, type StoreCollection } from '../../service/store';
-import { collectionsData } from '../../data/collections';
 import type { Product } from '../../types';
 
 const SEARCH_DEBOUNCE_MS = 350;
@@ -66,7 +65,7 @@ const SearchResultSkeleton: React.FC = () => (
 );
 
 export const SearchModal: React.FC = () => {
-  const { isSearchOpen, setIsSearchOpen, formatPrice } = useShop();
+  const { isSearchOpen, setIsSearchOpen, formatPrice, categories } = useShop();
   const [query, setQuery] = useState('');
   // Results + the exact query they belong to; the empty state is only valid when these match
   const [results, setResults] = useState<Product[]>([]);
@@ -97,28 +96,31 @@ export const SearchModal: React.FC = () => {
     };
   }, []);
 
-  const collectionList = useMemo(() => {
-    if (storeCollections && storeCollections.length > 0) {
-      return storeCollections.map(c => ({
-        name: c.name || (c as any).title || 'Collection',
-        to: c.slug ? `/collections/${c.slug}` : `/shop?collection=${encodeURIComponent(c.name)}`,
-      }));
-    }
-    return collectionsData.map(c => ({
-      name: c.title,
-      to: `/collections/${c.slug}`,
-    }));
-  }, [storeCollections]);
+  // Real collections from the store API only (no static fallback)
+  const collectionList = useMemo(
+    () =>
+      storeCollections
+        .filter(c => c.name || (c as any).title)
+        .map(c => ({
+          name: c.name || (c as any).title,
+          to: c.slug ? `/collections/${c.slug}` : `/shop?collection=${encodeURIComponent(c.name)}`,
+        })),
+    [storeCollections]
+  );
 
-  const popularTags = [
-    'Anarkali Sets',
-    'Bridal Lehengas',
-    'Modest Co-ords',
-    'Festive Silk',
-    'Embroidered Dresses',
-    'Chanderi Kurtas',
-    'Organza Dupattas',
-  ];
+  // Quick-search tags come from the live store categories
+  const popularTags = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          categories
+            .filter(c => !c.status || String(c.status).toUpperCase() === 'ACTIVE')
+            .map(c => c.name?.trim())
+            .filter((name): name is string => !!name)
+        )
+      ).slice(0, 10),
+    [categories]
+  );
 
   useEffect(() => {
     if (isSearchOpen) {
@@ -253,45 +255,49 @@ export const SearchModal: React.FC = () => {
                 Keep typing — enter at least {MIN_QUERY_LENGTH} characters to search.
               </p>
             )}
-            <div>
-              <div className="flex items-center gap-2 text-allura-goldDark text-xs font-sans font-bold tracking-[0.2em] uppercase mb-4">
-                <TrendingUp size={15} />
-                <span>POPULAR SEARCHES</span>
+            {popularTags.length > 0 && (
+              <div>
+                <div className="flex items-center gap-2 text-allura-goldDark text-xs font-sans font-bold tracking-[0.2em] uppercase mb-4">
+                  <TrendingUp size={15} />
+                  <span>POPULAR CATEGORY</span>
+                </div>
+                <div className="flex flex-wrap gap-2.5">
+                  {popularTags.map(tag => (
+                    <button
+                      key={tag}
+                      onClick={() => handleSearchTag(tag)}
+                      className="px-4 py-2 rounded-full border border-allura-border bg-allura-bg hover:border-allura-gold hover:bg-allura-bgSecondary text-xs font-sans text-allura-text transition-all duration-200"
+                    >
+                      {tag}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <div className="flex flex-wrap gap-2.5">
-                {popularTags.map(tag => (
-                  <button
-                    key={tag}
-                    onClick={() => handleSearchTag(tag)}
-                    className="px-4 py-2 rounded-full border border-allura-border bg-allura-bg hover:border-allura-gold hover:bg-allura-bgSecondary text-xs font-sans text-allura-text transition-all duration-200"
-                  >
-                    {tag}
-                  </button>
-                ))}
-              </div>
-            </div>
+            )}
 
-            <div>
-              <div className="flex items-center gap-2 text-allura-goldDark text-xs font-sans font-bold tracking-[0.2em] uppercase mb-4">
-                <Layers size={15} />
-                <span>EXPLORE BY COLLECTION</span>
+            {collectionList.length > 0 && (
+              <div>
+                <div className="flex items-center gap-2 text-allura-goldDark text-xs font-sans font-bold tracking-[0.2em] uppercase mb-4">
+                  <Layers size={15} />
+                  <span>EXPLORE BY COLLECTION</span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {collectionList.map(item => (
+                    <button
+                      key={item.name}
+                      onClick={() => {
+                        setIsSearchOpen(false);
+                        navigate(item.to);
+                      }}
+                      className="p-3.5 rounded-lg border border-allura-border/80 bg-allura-bg/50 hover:bg-allura-bgSecondary text-left transition-colors flex items-center justify-between"
+                    >
+                      <span className="font-serif text-sm font-medium text-allura-text">{item.name}</span>
+                      <ArrowRight size={14} className="text-allura-muted" />
+                    </button>
+                  ))}
+                </div>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {collectionList.map(item => (
-                  <button
-                    key={item.name}
-                    onClick={() => {
-                      setIsSearchOpen(false);
-                      navigate(item.to);
-                    }}
-                    className="p-3.5 rounded-lg border border-allura-border/80 bg-allura-bg/50 hover:bg-allura-bgSecondary text-left transition-colors flex items-center justify-between"
-                  >
-                    <span className="font-serif text-sm font-medium text-allura-text">{item.name}</span>
-                    <ArrowRight size={14} className="text-allura-muted" />
-                  </button>
-                ))}
-              </div>
-            </div>
+            )}
           </div>
         ) : (
           <div>
@@ -322,14 +328,13 @@ export const SearchModal: React.FC = () => {
                   No matching boutique pieces found
                 </h4>
                 <p className="text-xs text-allura-muted max-w-sm mx-auto">
-                  Try searching for keywords like "Anarkali", "Lehenga", "Co-ord", "Festive", or "Velvet".
+                  Try a different keyword or check the spelling.
                 </p>
               </div>
             ) : (
               <div
-                className={`grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-5 transition-opacity duration-200 ${
-                  isLoading && visibleResults.length > 0 ? 'opacity-60' : 'opacity-100'
-                }`}
+                className={`grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-5 transition-opacity duration-200 ${isLoading && visibleResults.length > 0 ? 'opacity-60' : 'opacity-100'
+                  }`}
                 aria-busy={isLoading}
               >
                 {isLoading && visibleResults.length === 0 ? (

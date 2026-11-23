@@ -10,7 +10,7 @@ export const MobileBottomNav: React.FC = () => {
   const navItems = [
     { label: 'Home', to: '/', icon: Home, exact: true },
     { label: 'Shop', to: '/shop', icon: ShoppingBag },
-    { label: 'Collections', to: '/collections/festive-edit', icon: Sparkles },
+    { label: 'Collections', to: '/collections', icon: Sparkles },
     { label: 'Wishlist', to: '/wishlist', icon: Heart, badge: wishlist.length },
     { label: 'Account', to: '/account', icon: UserRound },
   ];

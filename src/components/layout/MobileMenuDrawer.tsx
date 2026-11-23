@@ -4,10 +4,12 @@ import { X, MessageCircle, Phone, MapPin, ChevronRight } from 'lucide-react';
 import { AlluraLogo } from '../common/AlluraLogo';
 import { useShop } from '../../context/ShopContext';
 import { useStoreAddress } from '../../hooks/useStoreAddress';
+import { useStoreCollections } from '../../hooks/useStoreCollections';
 
 export const MobileMenuDrawer: React.FC = () => {
   const { isMobileMenuOpen, setIsMobileMenuOpen } = useShop();
   const { address } = useStoreAddress();
+  const { collections } = useStoreCollections();
 
   if (!isMobileMenuOpen) return null;
 
@@ -45,9 +47,6 @@ export const MobileMenuDrawer: React.FC = () => {
                 { label: 'All Products', to: '/shop' },
                 { label: 'New Arrivals', to: '/shop?filter=new' },
                 { label: 'Best Sellers', to: '/shop?filter=bestseller' },
-                { label: 'Ethnic Wear', to: '/collections/ethnic' },
-                { label: 'Modest Wear', to: '/collections/modest-wear' },
-                { label: 'Party Wear', to: '/collections/party-wear' },
               ].map(item => (
                 <Link
                   key={item.label}
@@ -69,14 +68,13 @@ export const MobileMenuDrawer: React.FC = () => {
             </h3>
             <div className="space-y-1">
               {[
-                { label: 'Festive Edit', to: '/collections/festive-edit' },
-                { label: 'Bridal Edit', to: '/collections/bridal-edit' },
-                { label: 'The Occasion Edit', to: '/collections/party-wear' },
-                { label: 'Everyday Elegance', to: '/collections/ethnic' },
-                { label: 'The Allura Lookbook', to: '/lookbook', badge: 'New' },
+                // Live ACTIVE collections from the API
+                ...collections.slice(0, 8).map(c => ({ label: c.name, to: `/collections/${c.slug}`, badge: undefined as string | undefined })),
+                { label: 'All Collections', to: '/collections', badge: undefined as string | undefined },
+                // { label: 'The Allura Lookbook', to: '/lookbook', badge: 'New' }, // LOOKBOOK DISABLED
               ].map(item => (
                 <Link
-                  key={item.label}
+                  key={item.to}
                   to={item.to}
                   onClick={() => setIsMobileMenuOpen(false)}
                   className="flex items-center justify-between py-2.5 text-sm font-sans text-allura-text hover:text-allura-gold transition-colors border-b border-allura-border/40"

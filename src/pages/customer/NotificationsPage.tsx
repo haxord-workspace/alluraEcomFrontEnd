@@ -17,8 +17,10 @@ import {
   CheckCircle2,
   AlertCircle,
   Share2,
+  Trash2,
 } from 'lucide-react';
 import { useShop } from '../../context/ShopContext';
+import { useConfirm } from '../../context/ConfirmContext';
 import { formatCustomerNotificationView } from '../../utils/userFacingText';
 
 export const NotificationsPage: React.FC = () => {
@@ -26,12 +28,35 @@ export const NotificationsPage: React.FC = () => {
     notifications,
     markNotificationAsRead,
     markAllNotificationsAsRead,
+    deleteNotification,
     isLoadingNotifications,
     notificationsError,
     refreshNotifications,
     enablePushNotifications,
   } = useShop();
+  const confirm = useConfirm();
   const [activeCategory, setActiveCategory] = useState<string>('All');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const handleDelete = async (id: string) => {
+    const ok = await confirm({
+      title: 'Delete notification',
+      message: "Delete this notification? This can't be undone.",
+      confirmLabel: 'Delete',
+      cancelLabel: 'Cancel',
+      isDestructive: true,
+    });
+    if (!ok) return;
+
+    setDeletingId(id);
+    try {
+      await deleteNotification(id);
+    } catch {
+      // Handled in ShopContext with error toasts
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   // Push notification state detection
   const isPushSupported = typeof window !== 'undefined' && 'Notification' in window && 'serviceWorker' in navigator;
@@ -238,7 +263,9 @@ export const NotificationsPage: React.FC = () => {
           <div className="w-12 h-12 rounded-full bg-allura-bgSecondary text-allura-goldDark flex items-center justify-center mx-auto">
             <Bell size={24} />
           </div>
-          <h3 className="font-serif text-lg text-allura-text">No notifications in this category</h3>
+          <h3 className="font-serif text-lg text-allura-text">
+            {activeCategory === 'All' ? 'No notifications yet' : 'No notifications in this category'}
+          </h3>
           <p className="text-xs font-sans text-allura-muted">You are up to date with all your boutique activities.</p>
         </div>
       ) : (
@@ -288,15 +315,33 @@ export const NotificationsPage: React.FC = () => {
                   </div>
                 </div>
 
-                {!notif.isRead && (
+                <div className="flex items-center gap-1 shrink-0 mt-0.5">
+                  {!notif.isRead && (
+                    <button
+                      type="button"
+                      onClick={() => markNotificationAsRead(notif.id)}
+                      title="Mark as read"
+                      aria-label="Mark as read"
+                      className="p-1.5 text-allura-muted hover:text-emerald-700 transition-colors rounded-lg hover:bg-allura-bgSecondary/60"
+                    >
+                      <Check size={16} />
+                    </button>
+                  )}
                   <button
-                    onClick={() => markNotificationAsRead(notif.id)}
-                    title="Mark as read"
-                    className="p-1.5 text-allura-muted hover:text-emerald-700 transition-colors"
+                    type="button"
+                    onClick={() => handleDelete(notif.id)}
+                    disabled={deletingId === notif.id}
+                    title="Delete notification"
+                    aria-label="Delete notification"
+                    className="p-1.5 text-allura-muted hover:text-rose-600 transition-colors rounded-lg hover:bg-rose-50 disabled:opacity-50"
                   >
-                    <Check size={16} />
+                    {deletingId === notif.id ? (
+                      <Loader2 size={16} className="animate-spin text-rose-500" />
+                    ) : (
+                      <Trash2 size={16} />
+                    )}
                   </button>
-                )}
+                </div>
               </div>
             );
           })}

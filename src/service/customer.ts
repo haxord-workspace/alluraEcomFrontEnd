@@ -13,6 +13,7 @@ export interface CustomerProfileResponse {
   phone?: {
     countryCode: string;
     number: string;
+    isVerified?: boolean;
   };
   avatarUrl?: string;
   [key: string]: any;
@@ -43,7 +44,11 @@ const mapProfile = (raw: any): CustomerProfileResponse => {
   const phoneRaw = root.phone ?? p.phone;
   const phone =
     phoneRaw && typeof phoneRaw === 'object' && phoneRaw.number
-      ? { countryCode: phoneRaw.countryCode || '+91', number: String(phoneRaw.number) }
+      ? {
+          countryCode: phoneRaw.countryCode || '+91',
+          number: String(phoneRaw.number),
+          ...(typeof phoneRaw.isVerified === 'boolean' ? { isVerified: phoneRaw.isVerified } : {}),
+        }
       : typeof phoneRaw === 'string' && phoneRaw.trim()
       ? { countryCode: '+91', number: phoneRaw.trim() }
       : undefined;

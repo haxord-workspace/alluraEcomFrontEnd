@@ -1,7 +1,46 @@
 import { useCallback, useEffect, useState } from 'react';
 import { getMyReviews } from '../service/reviews';
+import { getStoreProduct } from '../service/store';
 import { isReviewRequestAborted, toReviewApiError } from '../service/reviewErrors';
 import type { CustomerReview, ReviewApiError, ReviewPagination } from '../types/reviews';
+
+type ProductInfo = { name?: string; image?: string; slug?: string } | null;
+
+// Session cache so paging back and forth doesn't refetch the same products
+const productInfoCache = new Map<string, Promise<ProductInfo>>();
+
+const loadProductInfo = (productId: string): Promise<ProductInfo> => {
+  let pending = productInfoCache.get(productId);
+  if (!pending) {
+    pending = getStoreProduct(productId)
+      .then(p => ({ name: p.name, image: p.images.gallery?.[0] || p.images.primary, slug: p.slug }))
+      .catch(() => {
+        productInfoCache.delete(productId); // allow a retry later
+        return null;
+      });
+    productInfoCache.set(productId, pending);
+  }
+  return pending;
+};
+
+/**
+ * GET /customer/reviews may return only a productId (no name / image / slug).
+ * Fill the gaps from GET /store/products/:id so each card shows its product.
+ */
+const withProductDetails = (reviews: CustomerReview[]): Promise<CustomerReview[]> =>
+  Promise.all(
+    reviews.map(async review => {
+      if (!review.productId || (review.productName && review.productImage && review.productSlug)) return review;
+      const info = await loadProductInfo(review.productId);
+      if (!info) return review;
+      return {
+        ...review,
+        productName: review.productName || info.name,
+        productImage: review.productImage || info.image,
+        productSlug: review.productSlug || info.slug,
+      };
+    })
+  );
 
 interface PageResult {
   key: string;
@@ -23,7 +62,10 @@ export const useMyReviewsPage = (page: number, limit: number) => {
   useEffect(() => {
     const controller = new AbortController();
     getMyReviews({ page, limit }, { signal: controller.signal })
-      .then(data => setResult({ key, ...data }))
+      .then(async data => {
+        const reviews = await withProductDetails(data.reviews);
+        if (!controller.signal.aborted) setResult({ key, ...data, reviews });
+      })
       .catch(err => {
         if (isReviewRequestAborted(err)) return;
         setError({ key, error: toReviewApiError(err, 'read', 'Could not load your reviews.') });

@@ -1,30 +1,68 @@
-import React, { useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import {
-  ArrowLeft,
-  CheckCircle2,
-  Upload,
-  ShieldCheck,
-  ArrowRight
-} from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { useParams, useSearchParams, Link, Navigate } from 'react-router-dom';
+import { ArrowLeft, MessageCircle, Info } from 'lucide-react';
 import { useShop } from '../../context/ShopContext';
-import type { ReturnReason } from '../../types';
 import { useCustomerOrder } from '../../hooks/useCustomerOrder';
+import { ItemVariantMeta } from '../../components/common/ItemVariantMeta';
+import { getReturnEligibility, RETURN_WINDOW_DAYS } from '../../utils/returnEligibility';
+import { normalizeWhatsAppNumber, openWhatsApp } from '../../utils/whatsapp';
+import {
+  buildReturnWhatsAppUrl,
+  getItemDisplayPrice,
+  type ReturnRequestType,
+} from '../../utils/buildReturnWhatsAppMessage';
+
+const REQUEST_TYPES: { value: ReturnRequestType; label: string; hint: string }[] = [
+  { value: 'Return', label: 'Return', hint: 'Send the item back' },
+  { value: 'Exchange', label: 'Exchange', hint: 'Swap for another size / colour' },
+];
+
+const RETURN_REASONS = [
+  'Size issue',
+  'Wrong item received',
+  'Damaged / defective',
+  'Color different from image',
+  'Quality not as expected',
+  'Changed my mind',
+  'Other',
+] as const;
+
+const WHATSAPP_UNAVAILABLE = 'WhatsApp support is not available right now, please try again later';
+
+const labelClass = 'block text-[11px] font-sans font-bold uppercase tracking-wider text-allura-muted mb-2';
+const errorClass = 'text-[11px] font-sans text-rose-700 mt-1.5';
+
+type Field = 'type' | 'reason' | 'comments';
 
 export const OrderReturnPage: React.FC = () => {
   const { orderId } = useParams<{ orderId: string }>();
-  const { submitReturnRequest, customer } = useShop();
+  const [searchParams] = useSearchParams();
+  const { storeSettings, showToast, formatExactPrice } = useShop();
   const { order, isLoading: isLoadingOrder } = useCustomerOrder(orderId);
 
-  const [step, setStep] = useState<number>(1);
-  const [selectedItemIdx, setSelectedItemIdx] = useState<number>(0);
-  const [reason, setReason] = useState<ReturnReason>('Size issue');
-  const [reasonDetail, setReasonDetail] = useState('');
-  const [preference, setPreference] = useState<'Exchange for different size' | 'Store Credit' | 'Refund to source'>('Exchange for different size');
-  const [exchangeSize, setExchangeSize] = useState('S');
-  const [uploadedPhotos, setUploadedPhotos] = useState<string[]>([]);
-  const [isSubmitted, setIsSubmitted] = useState(false);
-  const [returnRef, setReturnRef] = useState('');
+  // The product comes from the "Return or Exchange Request" button it was opened from (?item=<index>)
+  const itemParam = searchParams.get('item');
+  const itemIndex = itemParam !== null && /^\d+$/.test(itemParam) ? Number(itemParam) : -1;
+  const item = order?.items[itemIndex];
+
+  const [requestType, setRequestType] = useState<ReturnRequestType | ''>('');
+  /** Quantity to return / exchange; null until changed, meaning the full ordered quantity */
+  const [quantity, setQuantity] = useState<number | null>(null);
+  const [reason, setReason] = useState('');
+  const [comments, setComments] = useState('');
+  const [preferredVariant, setPreferredVariant] = useState('');
+  const [touched, setTouched] = useState<Partial<Record<Field, boolean>>>({});
+
+  const touch = (field: Field) => setTouched(prev => (prev[field] ? prev : { ...prev, [field]: true }));
+
+  const errors = useMemo(() => {
+    const e: Partial<Record<Field, string>> = {};
+    if (!requestType) e.type = 'Choose Return or Exchange.';
+    if (!reason) e.reason = 'Choose a reason.';
+    if (reason === 'Other' && !comments.trim()) e.comments = 'Please tell us more when the reason is "Other".';
+    return e;
+  }, [requestType, reason, comments]);
+  const isValid = Object.keys(errors).length === 0;
 
   if (isLoadingOrder) {
     return (
@@ -46,375 +84,242 @@ export const OrderReturnPage: React.FC = () => {
     );
   }
 
-  const selectedItem = order.items[selectedItemIdx] || order.items[0];
+  const eligibility = getReturnEligibility(order);
 
-  const reasonsList: ReturnReason[] = [
-    'Size issue',
-    'Color difference',
-    'Damaged product',
-    'Wrong product',
-    'Fit & drape preference',
-    'Other',
-  ];
+  const header = (
+    <div>
+      <Link
+        to={`/account/orders/${order.id}`}
+        className="inline-flex items-center gap-1.5 text-xs font-sans text-allura-muted hover:text-allura-text transition-colors mb-2"
+      >
+        <ArrowLeft size={14} />
+        <span>Back to Order {order.orderNumber}</span>
+      </Link>
+      <h1 className="font-serif text-2xl sm:text-4xl text-allura-text font-normal">Return or Exchange Request</h1>
+      <p className="text-xs font-sans text-allura-muted mt-1">
+        Easy {RETURN_WINDOW_DAYS}-day exchange from the date of delivery. Our team will continue with you on WhatsApp.
+      </p>
+    </div>
+  );
 
-  const handlePhotoUploadMock = () => {
-    setUploadedPhotos(prev => [...prev, '/images/best-sellers/blush-modest-elegance.jpeg']);
-  };
-
-  const handleSubmitReturn = (e: React.FormEvent) => {
-    e.preventDefault();
-    const req = submitReturnRequest({
-      orderId: order.id,
-      orderNumber: order.orderNumber,
-      customerName: customer?.name || order.customer.name,
-      customerEmail: customer?.email || order.customer.email,
-      customerPhone: customer?.phone || order.customer.phone,
-      items: [
-        {
-          productName: selectedItem.product.name,
-          size: selectedItem.selectedSize,
-          color: selectedItem.selectedColor.name,
-          sku: selectedItem.sku,
-          price: selectedItem.unitPrice,
-          image: selectedItem.product.images.primary,
-          quantity: selectedItem.quantity,
-        },
-      ],
-      reason,
-      reasonDetail,
-      preference,
-      exchangeSize: preference === 'Exchange for different size' ? exchangeSize : undefined,
-      pickupAddress: order.shippingAddress,
-      images: uploadedPhotos,
-    });
-
-    setReturnRef(req.id);
-    setIsSubmitted(true);
-  };
-
-  if (isSubmitted) {
+  if (!eligibility.eligible) {
     return (
-      <div className="max-w-xl mx-auto px-4 py-16 text-center space-y-6 animate-slide-up">
-        <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto">
-          <CheckCircle2 size={36} />
-        </div>
-
-        <span className="text-[10px] font-sans font-bold tracking-[0.25em] uppercase text-allura-goldDark">
-          REQUEST REGISTERED
-        </span>
-
-        <h1 className="font-serif text-3xl sm:text-4xl text-allura-text font-normal">
-          Return / Exchange Initiated
-        </h1>
-
-        <div className="bg-allura-card border border-allura-border rounded-2xl p-6 text-left space-y-3 shadow-subtle text-xs font-sans">
-          <div className="flex justify-between items-center pb-3 border-b border-allura-border/60">
-            <div>
-              <p className="text-allura-muted uppercase tracking-wider text-[10px]">Reference Number</p>
-              <p className="font-serif text-base font-bold text-allura-darkBrown uppercase">{returnRef}</p>
-            </div>
-            <span className="bg-blue-100 text-blue-800 font-semibold px-2 py-0.5 rounded text-[11px]">
-              Under Review
-            </span>
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-16 space-y-6">
+        {header}
+        <div className="bg-allura-card border border-allura-border rounded-2xl p-5 sm:p-6 shadow-subtle flex items-start gap-3 text-xs font-sans text-allura-text">
+          <Info size={18} className="text-allura-goldDark shrink-0 mt-0.5" />
+          <div className="space-y-3">
+            <p>{eligibility.reason}</p>
+            <Link
+              to={`/account/orders/${order.id}`}
+              className="inline-block px-5 py-2.5 bg-allura-darkBrown hover:bg-allura-softBrown text-white text-xs font-sans font-bold uppercase tracking-wider rounded-xl transition-colors"
+            >
+              Back to Order
+            </Link>
           </div>
-
-          <p><strong>Item:</strong> {selectedItem.product.name} ({selectedItem.selectedSize})</p>
-          <p><strong>Preference:</strong> {preference} {preference === 'Exchange for different size' && `(New Size: ${exchangeSize})`}</p>
-          <p><strong>Pickup Address:</strong> {order.shippingAddress.addressLine1}, {order.shippingAddress.city}</p>
-          <p className="text-emerald-800 bg-emerald-50 p-2.5 rounded-lg border border-emerald-200 mt-2">
-            Our atelier quality team will review your request within 24 hours. Delhivery doorstep pickup will be scheduled automatically.
-          </p>
-        </div>
-
-        <div className="flex gap-3 justify-center pt-2">
-          <Link
-            to="/account/orders"
-            className="px-6 py-2.5 bg-allura-darkBrown hover:bg-allura-softBrown text-white text-xs font-sans font-bold uppercase tracking-wider rounded-xl transition-colors"
-          >
-            View All Orders
-          </Link>
         </div>
       </div>
     );
   }
 
+  // No (or an unknown) product picked: send them back to choose one on the order page
+  if (!item) {
+    return <Navigate to={`/account/orders/${order.id}`} replace />;
+  }
+
+  const selectedQty = Math.min(Math.max(quantity ?? item.quantity, 1), item.quantity);
+
+  const handleSubmit = (e: React.SubmitEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setTouched({ type: true, reason: true, comments: true });
+    if (!isValid || !requestType) return;
+
+    const number = normalizeWhatsAppNumber(storeSettings?.boutiqueProfile?.whatsappNumber);
+    if (!number) {
+      showToast(WHATSAPP_UNAVAILABLE, 'error');
+      return;
+    }
+
+    const url = buildReturnWhatsAppUrl(number, order, {
+      type: requestType,
+      items: [{ item, quantity: selectedQty }],
+      reason,
+      comments,
+      preferredVariant: requestType === 'Exchange' ? preferredVariant : undefined,
+    });
+    // Opened synchronously inside the submit handler so popup blockers allow it
+    openWhatsApp(url);
+  };
+
+  const deadlineText = eligibility.deadline?.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+
   return (
-    <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-16 space-y-8">
-      {/* Header */}
-      <div>
-        <Link
-          to={`/account/orders/${order.id}`}
-          className="inline-flex items-center gap-1.5 text-xs font-sans text-allura-muted hover:text-allura-text transition-colors mb-2"
-        >
-          <ArrowLeft size={14} />
-          <span>Back to Order #{order.orderNumber}</span>
-        </Link>
-        <h1 className="font-serif text-3xl sm:text-4xl text-allura-text font-normal">
-          Return or Exchange Request
-        </h1>
-        <p className="text-xs font-sans text-allura-muted mt-1">
-          Complimentary doorstep return and size exchange within 7 days of delivery.
+    <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-16 space-y-6 sm:space-y-8">
+      {header}
+
+      <form
+        onSubmit={handleSubmit}
+        noValidate
+        className="bg-allura-card border border-allura-border rounded-2xl p-4 sm:p-8 shadow-luxury space-y-7"
+      >
+        <p className="text-[11px] font-sans text-allura-muted bg-allura-bg/60 border border-allura-border rounded-xl px-3 py-2">
+          Eligible until <strong className="text-allura-text">{deadlineText}</strong>
         </p>
-      </div>
 
-      {/* Progress Tabs */}
-      <div className="flex justify-between items-center bg-allura-card border border-allura-border rounded-xl p-3 text-xs font-sans">
-        {['1. Select Item', '2. Reason', '3. Preference', '4. Confirmation'].map((stepLabel, idx) => (
-          <span
-            key={idx}
-            className={`font-semibold ${
-              step === idx + 1 ? 'text-allura-goldDark' : step > idx + 1 ? 'text-emerald-700' : 'text-allura-muted'
-            }`}
-          >
-            {stepLabel}
-          </span>
-        ))}
-      </div>
-
-      <div className="bg-allura-card border border-allura-border rounded-2xl p-6 sm:p-8 shadow-luxury space-y-6">
-
-        {/* Step 1: Select Item */}
-        {step === 1 && (
-          <div className="space-y-4">
-            <h3 className="font-serif text-xl text-allura-text font-normal">Select Item to Return / Exchange</h3>
-            <div className="space-y-3">
-              {order.items.map((item, idx) => (
-                <div
-                  key={idx}
-                  onClick={() => setSelectedItemIdx(idx)}
-                  className={`p-4 rounded-xl border flex items-center gap-4 cursor-pointer transition-all ${
-                    selectedItemIdx === idx
-                      ? 'border-allura-gold bg-allura-gold/10 shadow-xs'
-                      : 'border-allura-border/60 hover:border-allura-border'
-                  }`}
-                >
+        {/* 1. Request type */}
+        <fieldset>
+          <legend className={labelClass}>Request Type *</legend>
+          <div className="grid grid-cols-2 gap-3">
+            {REQUEST_TYPES.map(opt => (
+              <label
+                key={opt.value}
+                className={`p-3 sm:p-4 rounded-xl border cursor-pointer transition-all text-xs font-sans ${
+                  requestType === opt.value ? 'border-allura-gold bg-allura-gold/10' : 'border-allura-border hover:border-allura-gold/60'
+                }`}
+              >
+                <span className="flex items-center gap-2">
                   <input
                     type="radio"
-                    name="return_item"
-                    checked={selectedItemIdx === idx}
-                    onChange={() => setSelectedItemIdx(idx)}
+                    name="request_type"
+                    value={opt.value}
+                    checked={requestType === opt.value}
+                    onChange={() => {
+                      setRequestType(opt.value);
+                      touch('type');
+                    }}
                     className="accent-allura-gold"
                   />
-                  <img
-                    src={item.product.images.primary}
-                    alt={item.product.name}
-                    className="w-16 h-20 object-cover rounded-lg bg-allura-bgSecondary flex-shrink-0"
-                  />
-                  <div className="text-xs font-sans space-y-1">
-                    <p className="font-serif text-base font-normal text-allura-text">{item.product.name}</p>
-                    <p className="text-allura-muted">Size: {item.selectedSize} • Color: {item.selectedColor.name}</p>
-                    <p className="font-bold text-allura-darkBrown">₹ {item.unitPrice.toLocaleString('en-IN')}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="flex justify-end pt-4">
-              <button
-                type="button"
-                onClick={() => setStep(2)}
-                className="px-6 py-2.5 bg-allura-darkBrown hover:bg-allura-softBrown text-white text-xs font-sans font-bold uppercase tracking-wider rounded-xl transition-colors flex items-center gap-2"
-              >
-                <span>Continue</span>
-                <ArrowRight size={14} />
-              </button>
-            </div>
+                  <span className="font-bold text-allura-text">{opt.label}</span>
+                </span>
+                <span className="block text-allura-muted pl-5 mt-0.5">{opt.hint}</span>
+              </label>
+            ))}
           </div>
-        )}
+          {touched.type && errors.type && <p className={errorClass}>{errors.type}</p>}
+        </fieldset>
 
-        {/* Step 2: Reason & Photos */}
-        {step === 2 && (
-          <div className="space-y-5">
-            <h3 className="font-serif text-xl text-allura-text font-normal">Select Reason for Return / Exchange</h3>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {reasonsList.map(r => (
-                <label
-                  key={r}
-                  className={`p-3.5 rounded-xl border flex items-center gap-3 cursor-pointer text-xs font-sans transition-all ${
-                    reason === r ? 'border-allura-gold bg-allura-gold/10 font-bold text-allura-goldDark' : 'border-allura-border text-allura-text'
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="return_reason"
-                    checked={reason === r}
-                    onChange={() => setReason(r)}
-                    className="accent-allura-gold"
-                  />
-                  <span>{r}</span>
-                </label>
-              ))}
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-sans font-bold uppercase tracking-wider text-allura-muted mb-1">
-                Additional Comments (Optional)
-              </label>
-              <textarea
-                value={reasonDetail}
-                onChange={e => setReasonDetail(e.target.value)}
-                placeholder="Describe any fit or drape issues so our atelier team can tailor the replacement perfectly..."
-                rows={3}
-                className="w-full p-3 bg-allura-bg border border-allura-border rounded-xl text-xs font-sans text-allura-text focus:outline-none focus:border-allura-gold"
+        {/* 2. Product (pre-selected from the button it was opened from) */}
+        <div>
+          <p className={labelClass}>Product</p>
+          <div className="p-3 rounded-xl border border-allura-gold bg-allura-gold/10">
+            <div className="flex items-start gap-3">
+              <img
+                src={item.product.images.primary}
+                alt={item.product.name}
+                className="w-14 h-[4.5rem] object-cover rounded-lg bg-allura-bgSecondary shrink-0"
               />
-            </div>
-
-            {/* Photo upload mockup */}
-            <div className="space-y-2">
-              <label className="block text-[11px] font-sans font-bold uppercase tracking-wider text-allura-muted">
-                Attach Photos (Optional)
-              </label>
-              <div
-                onClick={handlePhotoUploadMock}
-                className="border-2 border-dashed border-allura-border rounded-xl p-4 text-center cursor-pointer hover:bg-allura-bg transition-colors space-y-2"
-              >
-                <Upload size={20} className="mx-auto text-allura-goldDark" />
-                <p className="text-xs font-sans text-allura-muted">
-                  Click to attach garment images / tag verification photos
+              <div className="min-w-0 flex-1 space-y-1 text-xs font-sans">
+                <p className="font-serif text-sm sm:text-base text-allura-text break-words">{item.product.name}</p>
+                <ItemVariantMeta size={item.selectedSize} color={item.selectedColor} sku={item.sku} />
+                <p className="text-allura-muted">
+                  Qty: <strong className="text-allura-text">{item.quantity}</strong>
+                  <span className="mx-1.5 text-allura-border">•</span>
+                  <strong className="text-allura-darkBrown">{formatExactPrice(getItemDisplayPrice(item))}</strong>
                 </p>
-                {uploadedPhotos.length > 0 && (
-                  <p className="text-[11px] text-emerald-700 font-semibold">
-                    ✓ {uploadedPhotos.length} photo(s) attached
-                  </p>
-                )}
               </div>
             </div>
 
-            <div className="flex justify-between pt-4">
-              <button
-                type="button"
-                onClick={() => setStep(1)}
-                className="px-5 py-2.5 border border-allura-border text-xs font-sans text-allura-muted hover:text-allura-text rounded-xl"
-              >
-                Back
-              </button>
-              <button
-                type="button"
-                onClick={() => setStep(3)}
-                className="px-6 py-2.5 bg-allura-darkBrown hover:bg-allura-softBrown text-white text-xs font-sans font-bold uppercase tracking-wider rounded-xl transition-colors flex items-center gap-2"
-              >
-                <span>Next: Preferences</span>
-                <ArrowRight size={14} />
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Step 3: Preference & Sizing */}
-        {step === 3 && (
-          <div className="space-y-5">
-            <h3 className="font-serif text-xl text-allura-text font-normal">Choose Resolution Preference</h3>
-
-            <div className="space-y-3 text-xs font-sans">
-              {[
-                { label: 'Exchange for different size' as const, desc: 'Receive a fresh tailored replacement size with doorstep swap.' },
-                { label: 'Store Credit' as const, desc: 'Instant Allura Boutique credit with lifetime validity.' },
-                { label: 'Refund to source' as const, desc: 'Original UPI / Bank account refund within 3 business days of receipt.' },
-              ].map(opt => (
-                <label
-                  key={opt.label}
-                  className={`p-4 rounded-xl border block cursor-pointer transition-all ${
-                    preference === opt.label ? 'border-allura-gold bg-allura-gold/10' : 'border-allura-border'
-                  }`}
+            {item.quantity > 1 && (
+              <div className="flex items-center gap-2 mt-3 text-xs font-sans">
+                <label htmlFor="return-qty" className="text-allura-muted">
+                  Quantity to {requestType ? requestType.toLowerCase() : 'return'}:
+                </label>
+                <select
+                  id="return-qty"
+                  value={selectedQty}
+                  onChange={e => setQuantity(Number(e.target.value))}
+                  className="px-2 py-1 bg-allura-bg border border-allura-border rounded-lg text-allura-text focus:outline-none focus:border-allura-gold"
                 >
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="radio"
-                      name="preference"
-                      checked={preference === opt.label}
-                      onChange={() => setPreference(opt.label)}
-                      className="accent-allura-gold"
-                    />
-                    <span className="font-bold text-allura-text">{opt.label}</span>
-                  </div>
-                  <p className="text-allura-muted pl-5 mt-1">{opt.desc}</p>
-                </label>
-              ))}
-            </div>
-
-            {preference === 'Exchange for different size' && (
-              <div className="p-4 bg-allura-bg/60 rounded-xl border border-allura-border space-y-2">
-                <label className="block text-[11px] font-sans font-bold uppercase tracking-wider text-allura-muted">
-                  Desired Replacement Size
-                </label>
-                <div className="grid grid-cols-5 gap-2">
-                  {['XS', 'S', 'M', 'L', 'XL'].map(sz => (
-                    <button
-                      key={sz}
-                      type="button"
-                      onClick={() => setExchangeSize(sz)}
-                      className={`py-2 text-xs font-sans font-bold rounded-lg border ${
-                        exchangeSize === sz
-                          ? 'border-allura-gold bg-allura-gold text-white'
-                          : 'border-allura-border text-allura-muted hover:border-allura-darkBrown'
-                      }`}
-                    >
-                      {sz}
-                    </button>
+                  {Array.from({ length: item.quantity }, (_, i) => i + 1).map(n => (
+                    <option key={n} value={n}>
+                      {n} of {item.quantity}
+                    </option>
                   ))}
-                </div>
+                </select>
               </div>
             )}
+          </div>
+        </div>
 
-            <div className="flex justify-between pt-4">
-              <button
-                type="button"
-                onClick={() => setStep(2)}
-                className="px-5 py-2.5 border border-allura-border text-xs font-sans text-allura-muted hover:text-allura-text rounded-xl"
-              >
-                Back
-              </button>
-              <button
-                type="button"
-                onClick={() => setStep(4)}
-                className="px-6 py-2.5 bg-allura-darkBrown hover:bg-allura-softBrown text-white text-xs font-sans font-bold uppercase tracking-wider rounded-xl transition-colors flex items-center gap-2"
-              >
-                <span>Review & Submit</span>
-                <ArrowRight size={14} />
-              </button>
-            </div>
+        {/* 3. Reason */}
+        <div>
+          <label htmlFor="return-reason" className={labelClass}>
+            Reason *
+          </label>
+          <select
+            id="return-reason"
+            value={reason}
+            onChange={e => {
+              setReason(e.target.value);
+              touch('reason');
+            }}
+            onBlur={() => touch('reason')}
+            aria-invalid={!!(touched.reason && errors.reason)}
+            className="w-full p-3 bg-allura-bg border border-allura-border rounded-xl text-xs font-sans text-allura-text focus:outline-none focus:border-allura-gold"
+          >
+            <option value="" disabled>
+              Select a reason
+            </option>
+            {RETURN_REASONS.map(r => (
+              <option key={r} value={r}>
+                {r}
+              </option>
+            ))}
+          </select>
+          {touched.reason && errors.reason && <p className={errorClass}>{errors.reason}</p>}
+        </div>
+
+        {/* 4. Comments */}
+        <div>
+          <label htmlFor="return-comments" className={labelClass}>
+            Comments {reason === 'Other' ? '*' : '(Optional)'}
+          </label>
+          <textarea
+            id="return-comments"
+            value={comments}
+            onChange={e => setComments(e.target.value)}
+            onBlur={() => touch('comments')}
+            maxLength={500}
+            rows={3}
+            placeholder="Tell us a little more about the issue"
+            aria-invalid={!!(touched.comments && errors.comments)}
+            className="w-full p-3 bg-allura-bg border border-allura-border rounded-xl text-xs font-sans text-allura-text focus:outline-none focus:border-allura-gold resize-none"
+          />
+          {touched.comments && errors.comments && <p className={errorClass}>{errors.comments}</p>}
+        </div>
+
+        {/* 5. Exchange preference */}
+        {requestType === 'Exchange' && (
+          <div>
+            <label htmlFor="return-preferred" className={labelClass}>
+              Preferred Size / Color (Optional)
+            </label>
+            <input
+              id="return-preferred"
+              type="text"
+              value={preferredVariant}
+              onChange={e => setPreferredVariant(e.target.value)}
+              maxLength={100}
+              placeholder="e.g. Size M, Maroon"
+              className="w-full p-3 bg-allura-bg border border-allura-border rounded-xl text-xs font-sans text-allura-text focus:outline-none focus:border-allura-gold"
+            />
           </div>
         )}
 
-        {/* Step 4: Review & Submit */}
-        {step === 4 && (
-          <form onSubmit={handleSubmitReturn} className="space-y-5">
-            <h3 className="font-serif text-xl text-allura-text font-normal">Review Return Request</h3>
-
-            <div className="p-4 bg-allura-bg/60 rounded-xl border border-allura-border space-y-2 text-xs font-sans">
-              <p><strong>Item:</strong> {selectedItem.product.name} (Current: {selectedItem.selectedSize})</p>
-              <p><strong>Reason:</strong> {reason}</p>
-              {reasonDetail && <p><strong>Notes:</strong> {reasonDetail}</p>}
-              <p><strong>Preference:</strong> {preference} {preference === 'Exchange for different size' && `(Replacement Size: ${exchangeSize})`}</p>
-              <p><strong>Pickup Address:</strong> {order.shippingAddress.addressLine1}, {order.shippingAddress.city} - {order.shippingAddress.postalCode}</p>
-            </div>
-
-            <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs font-sans text-amber-900 flex items-center gap-2">
-              <ShieldCheck size={18} className="text-amber-700 flex-shrink-0" />
-              <span>Please keep the original security tags and signature magnetic box ready for our courier partner.</span>
-            </div>
-
-            <div className="flex justify-between pt-4">
-              <button
-                type="button"
-                onClick={() => setStep(3)}
-                className="px-5 py-2.5 border border-allura-border text-xs font-sans text-allura-muted hover:text-allura-text rounded-xl"
-              >
-                Back
-              </button>
-              <button
-                type="submit"
-                className="px-6 py-3 bg-allura-darkBrown hover:bg-allura-softBrown text-white text-xs font-sans font-bold uppercase tracking-wider rounded-xl transition-colors flex items-center gap-2 shadow-md"
-              >
-                <span>Submit Request</span>
-                <CheckCircle2 size={16} />
-              </button>
-            </div>
-          </form>
-        )}
-
-      </div>
+        <div className="pt-2 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3">
+          <p className="text-[11px] font-sans text-allura-muted">
+            Opens WhatsApp with your order details filled in. Send the message to complete your request.
+          </p>
+          <button
+            type="submit"
+            disabled={!isValid}
+            className="w-full sm:w-auto shrink-0 px-6 py-3 bg-[#25D366] hover:bg-[#1EBE5A] text-white text-xs font-sans font-bold uppercase tracking-wider rounded-xl transition-colors flex items-center justify-center gap-2 shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <MessageCircle size={16} />
+            <span>Continue on WhatsApp</span>
+          </button>
+        </div>
+      </form>
     </div>
   );
 };

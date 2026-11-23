@@ -108,7 +108,7 @@ export const AdminCustomersPage: React.FC = () => {
             Allura Customers{headerCount !== null ? ` (${headerCount})` : ''}
           </h1>
           <p className="text-xs font-sans text-stone-500">
-            360-degree customer profiles, lifetime spending, size preferences, and dedicated WhatsApp concierge links.
+            360-degree customer profiles, lifetime spending, and dedicated WhatsApp concierge links.
           </p>
         </div>
 
@@ -266,7 +266,11 @@ export const AdminCustomersPage: React.FC = () => {
                     </td>
                     <td className="p-4 font-mono font-bold text-[#561C08]">{cust.ordersCount ?? 0} orders</td>
                     <td className="p-4 font-serif text-sm font-bold text-allura-darkBrown">
-                      ₹ {(cust.totalSpent ?? 0).toLocaleString('en-IN')}
+                      {cust.currency === 'USD' ? '$' : '₹'}{' '}
+                      {(cust.totalSpent ?? 0).toLocaleString('en-IN', {
+                        minimumFractionDigits: Number.isInteger(cust.totalSpent ?? 0) ? 0 : 2,
+                        maximumFractionDigits: 2,
+                      })}
                     </td>
                     <td className="p-4">
                       {cust.isCircleMember ? (

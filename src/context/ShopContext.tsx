@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import axios from 'axios';
 import { useNavigate, useLocation } from 'react-router-dom';
 import type {
   Product,
@@ -9,7 +10,6 @@ import type {
   CustomerNotification,
   Coupon,
   AIMessage,
-  ReturnRequest,
   Category,
 } from '../types';
 import { login, register, logout, googleLogin } from '../service/auth';
@@ -38,6 +38,7 @@ import {
   getUnreadCount,
   markNotificationRead,
   markAllNotificationsRead,
+  deleteNotification as deleteNotificationApi,
   notificationErrorMessage,
   registerDeviceToken,
   removeDeviceToken,
@@ -62,6 +63,8 @@ interface ShopContextType {
   categories: Category[];
   isLoadingProducts: boolean;
   storeSettings: StoreSettings | null;
+  /** State of the shared GET /store/settings request */
+  storeSettingsStatus: 'loading' | 'ready' | 'error';
   refreshStoreSettings: () => Promise<void>;
 
   // Cart & Wishlist
@@ -109,10 +112,11 @@ interface ShopContextType {
 
   // Customer Auth & Profile
   customer: CustomerProfile | null;
+  setCustomer: React.Dispatch<React.SetStateAction<CustomerProfile | null>>;
   isAuthenticated: boolean;
   loginUser: (data: LoginData) => Promise<void>;
   registerUser: (data: RegisterData) => Promise<void>;
-  loginWithGoogle: (data: GoogleLoginData) => Promise<void>;
+  loginWithGoogle: (data: GoogleLoginData | { credential: string }) => Promise<void>;
   completeProfile: (profile: Partial<CustomerProfile>) => void;
   logoutCustomer: () => Promise<void>;
 
@@ -135,8 +139,6 @@ interface ShopContextType {
   cancelCustomerOrder: (orderId: string, reason: string, note?: string) => Promise<boolean>;
   placeOrder: (orderData: Partial<Order>) => Order;
   getOrderById: (orderId: string) => Order | undefined;
-  returns: ReturnRequest[];
-  submitReturnRequest: (returnData: Omit<ReturnRequest, 'id' | 'status' | 'requestedDate'>) => ReturnRequest;
 
   // Notifications
   notifications: CustomerNotification[];
@@ -146,6 +148,7 @@ interface ShopContextType {
   refreshNotifications: () => Promise<void>;
   markNotificationAsRead: (id: string) => void;
   markAllNotificationsAsRead: () => void;
+  deleteNotification: (id: string) => Promise<void>;
   enablePushNotifications: () => Promise<{ success: boolean; status: string }>;
 
   // AI Assistant
@@ -193,7 +196,7 @@ const INITIAL_AI_MESSAGES: AIMessage[] = [
 ];
 import { useAppDispatch } from '../store/hooks';
 import { fetchCustomerProfile } from '../store/slices/authSlice';
-import { hasCustomerSession, storeCustomerTokens, clearCustomerTokens, CUSTOMER_SESSION_EXPIRED_EVENT } from '../service/api';
+import api, { hasCustomerSession, storeCustomerTokens, clearCustomerTokens, CUSTOMER_SESSION_EXPIRED_EVENT } from '../service/api';
 
 export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const dispatch = useAppDispatch();
@@ -210,6 +213,7 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [categories, setCategories] = useState<Category[]>([]);
   const [isLoadingProducts, setIsLoadingProducts] = useState(true);
   const [storeSettings, setStoreSettings] = useState<StoreSettings | null>(null);
+  const [storeSettingsStatus, setStoreSettingsStatus] = useState<'loading' | 'ready' | 'error'>('loading');
 
   // Fetch the public boutique profile / shipping settings once per storefront visit.
   // Never blocks rendering — callers keep their own defaults until this resolves.
@@ -218,9 +222,12 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const data = await getStoreSettings();
       setStoreSettings(data);
+      setStoreSettingsStatus('ready');
     } catch (e) {
       console.error('Failed to load store settings:', e);
       settingsRequested.current = false;
+      // Keep showing previously loaded settings if a later refresh fails
+      setStoreSettingsStatus(prev => (prev === 'ready' ? 'ready' : 'error'));
     }
   }, []);
 
@@ -332,16 +339,6 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoadingOrders, setIsLoadingOrders] = useState(false);
   const [isLoadingAddresses, setIsLoadingAddresses] = useState(false);
 
-  // Return requests state
-  const [returns, setReturns] = useState<ReturnRequest[]>(() => {
-    try {
-      const saved = localStorage.getItem('allura_returns');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
-
   // Notifications state (real API; was localStorage-mock, now server-backed)
   const [notifications, setNotifications] = useState<CustomerNotification[]>([]);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
@@ -415,7 +412,16 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
             phone: profilePhone(p) || prev.phone,
             avatar: p.avatarUrl || prev.avatar,
           }
-          : prev
+          : {
+            id: p.id || `usr-${Date.now()}`,
+            name: profileDisplayName(p) || 'Customer',
+            email: p.email || '',
+            phone: profilePhone(p) || '',
+            addresses: [],
+            orders: [],
+            avatar: p.avatarUrl,
+            isCircleMember: false,
+          }
       );
     } catch (e) {
       console.warn('Could not load the customer profile:', e);
@@ -437,14 +443,6 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setOrdersTotal(0);
     }
   }, [customer]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('allura_returns', JSON.stringify(returns));
-    } catch (e) {
-      console.error(e);
-    }
-  }, [returns]);
 
   const refreshNotifications = useCallback(async () => {
     if (!customer || !hasCustomerSession() || isAdminRoute) {
@@ -976,20 +974,45 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const loginWithGoogle = async (data: GoogleLoginData) => {
+  const loginWithGoogle = async (data: GoogleLoginData | { credential: string }) => {
     try {
-      const response = await googleLogin(data);
+      const payload: GoogleLoginData = 'credential' in data && data.credential ? { credential: data.credential } : (data as GoogleLoginData);
+      const response = await googleLogin(payload);
       storeCustomerTokens(response);
 
-      const userProfile: CustomerProfile = response.user || {
-        id: `usr-${Date.now()}`,
-        name: 'Google User',
-        email: '',
-        phone: '',
-        addresses: [],
-        orders: [],
-      };
+      let userProfile: CustomerProfile;
+      try {
+        const meRes = await api.get('/auth/me');
+        const rawUser = meRes.data?.data?.user || meRes.data?.user || meRes.data?.data || meRes.data || {};
+        const profile = rawUser.profile || {};
+        const name =
+          profile.displayName ||
+          [profile.firstName, profile.lastName].filter(Boolean).join(' ') ||
+          rawUser.name ||
+          rawUser.email?.split('@')[0] ||
+          'Google User';
+
+        userProfile = {
+          id: rawUser._id || rawUser.id || `usr-${Date.now()}`,
+          name,
+          email: rawUser.email || '',
+          phone: rawUser.phone?.number || (typeof rawUser.phone === 'string' ? rawUser.phone : '') || '',
+          addresses: rawUser.addresses || [],
+          avatar: profile.avatarUrl || rawUser.avatarUrl,
+          isCircleMember: !!rawUser.isCircleMember,
+        };
+      } catch {
+        userProfile = response.user || {
+          id: `usr-${Date.now()}`,
+          name: 'Google User',
+          email: '',
+          phone: '',
+          addresses: [],
+          isCircleMember: false,
+        };
+      }
       setCustomer(userProfile);
+      dispatch(fetchCustomerProfile());
       showToast(`Welcome back, ${userProfile.name}`, 'gold');
     } catch (error: any) {
       let errorMessage = 'Google login failed.';
@@ -1010,15 +1033,30 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
       trackMetaEvent('CompleteRegistration', { status: true }, metaEventId);
       storeCustomerTokens(response);
 
-      const userProfile: CustomerProfile = response.user || {
-        id: `usr-${Date.now()}`,
-        name: data.name || data.email.split('@')[0],
-        email: data.email,
-        phone: '',
-        addresses: [],
-        orders: [],
-      };
+      const phoneStr =
+        response.user?.phone && typeof response.user.phone === 'object' && response.user.phone.number
+          ? `${response.user.phone.countryCode || '+91'} ${response.user.phone.number}`.trim()
+          : typeof response.user?.phone === 'string' && response.user.phone.trim()
+          ? response.user.phone.trim()
+          : data.phone?.number
+          ? `${data.phone.countryCode || '+91'} ${data.phone.number}`.trim()
+          : '';
+
+      const userProfile: CustomerProfile = response.user
+        ? {
+            ...response.user,
+            phone: phoneStr || response.user.phone || '',
+          }
+        : {
+            id: `usr-${Date.now()}`,
+            name: data.name || data.email.split('@')[0],
+            email: data.email,
+            phone: phoneStr,
+            isCircleMember: false,
+            addresses: [],
+          };
       setCustomer(userProfile);
+      dispatch(fetchCustomerProfile());
       showToast(`Welcome to Allura, ${userProfile.name}!`, 'gold');
     } catch (error: any) {
       let errorMessage = 'Registration failed.';
@@ -1033,10 +1071,14 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const completeProfile = (profile: Partial<CustomerProfile>) => {
-    if (customer) {
-      setCustomer({ ...customer, ...profile });
-      showToast('Profile updated successfully', 'success');
-    }
+    setCustomer(prev => {
+      const next = prev ? { ...prev, ...profile } : (profile as CustomerProfile);
+      try {
+        localStorage.setItem('allura_customer', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+    showToast('Profile updated successfully', 'success');
   };
 
   const logoutCustomer = async () => {
@@ -1298,19 +1340,6 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const submitReturnRequest = (returnData: Omit<ReturnRequest, 'id' | 'status' | 'requestedDate'>): ReturnRequest => {
-    const newReturn: ReturnRequest = {
-      ...returnData,
-      id: `ret-${Math.floor(1000 + Math.random() * 9000)}`,
-      status: 'Request Submitted',
-      requestedDate: 'Today, Just now',
-    };
-
-    setReturns(prev => [newReturn, ...prev]);
-    showToast('Return/Exchange request submitted. Our team will review within 24 hours.', 'gold');
-    return newReturn;
-  };
-
   // Notifications — optimistic, rolled back if the API call fails
   const markNotificationAsRead = async (id: string) => {
     let wasUnread = false;
@@ -1342,6 +1371,45 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setNotifications(prevNotifications);
       setUnreadNotificationCount(prevCount);
       showToast(notificationErrorMessage(err, 'Could not mark notifications as read'), 'error');
+    }
+  };
+
+  const deleteNotification = async (id: string) => {
+    const target = notifications.find(n => n.id === id);
+    const wasUnread = target ? !target.isRead : false;
+
+    // Remove immediately from local state
+    setNotifications(prev => prev.filter(n => n.id !== id));
+    if (wasUnread) setUnreadNotificationCount(c => Math.max(0, c - 1));
+
+    try {
+      await deleteNotificationApi(id);
+      showToast('Notification deleted', 'info');
+    } catch (err: unknown) {
+      if (axios.isAxiosError(err)) {
+        if (err.response?.status === 404) {
+          // The notification no longer exists, keep it removed quietly and refetch
+          refreshNotifications();
+          return;
+        }
+        // Rollback on other errors
+        if (target) {
+          setNotifications(prev => (prev.some(n => n.id === id) ? prev : [target, ...prev]));
+          if (wasUnread) setUnreadNotificationCount(c => c + 1);
+        }
+        if (err.response?.status === 403) {
+          showToast("You can't delete this notification.", 'error');
+        } else if (err.response?.status !== 401) {
+          showToast("Couldn't delete the notification. Please try again.", 'error');
+        }
+      } else {
+        if (target) {
+          setNotifications(prev => (prev.some(n => n.id === id) ? prev : [target, ...prev]));
+          if (wasUnread) setUnreadNotificationCount(c => c + 1);
+        }
+        showToast("Couldn't delete the notification. Please try again.", 'error');
+      }
+      throw err;
     }
   };
 
@@ -1465,6 +1533,7 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
         categories,
         isLoadingProducts,
         storeSettings,
+        storeSettingsStatus,
         refreshStoreSettings,
         cart,
         cartTotals,
@@ -1498,6 +1567,7 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
         removeCoupon,
         finalOrderTotal,
         customer,
+        setCustomer,
         isAuthenticated,
         loginUser,
         registerUser,
@@ -1517,8 +1587,6 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
         cancelCustomerOrder,
         placeOrder,
         getOrderById,
-        returns,
-        submitReturnRequest,
         notifications,
         unreadNotificationCount,
         isLoadingNotifications,
@@ -1526,6 +1594,7 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
         refreshNotifications,
         markNotificationAsRead,
         markAllNotificationsAsRead,
+        deleteNotification,
         enablePushNotifications,
         isAIAssistantOpen,
         setIsAIAssistantOpen,

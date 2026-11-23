@@ -1,11 +1,42 @@
 import React, { useState } from 'react';
-import { Phone, MapPin, Clock, MessageCircle, Send, CheckCircle2, Navigation } from 'lucide-react';
+import { Phone, MapPin, MessageCircle, Send, CheckCircle2, Navigation } from 'lucide-react';
 import { useShop } from '../context/ShopContext';
 import { useStoreAddress } from '../hooks/useStoreAddress';
+import { cleanProfileValue, formatPhoneDisplay, phoneDigits, storeDisplayName } from '../utils/storeProfile';
+
+/** Skeleton in the same size as an info card, so the layout doesn't jump while settings load */
+const InfoCardSkeleton: React.FC<{ rows?: number }> = ({ rows = 1 }) => (
+  <div className="p-6 rounded-xl bg-allura-card border border-allura-border shadow-xs space-y-3 animate-pulse" aria-hidden="true">
+    <div className="flex items-center gap-3">
+      <div className="w-10 h-10 rounded-full bg-allura-bgSecondary" />
+      <div className="flex-1 space-y-2">
+        <div className="h-3.5 w-40 rounded bg-allura-bgSecondary" />
+        <div className="h-3 w-56 max-w-full rounded bg-allura-bgSecondary" />
+      </div>
+    </div>
+    {Array.from({ length: rows }).map((_, i) => (
+      <div key={i} className="h-10 w-full rounded-lg bg-allura-bgSecondary" />
+    ))}
+  </div>
+);
 
 export const ContactPage: React.FC = () => {
-  const { showToast } = useShop();
+  const { showToast, storeSettings, storeSettingsStatus } = useShop();
+  // Same shared GET /store/settings data the Footer uses (fetched once in ShopContext)
   const { address, mapsUrl } = useStoreAddress();
+  const profile = storeSettings?.boutiqueProfile;
+  const storeName = storeDisplayName(profile?.legalName);
+  const whatsappNumber = cleanProfileValue(profile?.whatsappNumber);
+  const whatsappDigits = phoneDigits(whatsappNumber);
+
+  // One button per number. Settings currently expose a single number (whatsappNumber);
+  // add more sources here if the API gains extra phone fields.
+  const phoneNumbers = Array.from(new Set([whatsappNumber].filter((n): n is string => !!n && !!phoneDigits(n))));
+
+  const isSettingsLoading = storeSettingsStatus === 'loading' && !storeSettings;
+  const isSettingsError = storeSettingsStatus === 'error' && !storeSettings;
+  const hasLocation = !!address;
+  const hasContact = phoneNumbers.length > 0 || !!whatsappDigits;
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [occasion, setOccasion] = useState('Bridal');
@@ -19,14 +50,14 @@ export const ContactPage: React.FC = () => {
       return;
     }
     setIsSubmitted(true);
-    showToast('Enquiry sent to Allura Stylists!', 'gold');
+    showToast(storeName ? `Enquiry sent to ${storeName} stylists!` : 'Enquiry sent to our stylists!', 'gold');
   };
 
   const handleOpenWhatsApp = () => {
-    window.open(
-      'https://wa.me/919037991774?text=Hello%20Allura%20Boutique%2C%20I%20would%20like%20to%20enquire%20about%20boutique%20timings%20and%20location.',
-      '_blank'
-    );
+    if (!whatsappDigits) return;
+    const greeting = storeName ? `Hello ${storeName}, ` : 'Hello, ';
+    const text = `${greeting}I would like to enquire about boutique timings and location.`;
+    window.open(`https://wa.me/${whatsappDigits}?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer');
   };
 
   return (
@@ -40,7 +71,7 @@ export const ContactPage: React.FC = () => {
           WE'D LOVE TO HEAR FROM YOU
         </h1>
         <p className="text-xs sm:text-sm text-allura-muted font-sans leading-relaxed">
-          Visit our boutique in Perinthalmanna or connect directly with an Allura stylist for custom measurements and order enquiries.
+          Visit our boutique or connect directly with {storeName ? `${storeName}'s` : 'our'} stylists for custom measurements and order enquiries.
         </p>
       </div>
 
@@ -48,7 +79,24 @@ export const ContactPage: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
         {/* Left: Store Information Cards (5 cols) */}
         <div className="lg:col-span-5 space-y-6">
-          {/* Location Card */}
+          {isSettingsLoading && (
+            <>
+              <InfoCardSkeleton />
+              <InfoCardSkeleton rows={2} />
+            </>
+          )}
+
+          {/* Request failed, or the settings have no contact details at all */}
+          {(isSettingsError || (!isSettingsLoading && !hasLocation && !hasContact)) && (
+            <div className="p-6 rounded-xl bg-allura-card border border-allura-border shadow-xs">
+              <p className="text-xs text-allura-muted font-sans">
+                Contact details are unavailable right now. Please try again later.
+              </p>
+            </div>
+          )}
+
+          {/* Location Card — boutiqueProfile.address */}
+          {hasLocation && (
           <div className="p-6 rounded-xl bg-allura-card border border-allura-border shadow-xs space-y-3">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-allura-bgSecondary flex items-center justify-center text-allura-goldDark">
@@ -79,8 +127,10 @@ export const ContactPage: React.FC = () => {
               </div>
             )}
           </div>
+          )}
 
-          {/* Contact Numbers */}
+          {/* Contact Numbers — boutiqueProfile.whatsappNumber */}
+          {hasContact && (
           <div className="p-6 rounded-xl bg-allura-card border border-allura-border shadow-xs space-y-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-allura-bgSecondary flex items-center justify-center text-allura-goldDark">
@@ -90,60 +140,38 @@ export const ContactPage: React.FC = () => {
                 <h3 className="font-serif text-base font-semibold uppercase text-allura-text">
                   Direct Phone & WhatsApp
                 </h3>
-                <p className="text-xs text-allura-muted font-sans">Available 10 AM to 8:30 PM daily</p>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-              <a
-                href="tel:+919037991774"
-                className="p-3 rounded-lg border border-allura-border/80 bg-allura-bg hover:border-allura-gold text-xs font-sans text-allura-text flex items-center justify-between"
+            {phoneNumbers.length > 0 && (
+              <div className={`grid grid-cols-1 ${phoneNumbers.length > 1 ? 'sm:grid-cols-2' : ''} gap-3 pt-1`}>
+                {phoneNumbers.map(number => (
+                  <a
+                    key={number}
+                    href={`tel:+${phoneDigits(number)}`}
+                    className="p-3 rounded-lg border border-allura-border/80 bg-allura-bg hover:border-allura-gold text-xs font-sans text-allura-text flex items-center justify-between"
+                  >
+                    <span>{formatPhoneDisplay(number)}</span>
+                    <Phone size={13} className="text-allura-muted" />
+                  </a>
+                ))}
+              </div>
+            )}
+
+            {whatsappDigits && (
+              <button
+                onClick={handleOpenWhatsApp}
+                className="w-full bg-[#25D366]/10 text-[#128C7E] hover:bg-[#25D366]/20 border border-[#25D366]/40 py-2.5 px-4 rounded text-xs font-sans font-bold tracking-wider uppercase transition-colors flex items-center justify-center gap-2"
               >
-                <span>+91 9037991774</span>
-                <Phone size={13} className="text-allura-muted" />
-              </a>
-
-              <a
-                href="tel:+919207801775"
-                className="p-3 rounded-lg border border-allura-border/80 bg-allura-bg hover:border-allura-gold text-xs font-sans text-allura-text flex items-center justify-between"
-              >
-                <span>+91 9207801775</span>
-                <Phone size={13} className="text-allura-muted" />
-              </a>
-            </div>
-
-            <button
-              onClick={handleOpenWhatsApp}
-              className="w-full bg-[#25D366]/10 text-[#128C7E] hover:bg-[#25D366]/20 border border-[#25D366]/40 py-2.5 px-4 rounded text-xs font-sans font-bold tracking-wider uppercase transition-colors flex items-center justify-center gap-2"
-            >
-              <MessageCircle size={15} />
-              <span>Instant WhatsApp Stylist Desk</span>
-            </button>
+                <MessageCircle size={15} />
+                <span>Instant WhatsApp Stylist Desk</span>
+              </button>
+            )}
           </div>
+          )}
 
-          {/* Opening Hours */}
-          <div className="p-6 rounded-xl bg-allura-card border border-allura-border shadow-xs space-y-3">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-allura-bgSecondary flex items-center justify-center text-allura-goldDark">
-                <Clock size={18} />
-              </div>
-              <div>
-                <h3 className="font-serif text-base font-semibold uppercase text-allura-text">
-                  Boutique Hours
-                </h3>
-              </div>
-            </div>
-            <div className="space-y-1.5 text-xs text-allura-muted font-sans pt-1">
-              <div className="flex justify-between">
-                <span>Monday - Saturday:</span>
-                <strong className="text-allura-text">10:00 AM – 8:30 PM</strong>
-              </div>
-              <div className="flex justify-between">
-                <span>Sunday:</span>
-                <strong className="text-allura-text">1:30 PM – 8:30 PM</strong>
-              </div>
-            </div>
-          </div>
+          {/* Boutique Hours card removed: it was hardcoded, and /store/settings has no
+              business-hours field. Add a card here once the API provides hours. */}
         </div>
 
         {/* Right: Interactive Enquiry Form (7 cols) */}
@@ -157,7 +185,7 @@ export const ContactPage: React.FC = () => {
                 Thank you, {name}!
               </h3>
               <p className="text-xs sm:text-sm text-allura-muted font-sans max-w-sm mx-auto leading-relaxed">
-                An Allura Boutique stylist will reach out on WhatsApp / Phone ({phone}) shortly to assist you.
+                {storeName ? `A ${storeName} stylist` : 'Our stylist'} will reach out on WhatsApp / Phone ({phone}) shortly to assist you.
               </p>
               <button
                 onClick={() => setIsSubmitted(false)}
@@ -186,7 +214,7 @@ export const ContactPage: React.FC = () => {
                     type="text"
                     value={name}
                     onChange={e => setName(e.target.value)}
-                    placeholder="e.g. Fathima / Ananya"
+                    placeholder="Enter your name"
                     required
                     className="w-full bg-allura-bg border border-allura-border rounded p-3 text-xs sm:text-sm text-allura-text focus:outline-none focus:border-allura-gold font-sans"
                   />
@@ -200,7 +228,7 @@ export const ContactPage: React.FC = () => {
                     type="tel"
                     value={phone}
                     onChange={e => setPhone(e.target.value)}
-                    placeholder="e.g. +91 9037991774"
+                    placeholder="Enter your phone number"
                     required
                     className="w-full bg-allura-bg border border-allura-border rounded p-3 text-xs sm:text-sm text-allura-text focus:outline-none focus:border-allura-gold font-sans"
                   />

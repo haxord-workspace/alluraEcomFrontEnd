@@ -1,13 +1,20 @@
 import adminApi from './adminApi';
 import type { AdminCollection } from '../types';
+import { normalizeCollectionStatus, type CollectionStatus } from '../constants/collectionStatus';
 
 const mapCollection = (raw: any): AdminCollection => {
   if (!raw) return raw;
   return {
     ...raw,
     id: raw.id || raw._id,
+    // Legacy / lowercase values (e.g. "ARCHIVED", "active") become ACTIVE or INACTIVE
+    status: normalizeCollectionStatus(raw.status),
   };
 };
+
+/** Guarantees the request body only ever carries "ACTIVE" or "INACTIVE" */
+const withValidStatus = <T extends { status?: string }>(data: T): T =>
+  data.status === undefined ? data : { ...data, status: normalizeCollectionStatus(data.status) };
 
 /**
  * GET /collections (Admin) — fetch all collections
@@ -47,7 +54,7 @@ export interface CollectionPayload {
   seo?: CollectionSeo;
   sortOrder?: number;
   isFeatured?: boolean;
-  status: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED' | string;
+  status: CollectionStatus;
   products?: string[];
 }
 
@@ -55,7 +62,7 @@ export interface CollectionPayload {
  * POST /collections (Admin) — create a collection
  */
 export const createAdminCollection = async (data: CollectionPayload): Promise<AdminCollection> => {
-  const response = await adminApi.post('/collections', data);
+  const response = await adminApi.post('/collections', withValidStatus(data));
   return mapCollection(response.data?.data || response.data);
 };
 
@@ -66,7 +73,7 @@ export const updateAdminCollection = async (
   id: string,
   data: Partial<CollectionPayload>
 ): Promise<AdminCollection> => {
-  const response = await adminApi.patch(`/collections/${id}`, data);
+  const response = await adminApi.patch(`/collections/${id}`, withValidStatus(data));
   return mapCollection(response.data?.data || response.data);
 };
 

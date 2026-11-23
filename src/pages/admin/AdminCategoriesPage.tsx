@@ -10,6 +10,23 @@ import { useShop } from '../../context/ShopContext';
 import { getBackendErrorMessage } from '../../utils/apiResponse';
 
 import { AdminErrorBanner } from '../../components/admin/AdminErrorBanner';
+import {
+  STATUS_OPTIONS,
+  STATUS_LABELS,
+  INVALID_STATUS_MESSAGE,
+  normalizeActiveStatus,
+  type ActiveStatus,
+} from '../../constants/status';
+
+type CategoryForm = {
+  name: string;
+  slug: string;
+  status: ActiveStatus;
+  image: { url: string };
+};
+
+// New categories always start ACTIVE
+const EMPTY_CATEGORY_FORM: CategoryForm = { name: '', slug: '', status: 'ACTIVE', image: { url: '' } };
 
 export const AdminCategoriesPage: React.FC = () => {
   const { products } = useAdmin();
@@ -26,12 +43,7 @@ export const AdminCategoriesPage: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   
-  const [formData, setFormData] = useState({
-    name: '',
-    slug: '',
-    status: 'ACTIVE',
-    image: { url: '' },
-  });
+  const [formData, setFormData] = useState<CategoryForm>(EMPTY_CATEGORY_FORM);
 
   const fetchCategories = async () => {
     setIsLoading(true);
@@ -54,12 +66,7 @@ export const AdminCategoriesPage: React.FC = () => {
   const handleOpenAdd = () => {
     setEditingCategoryId(null);
     setModalError(null);
-    setFormData({
-      name: '',
-      slug: '',
-      status: 'ACTIVE',
-      image: { url: '' },
-    });
+    setFormData(EMPTY_CATEGORY_FORM);
     setIsModalOpen(true);
   };
 
@@ -69,7 +76,8 @@ export const AdminCategoriesPage: React.FC = () => {
     setFormData({
       name: cat.name,
       slug: cat.slug,
-      status: cat.status || 'ACTIVE',
+      // Uppercased; anything still invalid (e.g. legacy "ARCHIVED") opens as INACTIVE so it can be saved
+      status: normalizeActiveStatus(cat.status),
       image: typeof cat.image === 'string'
         ? { url: cat.image }
         : { url: cat.image?.url || '' },
@@ -126,7 +134,9 @@ export const AdminCategoriesPage: React.FC = () => {
       setIsModalOpen(false);
     } catch (error: any) {
       console.error('Failed to save category:', error);
-      const errText = getBackendErrorMessage(error, 'Failed to save category');
+      const backendText = getBackendErrorMessage(error, 'Failed to save category');
+      // Keep the API's message, with a clear hint if it was about the status value
+      const errText = /\bstatus\b/i.test(backendText) ? `${backendText} — ${INVALID_STATUS_MESSAGE}` : backendText;
       setModalError(errText);
       showToast(errText, 'error');
     } finally {
@@ -304,12 +314,12 @@ export const AdminCategoriesPage: React.FC = () => {
                 <label className="block text-[10px] uppercase font-bold text-stone-500 mb-1">Status</label>
                 <select
                   value={formData.status}
-                  onChange={e => setFormData({ ...formData, status: e.target.value })}
+                  onChange={e => setFormData({ ...formData, status: normalizeActiveStatus(e.target.value) })}
                   className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none"
                 >
-                  <option value="ACTIVE">Active</option>
-                  <option value="INACTIVE">Inactive</option>
-                  <option value="ARCHIVED">Archived</option>
+                  {STATUS_OPTIONS.map(status => (
+                    <option key={status} value={status}>{STATUS_LABELS[status]}</option>
+                  ))}
                 </select>
               </div>
               <div className="pt-2">

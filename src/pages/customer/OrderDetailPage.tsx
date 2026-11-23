@@ -16,12 +16,14 @@ import {
 import { useShop } from '../../context/ShopContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { InvoiceModal } from '../../components/common/InvoiceModal';
+import { ItemVariantMeta } from '../../components/common/ItemVariantMeta';
 import { OrderDetailSkeleton } from '../../components/ui/OrderDetailSkeleton';
 import { useCustomerOrder } from '../../hooks/useCustomerOrder';
 import { useOrderPayment } from '../../hooks/useOrderPayment';
 import { downloadOrderInvoice } from '../../service/orders';
 import { OrderItemReviewAction } from '../../components/reviews/OrderItemReviewAction';
 import { shouldShowOrderTracking } from '../../utils/reviewEligibility';
+import { getReturnEligibility } from '../../utils/returnEligibility';
 import {
   getUserFacingCancelReason,
   formatUserFacingStatus,
@@ -111,6 +113,7 @@ export const OrderDetailPage: React.FC = () => {
   }
 
   const isCancelled = /cancell?ed/i.test(String(order.orderStatus || ''));
+  const returnEligibility = getReturnEligibility(order);
 
   const cancelEntry = order.history
     ? [...order.history].reverse().find(h => String(h.status || h.to || '').toUpperCase() === 'CANCELLED')
@@ -222,14 +225,22 @@ export const OrderDetailPage: React.FC = () => {
             </button>
           )} */}
 
-            {order.orderStatus === 'Delivered' && (
-              <Link
-                to={`/account/orders/${order.id}/return`}
-                className="px-4 py-2 border border-amber-300 bg-amber-50 text-amber-800 rounded-xl text-xs font-sans font-bold hover:bg-amber-100 transition-colors flex items-center gap-1.5"
-              >
-                <RotateCcw size={14} />
-                <span>Request Return / Exchange</span>
-              </Link>
+            {/* Eligible orders get a per-product button in the items list below */}
+            {!returnEligibility.eligible && order.orderStatus === 'Delivered' && (
+                <div className="flex flex-col gap-1 max-w-xs">
+                  <button
+                    type="button"
+                    disabled
+                    aria-describedby="return-unavailable-reason"
+                    className="px-4 py-2 border border-allura-border rounded-xl text-xs font-sans font-bold text-allura-muted opacity-60 cursor-not-allowed flex items-center gap-1.5 self-start"
+                  >
+                    <RotateCcw size={14} />
+                    <span>Return or Exchange Request</span>
+                  </button>
+                  <span id="return-unavailable-reason" className="text-[11px] font-sans text-allura-muted">
+                    {returnEligibility.reason}
+                  </span>
+                </div>
             )}
           </div>
         </div>
@@ -303,9 +314,7 @@ export const OrderDetailPage: React.FC = () => {
                       <h4 className="font-serif text-base font-normal text-allura-text">
                         {item.product.name}
                       </h4>
-                      <p className="text-xs text-allura-muted font-sans">
-                        Size: <strong className="text-allura-text">{item.selectedSize}</strong> • Color: {item.selectedColor.name} • SKU: {item.sku}
-                      </p>
+                      <ItemVariantMeta size={item.selectedSize} color={item.selectedColor} sku={item.sku} />
                       <p className="text-xs text-allura-muted font-sans">
                         Qty: <strong>{item.quantity}</strong>
                       </p>
@@ -313,6 +322,15 @@ export const OrderDetailPage: React.FC = () => {
                         {formatPrice(item.unitPrice * item.quantity)}
                       </p>
                       <OrderItemReviewAction order={order} item={item} />
+                      {returnEligibility.eligible && (
+                        <Link
+                          to={`/account/orders/${order.id}/return?item=${idx}`}
+                          className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 border border-amber-300 bg-amber-50 text-amber-800 rounded-lg text-[11px] font-sans font-bold hover:bg-amber-100 transition-colors"
+                        >
+                          <RotateCcw size={13} />
+                          <span>Return or Exchange Request</span>
+                        </Link>
+                      )}
                     </div>
                   </div>
                 ))}

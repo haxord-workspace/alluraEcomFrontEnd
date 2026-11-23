@@ -8,6 +8,19 @@ import { downloadOrderInvoice } from '../../service/orders';
 import { OrderCardSkeleton } from '../../components/ui/OrderCardSkeleton';
 import { OrderCardReviewSwap } from '../../components/reviews/OrderCardReviewSwap';
 import { formatUserFacingStatus, formatUserFacingPaymentStatus } from '../../utils/userFacingText';
+import { ItemVariantMeta } from '../../components/common/ItemVariantMeta';
+import { getReturnEligibility } from '../../utils/returnEligibility';
+import type { Order } from '../../types';
+
+/**
+ * Show the return link when the order is inside the window. The list payload may leave out the
+ * status history, so a delivered order with no known delivery date still links through; the
+ * return page re-checks the window against the full order before anything is sent.
+ */
+const canRequestReturn = (order: Order): boolean => {
+  const eligibility = getReturnEligibility(order);
+  return eligibility.eligible || !!eligibility.deliveryDateUnknown;
+};
 
 export const AccountOrdersPage: React.FC = () => {
   const { orders, formatPrice, formatExactPrice, invoiceOrder, setInvoiceOrder, addToCart, refreshOrders, isLoadingOrders } = useShop();
@@ -151,9 +164,7 @@ export const AccountOrdersPage: React.FC = () => {
                         <h4 className="font-serif text-sm font-normal text-allura-text truncate">
                           {item.product.name}
                         </h4>
-                        <p className="text-xs text-allura-muted font-sans">
-                          Size: <strong className="text-allura-text">{item.selectedSize}</strong> • Color: {item.selectedColor.name}
-                        </p>
+                        <ItemVariantMeta size={item.selectedSize} color={item.selectedColor} />
                         <p className="text-xs font-sans font-bold text-allura-darkBrown">
                           {formatPrice(item.unitPrice)} {item.quantity > 1 && `× ${item.quantity}`}
                         </p>
@@ -206,9 +217,14 @@ export const AccountOrdersPage: React.FC = () => {
                     <span>Invoice</span>
                   </button>
 
-                  {order.orderStatus === 'Delivered' && (
+                  {canRequestReturn(order) && (
                     <Link
-                      to={`/account/orders/${order.id}/return`}
+                      to={
+                        // One product: open its request directly; several: pick the product on the order page
+                        order.items.length === 1
+                          ? `/account/orders/${order.id}/return?item=0`
+                          : `/account/orders/${order.id}`
+                      }
                       className="px-3.5 py-1.5 rounded-lg border border-allura-border text-xs font-sans text-amber-800 hover:bg-amber-50 transition-colors flex items-center gap-1.5"
                     >
                       <RotateCcw size={13} />

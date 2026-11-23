@@ -12,9 +12,8 @@ const MoveToBagButton: React.FC<{ product: Product }> = ({ product }) => {
     <button
       onClick={() => bag.add(product, product.sizes[0], product.colors[0])}
       disabled={bag.isAdding}
-      className={`w-full text-allura-card text-[10px] sm:text-xs font-sans font-bold tracking-wider uppercase py-2.5 px-3 rounded-sm flex items-center justify-center gap-1.5 ${addToBagButtonState(bag.state)} ${
-        bag.justAdded ? 'bg-emerald-700' : 'bg-allura-darkBrown hover:bg-allura-goldDark'
-      }`}
+      className={`w-full text-allura-card text-[10px] sm:text-xs font-sans font-bold tracking-wider uppercase py-2.5 px-3 rounded-sm flex items-center justify-center gap-1.5 ${addToBagButtonState(bag.state)} ${bag.justAdded ? 'bg-emerald-700' : 'bg-allura-darkBrown hover:bg-allura-goldDark'
+        }`}
     >
       <AddToBagLabel state={bag.state} label="MOVE TO BAG" iconSize={13} />
     </button>
@@ -41,16 +40,16 @@ export const WishlistPage: React.FC = () => {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-16 space-y-12">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-10 pb-6 sm:py-16 space-y-12">
       <div className="text-center max-w-2xl mx-auto space-y-2">
         <span className="text-[11px] font-sans font-bold tracking-[0.28em] uppercase text-allura-goldDark">
-          SAVED PIECES
+          YOUR WISHLIST
         </span>
         <h1 className="font-serif text-3xl sm:text-5xl text-allura-text font-normal uppercase tracking-tight">
-          YOUR ALLURA EDIT ({wishlistProducts.length})
+          Your Saved Styles  ({wishlistProducts.length})
         </h1>
         <p className="text-xs sm:text-sm text-allura-muted font-sans">
-          Saved bespoke silhouettes and outfits ready for your next celebration.
+          Review your favourite outfits and move them to your bag when you're ready.
         </p>
         {wishlistProducts.length > 0 && (
           <button
