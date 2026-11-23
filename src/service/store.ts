@@ -1,6 +1,4 @@
 import api from './api';
-import adminApi from './adminApi';
-import { getAdminAccessToken } from '../store/slices/adminAuthSlice';
 import { colorHex } from '../data/colorPalette';
 import { toNumber } from '../utils/number';
 import type { Product, ProductColor, ProductVariant, Category } from '../types';
@@ -199,6 +197,7 @@ export interface StoreCollection {
   isFeatured?: boolean;
   status?: string;
   sortOrder?: number;
+  products?: (string | Product | any)[];
 }
 
 export interface StoreCollectionParams {
@@ -219,40 +218,73 @@ export interface StoreCollectionsResult {
   meta: StoreCollectionsMeta;
 }
 
+const mapStoreCollection = (c: any): StoreCollection => ({
+  id: c._id || c.id,
+  name: c.name,
+  slug: c.slug || c._id || c.id,
+  description: c.description || '',
+  image: c.image,
+  isFeatured: !!c.isFeatured,
+  status: c.status,
+  sortOrder: c.sortOrder ?? 0,
+  products: Array.isArray(c.products) ? c.products : [],
+});
+
 /**
- * GET /store/collections — fetch a single page of collections (e.g. limit=1 for 1 at a time).
+ * Storefront shows ACTIVE collections only. INACTIVE (or isActive: false, or any other value) is hidden.
+ * A collection with no status at all is treated as active (the public endpoint may omit it).
+ */
+export const isActiveCollection = (c: any): boolean => {
+  if (!c) return false;
+  if (c.isActive === false) return false;
+  if (c.status === undefined || c.status === null || c.status === '') return true;
+  return String(c.status).trim().toUpperCase() === 'ACTIVE';
+};
+
+/** Raw list from GET /store/collections (public endpoint only, never the admin one) */
+const fetchActiveCollections = async (params?: StoreCollectionParams): Promise<StoreCollection[]> => {
+  const response = await api.get('/store/collections', { params });
+  const rawData = response.data?.data ?? response.data;
+  const list = Array.isArray(rawData) ? rawData : rawData?.collections || rawData?.items || [];
+  return Array.isArray(list) ? list.filter(isActiveCollection).map(mapStoreCollection) : [];
+};
+
+// Short-lived cache so the home page tiles don't refetch the full list for every page change
+const ACTIVE_COLLECTIONS_TTL_MS = 60_000;
+let activeCollectionsCache: { at: number; promise: Promise<StoreCollection[]> } | null = null;
+
+/** All ACTIVE collections, sorted by sortOrder. Cached for 60s and shared by header, menus and pages. */
+export const getCachedActiveCollections = (): Promise<StoreCollection[]> => {
+  if (!activeCollectionsCache || Date.now() - activeCollectionsCache.at > ACTIVE_COLLECTIONS_TTL_MS) {
+    const promise = fetchActiveCollections({ limit: 100 }).then(list =>
+      [...list].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+    );
+    activeCollectionsCache = { at: Date.now(), promise };
+    promise.catch(() => {
+      activeCollectionsCache = null; // allow a retry
+    });
+  }
+  return activeCollectionsCache.promise;
+};
+
+/**
+ * One page of ACTIVE collections (e.g. limit=1 for 1 at a time).
+ * Pages are cut client-side from the active list, so an inactive collection can never
+ * take a slot or leave a gap in the page count.
  */
 export const getStoreCollectionPage = async (
   page: number = 1,
   limit: number = 1
 ): Promise<StoreCollectionsResult> => {
   try {
-    const response = await api.get('/store/collections', {
-      params: { page, limit },
-    });
-    const rawData = response.data?.data || response.data || [];
-    const rawMeta = response.data?.meta || {};
-    const collections: StoreCollection[] = Array.isArray(rawData)
-      ? rawData.map((c: any) => ({
-          id: c._id || c.id,
-          name: c.name,
-          slug: c.slug,
-          description: c.description || '',
-          image: c.image,
-          isFeatured: !!c.isFeatured,
-          status: c.status,
-          sortOrder: c.sortOrder ?? 0,
-        }))
-      : [];
-
-    const meta: StoreCollectionsMeta = {
-      total: rawMeta.total ?? collections.length,
-      page: rawMeta.page ?? page,
-      limit: rawMeta.limit ?? limit,
-      totalPages: rawMeta.totalPages ?? Math.max(1, Math.ceil((rawMeta.total ?? collections.length) / limit)),
+    const all = await getCachedActiveCollections();
+    const safeLimit = Math.max(1, limit);
+    const totalPages = Math.max(1, Math.ceil(all.length / safeLimit));
+    const start = (page - 1) * safeLimit;
+    return {
+      collections: all.slice(start, start + safeLimit),
+      meta: { total: all.length, page, limit: safeLimit, totalPages },
     };
-
-    return { collections, meta };
   } catch (error) {
     console.warn('Failed to load store collection page from API:', error);
     return {
@@ -263,41 +295,67 @@ export const getStoreCollectionPage = async (
 };
 
 /**
- * GET /store/collections — public collections listing.
+ * GET /store/collections — public collections listing, ACTIVE collections only.
  */
 export const getStoreCollections = async (params?: StoreCollectionParams): Promise<StoreCollection[]> => {
   try {
-    let data: any[] = [];
-    const token = getAdminAccessToken();
-    if (token) {
-      try {
-        const adminRes = await adminApi.get('/collections', { params });
-        data = adminRes.data?.data || adminRes.data || [];
-      } catch (e) {
-        console.warn('Failed to load collections from admin endpoint, falling back to store endpoint', e);
-      }
-    }
-    if (!data || data.length === 0) {
-      const response = await api.get('/store/collections', { params });
-      data = response.data?.data || response.data || [];
-    }
-
-    return Array.isArray(data)
-      ? data.map((c: any) => ({
-          id: c._id || c.id,
-          name: c.name,
-          slug: c.slug,
-          description: c.description || '',
-          image: c.image,
-          isFeatured: !!c.isFeatured,
-          status: c.status,
-          sortOrder: c.sortOrder ?? 0,
-        }))
-      : [];
+    // No params: the full cached list (the endpoint defaults to 20 per page, which could cut collections off)
+    return params ? await fetchActiveCollections(params) : await getCachedActiveCollections();
   } catch (error) {
-    console.warn('Failed to load store collections from API, falling back to local collections:', error);
+    console.warn('Failed to load store collections from API:', error);
     return [];
   }
+};
+
+/**
+ * GET /store/collections/{slug} — one ACTIVE collection.
+ * Tries direct slug route, and falls back to looking up in the active collections list
+ * by slug, id, or name.
+ */
+export const getStoreCollectionBySlug = async (slug: string): Promise<StoreCollection | null> => {
+  if (!slug) return null;
+  const decoded = decodeURIComponent(slug).trim();
+
+  // 1. Direct GET /store/collections/{slug}
+  try {
+    const response = await api.get(`/store/collections/${encodeURIComponent(decoded)}`);
+    const raw = response.data?.data ?? response.data;
+    if (raw && isActiveCollection(raw)) {
+      return mapStoreCollection(raw);
+    }
+  } catch (error: any) {
+    if (error?.response?.status !== 404) {
+      console.warn('Direct store collection lookup by slug failed:', error);
+    }
+  }
+
+  // 2. Direct GET /store/collections/id/{slug} (if slug is a mongo ID)
+  try {
+    const response = await api.get(`/store/collections/id/${encodeURIComponent(decoded)}`);
+    const raw = response.data?.data ?? response.data;
+    if (raw && isActiveCollection(raw)) {
+      return mapStoreCollection(raw);
+    }
+  } catch {
+    // fallback
+  }
+
+  // 3. Fallback: match from the cached active collections list
+  try {
+    const all = await getCachedActiveCollections();
+    const target = decoded.toLowerCase();
+    const found = all.find(
+      c =>
+        c.slug?.toLowerCase() === target ||
+        c.id?.toLowerCase() === target ||
+        c.name?.toLowerCase() === target
+    );
+    if (found) return found;
+  } catch (err) {
+    console.warn('Fallback getCachedActiveCollections lookup failed:', err);
+  }
+
+  return null;
 };
 
 // -----------------------------------------------------------------------------

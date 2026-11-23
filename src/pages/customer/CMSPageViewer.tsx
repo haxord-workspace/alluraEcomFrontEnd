@@ -425,7 +425,9 @@ export const CMSPageViewer: React.FC<CMSPageViewerProps> = ({ slugOverride }) =>
   */
 
   return (
-    <div className="min-h-[80vh] py-8 sm:py-16">
+    // Mobile: no forced 80vh height (it left a big empty gap above the footer on short pages)
+    // and a 20px bottom pad. Desktop (sm+) keeps min-h-[80vh] and py-16 exactly as before.
+    <div className="min-h-0 sm:min-h-[80vh] pt-8 pb-5 sm:py-16">
       <SEOHead
         title={page.title}
         description={page.excerpt || `Read ${page.title} on Allura Boutique.`}

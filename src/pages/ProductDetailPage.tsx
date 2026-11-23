@@ -28,6 +28,7 @@ import { useAddToBag } from '../hooks/useAddToBag';
 import { AddToBagLabel, addToBagButtonState } from '../components/ui/AddToBagLabel';
 import { SEOHead } from '../components/common/SEOHead';
 import { ProductDetailSkeleton } from '../components/ui/ProductDetailSkeleton';
+import { ProductImageZoom } from '../components/product/ProductImageZoom';
 import { LazyProductReviews } from '../components/reviews/LazyProductReviews';
 import { ProductRatingInline } from '../components/reviews/ProductRatingInline';
 
@@ -335,31 +336,43 @@ export const ProductDetailPage: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-14">
           {/* Left: Product Images Gallery (7 cols on lg) */}
           <div className="lg:col-span-7 space-y-4">
-            <div className="aspect-[4/5] w-full rounded-lg overflow-hidden bg-allura-bgSecondary relative shadow-subtle border border-allura-border/60">
-              <img
-                src={galleryImages[activeImageIdx] || product.images.primary}
-                alt={product.name}
-                className="w-full h-full object-cover object-top transition-all duration-500"
-              />
-              <button
-                onClick={() => toggleWishlist(product)}
-                className={`absolute top-4 right-4 z-10 p-3 rounded-full backdrop-blur-md transition-all ${inWishlist
-                  ? 'bg-allura-card text-red-600 shadow-md'
-                  : 'bg-allura-card/85 text-allura-text hover:text-red-600'
-                  }`}
-                aria-label="Toggle Wishlist"
-              >
-                <Heart size={18} className={inWishlist ? 'fill-current' : ''} />
-              </button>
+            <ProductImageZoom
+              src={galleryImages[activeImageIdx] || product.images.primary}
+              alt={product.name}
+              images={galleryImages}
+              activeImageIdx={activeImageIdx}
+              onImageChange={setActiveImageIdx}
+              overlayButtons={
+                <>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleWishlist(product);
+                    }}
+                    className={`absolute top-4 right-4 pointer-events-auto p-3 rounded-full backdrop-blur-md transition-all ${inWishlist
+                      ? 'bg-allura-card text-red-600 shadow-md'
+                      : 'bg-allura-card/85 text-allura-text hover:text-red-600'
+                      }`}
+                    aria-label="Toggle Wishlist"
+                  >
+                    <Heart size={18} className={inWishlist ? 'fill-current' : ''} />
+                  </button>
 
-              <button
-                onClick={handleShare}
-                className="absolute top-4 left-4 z-10 p-3 rounded-full bg-allura-card/85 text-allura-text hover:text-allura-gold backdrop-blur-md transition-all"
-                aria-label="Share product"
-              >
-                <Share2 size={16} />
-              </button>
-            </div>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleShare();
+                    }}
+                    className="absolute top-4 left-4 pointer-events-auto p-3 rounded-full bg-allura-card/85 text-allura-text hover:text-allura-gold backdrop-blur-md transition-all"
+                    aria-label="Share product"
+                  >
+                    <Share2 size={16} />
+                  </button>
+                </>
+              }
+            />
 
             {galleryImages.length > 1 && (
               <div className="flex gap-3 overflow-x-auto no-scrollbar pb-1">
@@ -708,7 +721,7 @@ export const ProductDetailPage: React.FC = () => {
 
         {/* Complete The Look Section */}
         <section className="mt-8 sm:mt-14 pt-8 sm:pt-12 border-t border-allura-border/60">
-          <div className="flex items-center justify-between mb-8">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0 mb-6 sm:mb-8">
             <div>
               <span className="text-[11px] font-sans font-bold tracking-[0.25em] uppercase text-allura-goldDark block mb-1">
                 PAIR WITH INTENTION
@@ -719,7 +732,7 @@ export const ProductDetailPage: React.FC = () => {
             </div>
             <Link
               to="/shop"
-              className="text-xs font-sans font-bold tracking-wider text-allura-darkBrown hover:text-allura-goldDark uppercase"
+              className="text-xs font-sans font-bold tracking-wider text-allura-darkBrown hover:text-allura-goldDark uppercase self-start sm:self-auto"
             >
               Explore More →
             </Link>

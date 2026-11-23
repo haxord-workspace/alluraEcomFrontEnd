@@ -25,8 +25,10 @@ import { ProtectedRoute } from './components/common/ProtectedRoute';
 import { HomePage } from './pages/HomePage';
 import { ShopPage } from './pages/ShopPage';
 import { CollectionPage } from './pages/CollectionPage';
+import { CollectionsPage } from './pages/CollectionsPage';
 import { ProductDetailPage } from './pages/ProductDetailPage';
-import { LookbookPage } from './pages/LookbookPage';
+// LOOKBOOK DISABLED — commented out, not removed
+// import { LookbookPage } from './pages/LookbookPage';
 import { AboutPage } from './pages/AboutPage';
 import { ContactPage } from './pages/ContactPage';
 import { CartPage } from './pages/CartPage';
@@ -105,7 +107,6 @@ export const AppContent: React.FC = () => {
   const location = useLocation();
   const isCheckout = location.pathname === '/checkout';
   const isProductPage = location.pathname.startsWith('/product/');
-  const isHomePage = location.pathname === '/';
   const isAdminRoute = location.pathname.startsWith('/admin');
 
   // Meta Pixel & storefront analytics: the app never reloads between pages, so send PageView/PAGE_VIEW on every route change
@@ -189,15 +190,19 @@ export const AppContent: React.FC = () => {
       )}
 
       {/* Main Content Area */}
-      {/* Home on mobile: the footer's own pb-24 already clears the fixed bottom nav, so skip the extra gap */}
-      <main className={`flex-1 ${isProductPage ? 'pb-0' : 'pb-16'} ${isHomePage ? 'max-md:pb-0' : ''} lg:pb-0`}>
+      {/* Mobile (<768px): whenever the footer is shown, its own bottom padding already clears the
+          fixed bottom nav, so drop main's extra gap to avoid blank space above the footer */}
+      <main className={`flex-1 ${isProductPage ? 'pb-0' : 'pb-16'} ${!isCheckout ? 'max-md:pb-0' : ''} lg:pb-0`}>
         <Routes>
           {/* Core Pages */}
           <Route path="/" element={<HomePage />} />
           <Route path="/shop" element={<ShopPage />} />
+          <Route path="/collections" element={<CollectionsPage />} />
           <Route path="/collections/:slug" element={<CollectionPage />} />
           <Route path="/product/:slug" element={<ProductDetailPage />} />
+          {/* LOOKBOOK DISABLED
           <Route path="/lookbook" element={<LookbookPage />} />
+          */}
           <Route path="/about" element={<AboutPage />} />
           <Route path="/contact" element={<ContactPage />} />
           <Route path="/cart" element={<ProtectedRoute><CartPage /></ProtectedRoute>} />

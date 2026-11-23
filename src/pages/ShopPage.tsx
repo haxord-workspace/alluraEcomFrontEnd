@@ -444,7 +444,7 @@ export const ShopPage: React.FC = () => {
   const totalCount = meta.total || displayProducts.length;
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-8 sm:py-12">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-0 sm:py-12">
       {/* Header */}
       <div className="hidden sm:block text-center max-w-2xl mx-auto sm:mb-12">
         <span className="text-[10px] sm:text-[11px] font-sans font-bold tracking-[0.28em] uppercase text-allura-goldDark block mb-1 sm:mb-2">
@@ -785,7 +785,7 @@ export const ShopPage: React.FC = () => {
 
               {/* End of products indicator */}
               {!hasMore && !isLoadingMore && productsList.length > 0 && (
-                <div className="py-12 text-center border-t border-allura-border/40 mt-8">
+                <div className="pt-5 pb-2 mt-4 text-center sm:py-12 sm:mt-8 sm:border-t sm:border-allura-border/40">
                   <span className="text-[11px] font-sans font-bold tracking-[0.22em] uppercase text-allura-muted block">
                     ✦ You've reached the end of the collection ✦
                   </span>

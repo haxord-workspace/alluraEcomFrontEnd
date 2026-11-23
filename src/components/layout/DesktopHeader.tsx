@@ -4,11 +4,13 @@ import { Search, Heart, ShoppingBag, UserRound, ChevronDown } from 'lucide-react
 import { AlluraLogo } from '../common/AlluraLogo';
 import { useShop } from '../../context/ShopContext';
 import { NotificationBell } from './NotificationBell';
+import { useStoreCollections } from '../../hooks/useStoreCollections';
 
 export const DesktopHeader: React.FC = () => {
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
   const { cartCount, wishlist, customer, setIsCartOpen, setIsSearchOpen } = useShop();
   const location = useLocation();
+  const { collections } = useStoreCollections();
 
   const navLinks = [
     { label: 'HOME', to: '/' },
@@ -20,21 +22,17 @@ export const DesktopHeader: React.FC = () => {
         { label: 'All Products', to: '/shop' },
         { label: 'New Arrivals', to: '/shop?filter=new' },
         { label: 'Best Sellers', to: '/shop?filter=bestseller' },
-        { label: 'Ethnic Wear', to: '/collections/ethnic' },
-        { label: 'Modest Wear', to: '/collections/modest-wear' },
-        { label: 'Party Wear', to: '/collections/party-wear' },
       ],
     },
     {
       label: 'COLLECTIONS',
-      to: '/collections/festive-edit',
+      to: '/collections',
       hasDropdown: true,
+      // Live ACTIVE collections from the API (max 6), then the full list and the lookbook
       items: [
-        { label: 'Festive Edit', to: '/collections/festive-edit' },
-        { label: 'Bridal Edit', to: '/collections/bridal-edit' },
-        { label: 'The Occasion Edit', to: '/collections/party-wear' },
-        { label: 'Everyday Elegance', to: '/collections/ethnic' },
-        { label: 'Lookbook', to: '/lookbook' },
+        ...collections.slice(0, 6).map(c => ({ label: c.name, to: `/collections/${c.slug}` })),
+        { label: 'All Collections', to: '/collections' },
+        // { label: 'Lookbook', to: '/lookbook' }, // LOOKBOOK DISABLED
       ],
     },
     { label: 'ABOUT', to: '/about' },
@@ -76,7 +74,7 @@ export const DesktopHeader: React.FC = () => {
                   <div className="absolute top-full left-0 w-48 bg-[#FFFFFF] border border-[#561C08]/15 rounded-b-xl shadow-lg py-2 animate-fade-in z-50">
                     {link.items?.map(item => (
                       <Link
-                        key={item.label}
+                        key={item.to}
                         to={item.to}
                         onClick={() => setActiveDropdown(null)}
                         className="block px-4 py-2.5 text-xs font-body text-[#000000] hover:bg-[#F7E6C8] hover:text-[#561C08] transition-colors font-medium"

@@ -14,11 +14,16 @@ export interface RegisterData {
   name?: string;
   email: string;
   password?: string;
+  phone?: {
+    countryCode: string;
+    number: string;
+  };
   [key: string]: any;
 }
 
 export interface GoogleLoginData {
-  token: string;
+  credential?: string;
+  token?: string;
 }
 
 export interface AuthResponse {

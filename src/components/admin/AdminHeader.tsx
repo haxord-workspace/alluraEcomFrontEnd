@@ -6,7 +6,7 @@ import {
   Menu,
   ChevronDown,
   LogOut,
-  Check,
+  // Check,
   Mail,
   Smartphone,
   AlertTriangle,
@@ -18,7 +18,7 @@ import { useAdmin } from '../../context/AdminContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import { useCloseOnScroll } from '../../hooks/useCloseOnScroll';
 import { Link, useNavigate } from 'react-router-dom';
-import type { AdminRole } from '../../types';
+// import type { AdminRole } from '../../types';
 import { getAdminNotifications, notificationErrorMessage } from '../../service/notifications';
 import type { Notification, NotificationChannel } from '../../types/notification';
 
@@ -58,16 +58,16 @@ const ChannelDot: React.FC<{ channel: NotificationChannel }> = ({ channel }) =>
 export const AdminHeader: React.FC<AdminHeaderProps> = ({ onMobileMenuToggle }) => {
   const {
     currentAdmin,
-    setRole,
+    // setRole,
     setIsCommandOpen,
     isAdminNotificationsOpen,
     setIsAdminNotificationsOpen,
     adminLogout,
   } = useAdmin();
-  const { role, realRole, roles, can } = usePermissions();
+  const { role, realRole, can } = usePermissions();
   const canViewNotifications = can('push_email_alerts', 'view');
 
-  const [isRoleDropdownOpen, setIsRoleDropdownOpen] = useState(false);
+  // const [isRoleDropdownOpen, setIsRoleDropdownOpen] = useState(false);
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
   const navigate = useNavigate();
 
@@ -181,10 +181,6 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({ onMobileMenuToggle }) 
 
   const activeRoleLabel = role || realRole || '—';
 
-  const handleRoleChange = (newRole: AdminRole) => {
-    setRole(newRole);
-    setIsRoleDropdownOpen(false);
-  };
 
   // e.g. SUPER_ADMIN -> Super Admin
   const roleLabel = activeRoleLabel
@@ -200,7 +196,7 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({ onMobileMenuToggle }) 
 
   return (
     <header className="print:hidden sticky top-0 z-30 h-16 bg-white/90 backdrop-blur-md border-b border-allura-border flex items-center justify-between px-4 sm:px-6">
-      
+
       {/* Left: Mobile Menu & Search trigger */}
       <div className="flex items-center gap-2 sm:gap-3">
         <button
@@ -236,8 +232,8 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({ onMobileMenuToggle }) 
 
       {/* Right: Role Switcher, Notifications, Admin Profile */}
       <div className="flex items-center gap-2 sm:gap-3">
-        
-        {/* Role Switcher Pill */}
+
+        {/* Role Switcher Pill
         <div className="relative">
           <button
             onClick={() => setIsRoleDropdownOpen(!isRoleDropdownOpen)}
@@ -258,9 +254,8 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({ onMobileMenuToggle }) 
                 <button
                   key={r}
                   onClick={() => handleRoleChange(r)}
-                  className={`w-full text-left px-3 py-2 rounded-xl flex items-center justify-between transition-colors ${
-                    role === r ? 'bg-allura-gold/15 text-allura-goldDark font-bold' : 'hover:bg-stone-50 text-stone-700'
-                  }`}
+                  className={`w-full text-left px-3 py-2 rounded-xl flex items-center justify-between transition-colors ${role === r ? 'bg-allura-gold/15 text-allura-goldDark font-bold' : 'hover:bg-stone-50 text-stone-700'
+                    }`}
                 >
                   <span className="font-mono text-xs">{r}</span>
                   {role === r && <Check size={14} />}
@@ -268,7 +263,7 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({ onMobileMenuToggle }) 
               ))}
             </div>
           )}
-        </div>
+        </div> */}
 
         {/* Notifications Dropdown — hidden entirely for roles without view access */}
         {canViewNotifications && (

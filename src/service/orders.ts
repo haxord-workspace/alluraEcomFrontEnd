@@ -311,6 +311,7 @@ const mapItem = (raw: any): OrderItem => {
     selectedColor: colorName ? { name: colorName, hex: colorHex(colorName) || '#D9C9B4' } : NO_COLOR,
     quantity: num(raw?.quantity, raw?.qty) || 1,
     unitPrice,
+    finalPrice: [raw?.finalPrice, raw?.pricing?.finalPrice].map(Number).find(v => Number.isFinite(v) && v > 0),
     mrp: num(raw?.mrp, variant?.pricing?.mrp, unitPrice),
     sku: raw?.sku || variant?.sku || product.sku || '',
   };
@@ -386,6 +387,8 @@ export const mapOrder = (raw: any): Order => {
     paymentMethod: toPaymentMethod(payment?.method || raw?.paymentMethod),
     paymentStatus: PAYMENT_STATUS[String(payment?.status || raw?.paymentStatus || 'PENDING').toUpperCase()] || 'Pending',
     transactionId: payment?.transactionId || payment?.txnId || payment?.paymentId || payment?.referenceId || raw?.transactionId,
+    paymentTransactionId: raw?.paymentTransactionId || payment?.paymentTransactionId || undefined,
+    deliveredAt: raw?.deliveredAt || shipment?.deliveredAt || undefined,
     orderStatus: toUiStatus(rawStatus),
     cancelReason: raw?.cancelReason,
     cancelNote: raw?.cancelNote,

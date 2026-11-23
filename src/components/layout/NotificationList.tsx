@@ -8,6 +8,7 @@ interface NotificationListProps {
   notifications: CustomerNotification[];
   isLoading: boolean;
   error: string | null;
+  emptyMessage?: string;
   onRetry: () => void;
   onMarkAsRead: (id: string) => void;
   /** Called after navigating away (e.g. to close the dropdown panel). Omit on the full page. */
@@ -34,6 +35,7 @@ export const NotificationList: React.FC<NotificationListProps> = ({
   notifications,
   isLoading,
   error,
+  emptyMessage,
   onRetry,
   onMarkAsRead,
   onAfterNavigate,
@@ -75,7 +77,7 @@ export const NotificationList: React.FC<NotificationListProps> = ({
     return (
       <div className="flex flex-col items-center gap-2 py-10 text-allura-muted">
         <BellOff size={20} />
-        <p className="text-xs font-sans">No notifications yet</p>
+        <p className="text-xs font-sans">{emptyMessage || 'No notifications yet'}</p>
       </div>
     );
   }

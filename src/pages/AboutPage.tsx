@@ -7,7 +7,7 @@ import { useStoreAddress } from '../hooks/useStoreAddress';
 export const AboutPage: React.FC = () => {
   const { address } = useStoreAddress();
   return (
-    <div className="space-y-16 sm:space-y-24 pb-20">
+    <div className="space-y-16 sm:space-y-24 pb-6 sm:pb-20">
       {/* Hero Header */}
       <section className="relative h-[45vh] sm:h-[52vh] min-h-[360px] bg-allura-bgSecondary flex items-center justify-center text-center px-6 overflow-hidden">
         <img

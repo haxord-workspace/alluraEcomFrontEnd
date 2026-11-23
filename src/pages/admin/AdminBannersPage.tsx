@@ -139,8 +139,11 @@ const BANNER_TEMPLATES = [
     badge: 'HAUTE COUTURE',
     eyebrow: 'EDITORIAL SHOWCASE',
     offerPill: 'Limited Edition Series',
-    ctaText: 'DISCOVER LOOKBOOK',
-    targetUrl: '/lookbook',
+    // LOOKBOOK DISABLED
+    // ctaText: 'DISCOVER LOOKBOOK',
+    // targetUrl: '/lookbook',
+    ctaText: 'DISCOVER COLLECTIONS',
+    targetUrl: '/collections',
     desktopImage: 'https://images.unsplash.com/photo-1490481651871-ab68de25d43d?auto=format&fit=crop&w=1920&q=80',
     placement: 'HOME_PROMOTION' as BannerPlacement,
   },
@@ -152,7 +155,7 @@ const QUICK_DESTINATIONS = [
   { label: 'New Arrivals', url: '/shop?sort=newest' },
   { label: 'Bridal Couture', url: '/collections/bridal' },
   { label: 'Festive Edit', url: '/collections/festive' },
-  { label: 'Lookbook', url: '/lookbook' },
+  // { label: 'Lookbook', url: '/lookbook' }, // LOOKBOOK DISABLED
   { label: 'AI Luxury Stylist', url: '/ai-assistant' },
 ];
 

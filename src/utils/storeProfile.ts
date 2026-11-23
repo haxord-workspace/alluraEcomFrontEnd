@@ -7,6 +7,23 @@ export const cleanProfileValue = (value?: string | null): string | undefined => 
   return trimmed && trimmed.toLowerCase() !== 'string' ? trimmed : undefined;
 };
 
+/** "Allura Boutique Pvt. Ltd." → "Allura Boutique" (company suffixes dropped for friendly copy) */
+export const storeDisplayName = (legalName?: string | null): string | undefined => {
+  const name = cleanProfileValue(legalName);
+  if (!name) return undefined;
+  const short = name
+    .replace(/[\s,]*\b(pvt\.?|private)?\s*(ltd\.?|limited|llp|inc\.?|co\.)\.?$/i, '')
+    .trim();
+  return short || name;
+};
+
+/** Digits-only phone for tel: / wa.me links; adds the 91 country code to 10-digit Indian numbers */
+export const phoneDigits = (raw?: string | null): string => {
+  const digits = (raw || '').replace(/\D/g, '');
+  if (!digits) return '';
+  return digits.length === 10 ? `91${digits}` : digits;
+};
+
 /** Formats an Indian phone number as "+91 XXXXX XXXXX"; returns the raw value when it can't be parsed */
 export const formatPhoneDisplay = (raw?: string | null): string => {
   if (!raw || typeof raw !== 'string') return '';

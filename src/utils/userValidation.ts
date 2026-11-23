@@ -5,7 +5,7 @@
 // Backend rules known so far: passwords need at least 8 characters (same rule as
 // POST /auth/reset-password). Nothing here is stricter than that for passwords.
 
-import { mobileError, normalizeMobile } from './addressValidation';
+import { normalizeMobile } from './addressValidation';
 
 export const NAME_MIN_LENGTH = 2;
 export const NAME_MAX_LENGTH = 50;
@@ -70,10 +70,18 @@ export const countryCodeError = (value: string): string => {
   return '';
 };
 
+/** Mobile number validation: mandatory, exactly 10 digits */
+export const mobileNumberError = (value: string): string => {
+  const digits = (value || '').replace(/\D/g, '');
+  if (!digits) return 'Mobile number is required.';
+  if (digits.length !== 10) return 'Please enter a valid 10-digit mobile number.';
+  return '';
+};
+
 /** Indian numbers: 10 digits starting with 6–9. Other country codes: 6–15 digits. */
 export const phoneNumberError = (value: string, countryCode: string): string => {
-  if (isIndianCountryCode(countryCode)) return mobileError(value);
-  if (!value) return 'Please enter a phone number.';
+  if (isIndianCountryCode(countryCode)) return mobileNumberError(value);
+  if (!value) return 'Mobile number is required.';
   return /^\d{6,15}$/.test(value) ? '' : 'Enter a valid phone number (digits only).';
 };
 
@@ -91,6 +99,7 @@ export type FieldRules<T extends Record<keyof T, string>> = {
 export type SignUpValues = {
   name: string;
   email: string;
+  phone: string;
   password: string;
   confirmPassword: string;
 };
@@ -98,6 +107,7 @@ export type SignUpValues = {
 export const signUpRules: FieldRules<SignUpValues> = {
   name: value => nameError(value, 'Full name'),
   email: value => emailError(value),
+  phone: value => mobileNumberError(value),
   password: value => passwordError(value),
   confirmPassword: (value, values) => confirmPasswordError(value, values.password),
 };

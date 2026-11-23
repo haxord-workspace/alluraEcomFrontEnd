@@ -101,6 +101,13 @@ export const markAllNotificationsRead = async (): Promise<void> => {
   await api.patch('/notifications/read-all');
 };
 
+/** DELETE /notifications/{id} */
+export const deleteNotification = async (id: string): Promise<void> => {
+  await api.delete(`/notifications/${id}`);
+};
+
+export const deleteCustomerNotification = deleteNotification;
+
 /** POST /notifications/device-tokens */
 export const registerDeviceToken = async (input: DeviceTokenInput): Promise<void> => {
   await api.post('/notifications/device-tokens', input);

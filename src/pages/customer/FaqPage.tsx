@@ -48,7 +48,7 @@ export const FaqPage: React.FC = () => {
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-16 space-y-12">
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-10 pb-6 sm:py-16 space-y-12">
       {/* Header */}
       <div className="text-center max-w-2xl mx-auto space-y-3">
         <span className="text-[11px] font-sans font-bold tracking-[0.25em] text-allura-goldDark uppercase">
