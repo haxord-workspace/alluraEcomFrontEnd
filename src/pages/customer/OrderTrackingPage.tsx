@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, MapPin, CheckCircle, Truck, ShieldCheck, MessageCircle, X, XCircle } from 'lucide-react';
+import { ArrowLeft, MapPin, CheckCircle, Truck, ShieldCheck, MessageCircle, X, XCircle, Copy, Check, ExternalLink } from 'lucide-react';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { useCustomerOrder } from '../../hooks/useCustomerOrder';
 import { OrderTrackingSkeleton } from '../../components/ui/OrderTrackingSkeleton';
@@ -9,6 +9,17 @@ import { formatUserFacingStatus, toReadableText } from '../../utils/userFacingTe
 export const OrderTrackingPage: React.FC = () => {
   const { orderId } = useParams<{ orderId: string }>();
   const { order, isLoading: isLoadingOrder } = useCustomerOrder(orderId);
+  const [isAwbCopied, setIsAwbCopied] = useState(false);
+
+  const copyAwb = async (awb: string) => {
+    try {
+      await navigator.clipboard.writeText(awb);
+      setIsAwbCopied(true);
+      window.setTimeout(() => setIsAwbCopied(false), 2000);
+    } catch {
+      // Clipboard API unavailable — no safe fallback, so no-op
+    }
+  };
 
   if (isLoadingOrder) {
     return <OrderTrackingSkeleton />;
@@ -30,6 +41,7 @@ export const OrderTrackingPage: React.FC = () => {
   }
 
   const isCancelled = /cancell?ed/i.test(String(order.orderStatus || ''));
+  const hasRealAwb = !!order.tracking?.awb;
 
   // Before dispatch there is no courier data yet: show the real state instead of a sample shipment
   const tracking = {
@@ -104,13 +116,37 @@ export const OrderTrackingPage: React.FC = () => {
         isCancelled ? 'border border-rose-300 ring-1 ring-rose-200/50' : 'border border-allura-border'
       }`}>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 pb-6 border-b border-allura-border/60">
-          <div>
+          <div className="min-w-0">
             <span className="text-[10px] font-sans font-bold uppercase tracking-wider text-allura-muted">
               WAYBILL / AWB NUMBER
             </span>
-            <p className="font-mono text-base font-bold text-allura-darkBrown mt-1">
-              {tracking.awb}
-            </p>
+            <div className="flex items-center gap-2 mt-1">
+              <p className="font-mono text-base font-bold text-allura-darkBrown break-all">
+                {tracking.awb}
+              </p>
+              {hasRealAwb && (
+                <button
+                  type="button"
+                  onClick={() => copyAwb(order.tracking!.awb)}
+                  className="shrink-0 p-1 rounded-lg text-allura-muted hover:text-allura-goldDark hover:bg-allura-bgSecondary transition-colors"
+                  aria-label="Copy AWB number"
+                  title="Copy AWB number"
+                >
+                  {isAwbCopied ? <Check size={14} className="text-emerald-700" /> : <Copy size={14} />}
+                </button>
+              )}
+            </div>
+            {tracking.trackingUrl && (
+              <a
+                href={tracking.trackingUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 mt-1 text-[11px] font-sans font-bold text-allura-goldDark hover:underline"
+              >
+                <span>Track shipment</span>
+                <ExternalLink size={11} />
+              </a>
+            )}
           </div>
 
           <div>

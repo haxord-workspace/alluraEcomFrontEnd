@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
 import {
   Heart,
   MessageCircle,
@@ -25,6 +25,7 @@ import { ProductCard } from '../components/ui/ProductCard';
 import { BottomSheet } from '../components/modals/BottomSheet';
 import type { Product } from '../types';
 import { useAddToBag } from '../hooks/useAddToBag';
+import type { RestoreShopSelection } from '../utils/pendingShopAction';
 import { AddToBagLabel, addToBagButtonState } from '../components/ui/AddToBagLabel';
 import { SEOHead } from '../components/common/SEOHead';
 import { ProductDetailSkeleton } from '../components/ui/ProductDetailSkeleton';
@@ -35,6 +36,12 @@ import { ProductRatingInline } from '../components/reviews/ProductRatingInline';
 export const ProductDetailPage: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  // Read when the product loads (the load effect only re-runs on a new slug)
+  const restoreStateRef = useRef<unknown>(location.state);
+  useEffect(() => {
+    restoreStateRef.current = location.state;
+  }, [location.state]);
   const {
     products,
     addToCart,
@@ -100,6 +107,21 @@ export const ProductDetailPage: React.FC = () => {
         }
         if (!initialSize) {
           initialSize = fetched.sizes?.[0] || '';
+        }
+
+        // Sent back here after sign-in (the pending Add to Bag / Buy Now couldn't finish):
+        // keep the size / colour / quantity the customer had chosen instead of the defaults
+        const restore = (restoreStateRef.current as Partial<RestoreShopSelection> | null)?.restoreSelection;
+        if (restore) {
+          const same = (a?: string, b?: string) => (a || '').trim().toLowerCase() === (b || '').trim().toLowerCase();
+          const colorIdx = restore.colorName ? (fetched.colors || []).findIndex(c => same(c.name, restore.colorName)) : -1;
+          const restoredColor = colorIdx >= 0 ? fetched.colors[colorIdx] : firstColor;
+          if (colorIdx >= 0) setSelectedColorIdx(colorIdx);
+          const sizeExists = (fetched.variants?.length
+            ? fetched.variants.some(v => same(v.size, restore.size) && (!restoredColor?.name || !v.color?.name || same(v.color.name, restoredColor.name)))
+            : (fetched.sizes || []).some(s => same(s, restore.size)));
+          if (restore.size && sizeExists) initialSize = restore.size.trim();
+          if (restore.quantity > 0) setQuantity(restore.quantity);
         }
         setSelectedSize(initialSize);
         trackProductView(fetched, 'pdp');
@@ -260,7 +282,8 @@ export const ProductDetailPage: React.FC = () => {
   const handleBuyNow = async () => {
     if (isBuyingNow) return;
     setIsBuyingNow(true);
-    const added = await addToCart(product, selectedSize, currentColor, quantity, { silent: true });
+    // A guest is sent to sign in; this selection then continues straight to checkout
+    const added = await addToCart(product, selectedSize, currentColor, quantity, { silent: true, intent: 'buy_now' });
     setIsBuyingNow(false);
     if (added) navigate('/checkout');
   };
@@ -414,6 +437,15 @@ export const ProductDetailPage: React.FC = () => {
             <h1 className="font-serif text-2xl sm:text-4xl text-allura-text font-normal uppercase tracking-tight">
               {product.name}
             </h1>
+
+            {!!product.shortDescription?.trim() && (
+              <div className="allura-fade-slide-up">
+                <span className="inline-flex items-center gap-1.5 text-[11px] sm:text-xs font-sans font-semibold text-allura-goldDark bg-allura-bgSecondary/60 border border-allura-gold/30 px-3 py-1 rounded-full">
+                  <Sparkles size={12} className="shrink-0" />
+                  {product.shortDescription}
+                </span>
+              </div>
+            )}
 
             <div className="flex items-baseline gap-3 pb-3 border-b border-allura-border/60">
               <span className="font-serif text-2xl sm:text-3xl font-semibold text-allura-darkBrown">
@@ -652,7 +684,7 @@ export const ProductDetailPage: React.FC = () => {
                   onClick={() => toggleAccordion('exchange')}
                   className="w-full p-3.5 text-left flex items-center justify-between text-xs font-sans font-bold text-allura-darkBrown uppercase tracking-wider hover:bg-allura-bgSecondary/40"
                 >
-                  <span>Exchange & Return Guidelines</span>
+                  <span>Exchange Guidelines</span>
                   <ChevronDown
                     size={14}
                     className={`transition-transform ${openAccordions.exchange ? 'rotate-180' : ''}`}
@@ -660,7 +692,7 @@ export const ProductDetailPage: React.FC = () => {
                 </button>
                 {openAccordions.exchange && (
                   <div className="p-4 pt-1 text-xs text-allura-muted font-sans space-y-1.5 border-t border-allura-border/40">
-                    <p>• 7-day hassle-free exchange for size or alternative designs.</p>
+                    <p>• 7-day hassle-free exchange for size or alternative designs (no returns).</p>
                     <p>• Product tags and original boutique invoice must be intact.</p>
                     <p>• WhatsApp us directly at +91 9037991774 to initiate an exchange.</p>
                   </div>

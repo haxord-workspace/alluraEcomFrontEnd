@@ -23,6 +23,7 @@ import { OrderQuickStatusMenu } from '../../components/admin/OrderQuickStatusMen
 import { OrderStatusBadgeMenu, ORDER_STATUS_PILL_SIZE } from '../../components/admin/OrderStatusBadgeMenu';
 import { ENABLE_ORDER_ROW_ACTIONS, ENABLE_STATUS_BADGE_MENU } from '../../config/orderStatusFlags';
 import { PaymentReminderModal } from '../../components/admin/PaymentReminderModal';
+import { BulkSlipBar } from '../../components/admin/BulkSlipBar';
 
 const CLOSED_ORDER_STATUSES: OrderStatus[] = ['Cancelled', 'Returned', 'Refunded'];
 /** Pending-payment orders (Phase B) show "Remind" instead of "Manage". */
@@ -66,6 +67,29 @@ export const AdminOrdersPage: React.FC = () => {
   // tracked client-side only, in localStorage (survives refresh, per-browser).
   const [reminderOrder, setReminderOrder] = useState<Order | null>(null);
   const [remindersSent, setRemindersSent] = useState<Record<string, string>>({});
+
+  // Bulk address-slip printing: selection is this page's rows only, cleared on
+  // page/filter/search change since there's no cross-page selection here.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const toggleSelected = (orderId: string) =>
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(orderId)) next.delete(orderId);
+      else next.add(orderId);
+      return next;
+    });
+  const allCurrentSelected = orders.length > 0 && orders.every(o => selectedIds.has(o.id));
+  const toggleSelectAll = () =>
+    setSelectedIds(prev => {
+      if (allCurrentSelected) {
+        const next = new Set(prev);
+        orders.forEach(o => next.delete(o.id));
+        return next;
+      }
+      const next = new Set(prev);
+      orders.forEach(o => next.add(o.id));
+      return next;
+    });
 
   useEffect(() => {
     setRemindersSent(prev => {
@@ -145,6 +169,11 @@ export const AdminOrdersPage: React.FC = () => {
   useEffect(() => {
     fetchOrders();
   }, [fetchOrders]);
+
+  // Clear the bulk-print selection whenever the visible rows change underneath it
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [page, statusFilter, search]);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -282,12 +311,27 @@ export const AdminOrdersPage: React.FC = () => {
         </div>
       )}
 
+      {canViewOrders && selectedIds.size > 0 && (
+        <BulkSlipBar orderIds={Array.from(selectedIds)} onClear={() => setSelectedIds(new Set())} />
+      )}
+
       {/* Orders Table */}
       <div className="bg-white border border-stone-200 rounded-2xl overflow-hidden shadow-xs">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[850px] text-left text-xs font-sans border-collapse">
             <thead>
               <tr className="bg-stone-50 border-b border-stone-200 text-stone-500 uppercase tracking-wider text-[10px]">
+                {canViewOrders && (
+                  <th className="p-4 w-10">
+                    <input
+                      type="checkbox"
+                      aria-label="Select all orders on this page"
+                      checked={allCurrentSelected}
+                      onChange={toggleSelectAll}
+                      className="h-3.5 w-3.5 rounded border-stone-300 accent-[#561C08]"
+                    />
+                  </th>
+                )}
                 <th className="p-4">Order Number & Date</th>
                 <th className="p-4">Customer & City</th>
                 <th className="p-4">Items / SKU</th>
@@ -301,17 +345,28 @@ export const AdminOrdersPage: React.FC = () => {
             <tbody className="divide-y divide-stone-100">
               {isLoading && orders.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="p-10 text-center text-stone-400">Loading orders…</td>
+                  <td colSpan={canViewOrders ? 9 : 8} className="p-10 text-center text-stone-400">Loading orders…</td>
                 </tr>
               ) : orders.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="p-10 text-center text-stone-400">
+                  <td colSpan={canViewOrders ? 9 : 8} className="p-10 text-center text-stone-400">
                     {search || statusFilter !== 'All' ? 'No orders match these filters.' : 'No orders yet.'}
                   </td>
                 </tr>
               ) : (
                 orders.map(order => (
                   <tr key={order.id} className="hover:bg-stone-50/70 transition-colors">
+                    {canViewOrders && (
+                      <td className="p-4" onClick={e => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          aria-label={`Select order ${order.orderNumber}`}
+                          checked={selectedIds.has(order.id)}
+                          onChange={() => toggleSelected(order.id)}
+                          className="h-3.5 w-3.5 rounded border-stone-300 accent-[#561C08]"
+                        />
+                      </td>
+                    )}
                     <td className="p-4">
                       {needsPaymentReminder(order) ? (
                         <Link to={`/admin/orders/${order.id}`} className="font-serif text-sm font-bold text-stone-900 hover:text-[#561C08] hover:underline">

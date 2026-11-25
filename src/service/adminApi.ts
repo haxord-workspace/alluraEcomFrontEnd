@@ -129,6 +129,81 @@ adminApi.interceptors.response.use(
       }
     }
 
+    // 403 error handling based on backend error envelope
+    if (error.response?.status === 403) {
+      const data = error.response?.data;
+      const errorCode =
+        data?.error?.code || (typeof data?.error === 'string' ? data.error : undefined) || data?.code;
+      const details = data?.error?.details || data?.details;
+      const detail0 = Array.isArray(details) && details.length > 0 ? details[0] : undefined;
+      const errModule = detail0?.module;
+      const errAction = detail0?.action;
+      const serverMessage = data?.message || data?.error?.message;
+
+      if (errorCode === 'ACCOUNT_INACTIVE') {
+        clearAdminSession();
+        import('../store').then(({ store }) => {
+          import('../store/slices/adminAuthSlice').then(({ clearAdmin }) => {
+            store.dispatch(clearAdmin());
+          });
+        });
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(
+            new CustomEvent('allura:admin-auth-error', {
+              detail: {
+                message: 'Your account has been deactivated. Contact the Super Admin.',
+                redirectToLogin: true,
+              },
+            })
+          );
+        }
+        return Promise.reject(error);
+      }
+
+      if (errorCode === 'FORBIDDEN') {
+        clearAdminSession();
+        import('../store').then(({ store }) => {
+          import('../store/slices/adminAuthSlice').then(({ clearAdmin }) => {
+            store.dispatch(clearAdmin());
+          });
+        });
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(
+            new CustomEvent('allura:admin-auth-error', {
+              detail: {
+                message: 'Admin access only.',
+                redirectToLogin: true,
+              },
+            })
+          );
+        }
+        return Promise.reject(error);
+      }
+
+      // PERMISSION_DENIED (or any other 403)
+      const friendlyMessage =
+        serverMessage && typeof serverMessage === 'string'
+          ? serverMessage
+          : errModule && errAction
+            ? `Permission denied: ${errModule}:${errAction}.`
+            : 'You do not have permission to perform this action.';
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('allura:permission-denied', {
+            detail: {
+              code: errorCode || 'PERMISSION_DENIED',
+              message: friendlyMessage,
+              module: errModule,
+              action: errAction,
+              status: 403,
+              url: originalRequest?.url,
+            },
+          })
+        );
+      }
+    }
+
     return Promise.reject(error);
   }
 );

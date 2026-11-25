@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   Plus,
   Search,
@@ -42,6 +42,25 @@ import { getDashboardProducts, type ProductAnalyticsResponse } from '../../servi
 import type { AdminProduct, AdminProductVariant } from '../../types';
 import { getBackendErrorMessage } from '../../utils/apiResponse';
 import { AdminErrorBanner } from '../../components/admin/AdminErrorBanner';
+import { SupplierSelect } from '../../components/admin/suppliers/SupplierSelect';
+import { SupplierStatusBadge } from '../../components/admin/suppliers/SupplierStatusBadge';
+import { toSupplierApiError } from '../../service/adminSuppliers';
+import type { ProductSupplierRef } from '../../types/suppliers';
+
+/** Supplier filter value for products without a supplier */
+const NO_SUPPLIER_FILTER = 'none';
+
+const SUPPLIER_SAVE_ERRORS: Record<string, string> = {
+  SUPPLIER_NOT_ASSIGNABLE: 'This supplier is inactive or blocked. Choose another.',
+  INVALID_SUPPLIER: 'This supplier no longer exists.',
+};
+
+/** Save responses may return supplierId as a bare id: keep the list row showing the supplier we chose */
+const withSupplierRef = (saved: AdminProduct, chosen: ProductSupplierRef | null): AdminProduct => {
+  const raw: unknown = saved.supplierId;
+  if (raw && typeof raw === 'object') return saved;
+  return { ...saved, supplierId: chosen };
+};
 
 // Default form state
 const EMPTY_FORM = {
@@ -150,8 +169,13 @@ export const AdminProductsPage: React.FC = () => {
 
   // ── Filters, Sort & Pagination ─────────────────────────────────────────────
   const PAGE_SIZE = 15;
+  const [searchParams, setSearchParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('All');
+  // '' = all, 'none' = without a supplier, otherwise a supplier id (also accepts ?supplierId= / ?supplier=none links)
+  const [selectedSupplier, setSelectedSupplier] = useState(
+    () => searchParams.get('supplierId') || searchParams.get('supplier') || ''
+  );
   const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'name-asc' | 'name-desc' | 'price-desc' | 'price-asc'>('newest');
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -172,6 +196,12 @@ export const AdminProductsPage: React.FC = () => {
   const [originalVariants, setOriginalVariants] = useState<Record<string, string>>({});
   const [isLoadingVariants, setIsLoadingVariants] = useState(false);
   const [saveProgress, setSaveProgress] = useState('');
+  // Supplier is tracked apart from formData so it is only sent when the rules below allow
+  const [supplierId, setSupplierId] = useState('');
+  const [chosenSupplier, setChosenSupplier] = useState<ProductSupplierRef | null>(null);
+  const [originalSupplier, setOriginalSupplier] = useState<ProductSupplierRef | null>(null);
+  const [supplierError, setSupplierError] = useState<string | null>(null);
+  const [supplierReloadToken, setSupplierReloadToken] = useState(0);
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
   // Variant prices per product, to flag products whose variants are priced differently
@@ -212,8 +242,12 @@ export const AdminProductsPage: React.FC = () => {
         !q ||
         (p.name || '').toLowerCase().includes(q) ||
         (p.sku || '').toLowerCase().includes(q) ||
-        (p.category?.name || '').toLowerCase().includes(q);
-      return matchesStatus && matchesQuery;
+        (p.category?.name || '').toLowerCase().includes(q) ||
+        (p.supplierId?.name || '').toLowerCase().includes(q);
+      const matchesSupplier =
+        !selectedSupplier ||
+        (selectedSupplier === NO_SUPPLIER_FILTER ? !p.supplierId : p.supplierId?._id === selectedSupplier);
+      return matchesStatus && matchesQuery && matchesSupplier;
     });
 
     list.sort((a, b) => {
@@ -237,11 +271,20 @@ export const AdminProductsPage: React.FC = () => {
     });
 
     return list;
-  }, [products, selectedStatus, searchQuery, sortBy]);
+  }, [products, selectedStatus, searchQuery, sortBy, selectedSupplier]);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, selectedStatus, sortBy]);
+  }, [searchQuery, selectedStatus, sortBy, selectedSupplier]);
+
+  // Supplier filter options: the suppliers linked to the loaded products
+  const supplierFilterOptions = useMemo(() => {
+    const map = new Map<string, ProductSupplierRef>();
+    products.forEach(p => {
+      if (p.supplierId?._id) map.set(p.supplierId._id, p.supplierId);
+    });
+    return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [products]);
 
   const paginatedProducts = useMemo(() => {
     const start = (currentPage - 1) * PAGE_SIZE;
@@ -324,6 +367,10 @@ export const AdminProductsPage: React.FC = () => {
     setFormError(null);
     setFormData(EMPTY_FORM);
     setOriginalVariants({});
+    setSupplierId('');
+    setChosenSupplier(null);
+    setOriginalSupplier(null);
+    setSupplierError(null);
     setIsModalOpen(true);
   };
 
@@ -346,6 +393,11 @@ export const AdminProductsPage: React.FC = () => {
       variants: [],
     });
     setOriginalVariants({});
+    const currentSupplier = product.supplierId ?? null;
+    setSupplierId(currentSupplier?._id ?? '');
+    setChosenSupplier(currentSupplier);
+    setOriginalSupplier(currentSupplier);
+    setSupplierError(null);
     setIsModalOpen(true);
 
     // Load this product's existing colour / size variants
@@ -365,6 +417,21 @@ export const AdminProductsPage: React.FC = () => {
       })
       .finally(() => setIsLoadingVariants(false));
   };
+
+  // Deep-link support: e.g. the command search sends ?edit=<productId> to open
+  // that product's edit modal directly, once its data has finished loading.
+  useEffect(() => {
+    const editId = searchParams.get('edit');
+    if (!editId || isLoading) return;
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      next.delete('edit');
+      return next;
+    }, { replace: true });
+    const product = products.find(p => p.id === editId);
+    if (product && canEdit) handleOpenEdit(product);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, isLoading, products, canEdit]);
 
   // Creates new rows, patches changed ones and deletes removed ones. Returns the error messages.
   // Saves variants ONE AT A TIME (the backend fails when several are created for a product in parallel).
@@ -423,12 +490,20 @@ export const AdminProductsPage: React.FC = () => {
     e.preventDefault();
     setIsSaving(true);
     setFormError(null);
+    setSupplierError(null);
     try {
       const { variants, ...productPayload } = formData;
+      const supplierRef = supplierId ? chosenSupplier : null;
 
       let saved: AdminProduct;
       if (editingId) {
-        saved = await updateAdminProduct(editingId, productPayload);
+        // Edit: a changed supplier is sent as its id, a removed one as null; unchanged → left out
+        const supplierChanged = supplierId !== (originalSupplier?._id ?? '');
+        saved = await updateAdminProduct(editingId, {
+          ...productPayload,
+          ...(supplierChanged ? { supplierId: supplierId || null } : {}),
+        });
+        saved = withSupplierRef(saved, supplierRef);
         if (formData.status) {
           try {
             const statusUpdated = await updateAdminProductStatus(editingId, formData.status);
@@ -439,9 +514,16 @@ export const AdminProductsPage: React.FC = () => {
         }
         setProducts(products.map(p => (p.id === editingId ? saved : p)));
       } else {
-        saved = await createAdminProduct(productPayload);
+        // Create: send supplierId only when one is picked; never null
+        saved = await createAdminProduct({
+          ...productPayload,
+          ...(supplierId ? { supplierId } : {}),
+        });
+        saved = withSupplierRef(saved, supplierRef);
         setProducts([saved, ...products]);
       }
+      // The product now has this supplier: a retry (variant failures) must diff against it
+      setOriginalSupplier(supplierRef);
 
       const result = await syncVariants(saved.id, saved.sku || formData.sku, formData.pricing, variants);
       // Remember what now exists on the server so "Save" again only retries what failed
@@ -462,6 +544,15 @@ export const AdminProductsPage: React.FC = () => {
       setIsModalOpen(false);
     } catch (err: any) {
       console.error('Failed to save product:', err);
+      const apiError = toSupplierApiError(err, 'Failed to save product');
+      const supplierMsg = apiError.code ? SUPPLIER_SAVE_ERRORS[apiError.code] : undefined;
+      if (supplierMsg) {
+        // The supplier was deactivated or deleted after the list loaded: flag the field and reload options
+        setSupplierError(supplierMsg);
+        setSupplierReloadToken(t => t + 1);
+        showToast(supplierMsg, 'error');
+        return;
+      }
       const errText = getBackendErrorMessage(err, 'Failed to save product');
       setFormError(errText);
       showToast(errText, 'error');
@@ -588,6 +679,26 @@ export const AdminProductsPage: React.FC = () => {
               <option value="ARCHIVED">Archived</option>
             </select>
 
+            <select
+              value={selectedSupplier}
+              onChange={e => setSelectedSupplier(e.target.value)}
+              aria-label="Filter by supplier"
+              className="px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-sans text-stone-700 focus:outline-none cursor-pointer max-w-[200px]"
+            >
+              <option value="">Supplier: All</option>
+              <option value={NO_SUPPLIER_FILTER}>No supplier</option>
+              {supplierFilterOptions.map(s => (
+                <option key={s._id} value={s._id}>
+                  {s.name} ({s.supplierCode})
+                </option>
+              ))}
+              {selectedSupplier &&
+                selectedSupplier !== NO_SUPPLIER_FILTER &&
+                !supplierFilterOptions.some(s => s._id === selectedSupplier) && (
+                  <option value={selectedSupplier}>Selected supplier</option>
+                )}
+            </select>
+
             <div className="flex items-center gap-1.5 border border-stone-200 rounded-xl px-2.5 py-1.5 bg-stone-50 text-xs text-stone-700">
               <ArrowUpDown size={13} className="text-stone-400" />
               <select
@@ -670,6 +781,7 @@ export const AdminProductsPage: React.FC = () => {
                     </button>
                   </th>
                   <th className="p-4">Product Details</th>
+                  <th className="p-4">Supplier</th>
                   <th className="p-4">Selling Price</th>
                   <th className="p-4">MRP</th>
                   <th className="p-4">Status</th>
@@ -721,6 +833,21 @@ export const AdminProductsPage: React.FC = () => {
                             )}
                           </div>
                         </div>
+                      </td>
+                      <td className="p-4">
+                        {product.supplierId ? (
+                          <div className="space-y-0.5 max-w-[160px]">
+                            <p className="text-stone-900 truncate" title={product.supplierId.companyName ? `${product.supplierId.name} · ${product.supplierId.companyName}` : product.supplierId.name}>{product.supplierId.name}</p>
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-mono text-[10px] text-stone-400">{product.supplierId.supplierCode}</span>
+                              {product.supplierId.status !== 'ACTIVE' && (
+                                <SupplierStatusBadge status={product.supplierId.status} />
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-stone-300">—</span>
+                        )}
                       </td>
                       <td className="p-4">
                         <p className="font-bold text-[#561C08]">
@@ -822,11 +949,11 @@ export const AdminProductsPage: React.FC = () => {
                 })}
                 {!isLoading && filteredAndSorted.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="p-12 text-center text-stone-500 space-y-2">
+                    <td colSpan={7} className="p-12 text-center text-stone-500 space-y-2">
                       <p>No products found matching your search and filter criteria.</p>
-                      {(searchQuery || selectedStatus !== 'All') && (
+                      {(searchQuery || selectedStatus !== 'All' || selectedSupplier) && (
                         <button
-                          onClick={() => { setSearchQuery(''); setSelectedStatus('All'); }}
+                          onClick={() => { setSearchQuery(''); setSelectedStatus('All'); setSelectedSupplier(''); }}
                           className="text-xs font-semibold text-stone-800 underline inline-block"
                         >
                           Clear search and filters
@@ -909,13 +1036,32 @@ export const AdminProductsPage: React.FC = () => {
                 />
               </div>
 
-              <div>
-                <label className="block text-[10px] uppercase font-bold text-stone-500 mb-1">Category</label>
-                <CategorySelect
-                  value={formData.categoryId}
-                  onChange={categoryId => setFormData({ ...formData, categoryId })}
-                  placeholder="Select a category"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] uppercase font-bold text-stone-500 mb-1">Category</label>
+                  <CategorySelect
+                    value={formData.categoryId}
+                    onChange={categoryId => setFormData({ ...formData, categoryId })}
+                    placeholder="Select a category"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="product-supplier" className="block text-[10px] uppercase font-bold text-stone-500 mb-1">
+                    Supplier <span className="normal-case font-normal text-stone-400">(optional)</span>
+                  </label>
+                  <SupplierSelect
+                    id="product-supplier"
+                    value={supplierId}
+                    currentSupplier={originalSupplier}
+                    error={supplierError ?? undefined}
+                    reloadToken={supplierReloadToken}
+                    onChange={(id, supplier) => {
+                      setSupplierId(id);
+                      setChosenSupplier(supplier ?? null);
+                      setSupplierError(null);
+                    }}
+                  />
+                </div>
               </div>
 
               {/* Pricing */}
@@ -928,11 +1074,11 @@ export const AdminProductsPage: React.FC = () => {
                       type="number"
                       required
                       min={0}
-                      step={0.01}
-                      value={formData.pricing.mrp}
+                      step={1}
+                      value={formData.pricing.mrp === 0 ? '' : formData.pricing.mrp}
                       onChange={e => setFormData({
                         ...formData,
-                        pricing: { ...formData.pricing, mrp: parseFloat(e.target.value) || 0 },
+                        pricing: { ...formData.pricing, mrp: e.target.value === '' ? 0 : parseFloat(e.target.value) || 0 },
                       })}
                       className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl font-mono focus:outline-none focus:border-stone-800"
                     />
@@ -943,11 +1089,11 @@ export const AdminProductsPage: React.FC = () => {
                       type="number"
                       required
                       min={0}
-                      step={0.01}
-                      value={formData.pricing.sellingPrice}
+                      step={1}
+                      value={formData.pricing.sellingPrice === 0 ? '' : formData.pricing.sellingPrice}
                       onChange={e => setFormData({
                         ...formData,
-                        pricing: { ...formData.pricing, sellingPrice: parseFloat(e.target.value) || 0 },
+                        pricing: { ...formData.pricing, sellingPrice: e.target.value === '' ? 0 : parseFloat(e.target.value) || 0 },
                       })}
                       className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl font-mono focus:outline-none focus:border-stone-800"
                     />

@@ -52,10 +52,10 @@ const benefitLabel = (c: { discountType: Coupon['discountType']; discountValue: 
 export const AdminCouponsPage: React.FC = () => {
   const { hasPermission } = useAdmin();
   const { showToast } = useShop();
-  const canCreate = hasPermission('marketing', 'create');
-  const canEdit = hasPermission('marketing', 'edit');
-  const canDelete = hasPermission('marketing', 'delete');
-  const canPublish = hasPermission('marketing', 'publish') || canEdit;
+  const canCreate = hasPermission('coupons_banners', 'create');
+  const canEdit = hasPermission('coupons_banners', 'edit');
+  const canDelete = hasPermission('coupons_banners', 'delete');
+  const canPublish = hasPermission('coupons_banners', 'publish') || canEdit;
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);

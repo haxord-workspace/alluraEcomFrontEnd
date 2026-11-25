@@ -149,7 +149,8 @@ const CopyIconButton: React.FC<{ value: string }> = ({ value }) => {
 export const AdminNotificationsPage: React.FC = () => {
   const { showToast } = useShop();
   const { hasPermission } = useAdmin();
-  const canSend = hasPermission('notifications', 'send');
+  const canCreateAlert = hasPermission('push_email_alerts', 'create');
+  const canSend = canCreateAlert;
 
   const [searchParams, setSearchParams] = useSearchParams();
   const [isBroadcastOpen, setIsBroadcastOpen] = useState(false);
@@ -296,7 +297,7 @@ export const AdminNotificationsPage: React.FC = () => {
     }
   };
 
-  const canRetry = detail?.status === 'FAILED' || detail?.status === 'PARTIALLY_SENT';
+  const canRetry = canCreateAlert && (detail?.status === 'FAILED' || detail?.status === 'PARTIALLY_SENT');
 
   const relatedEntityHref = (n: Pick<Notification, 'relatedEntityType' | 'relatedEntityId'>): string | undefined => {
     if (!n.relatedEntityId) return undefined;

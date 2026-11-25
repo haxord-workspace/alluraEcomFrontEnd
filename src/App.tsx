@@ -92,6 +92,11 @@ import { AdminAiPage } from './pages/admin/AdminAiPage';
 import { AdminSettingsPage } from './pages/admin/AdminSettingsPage';
 import { AdminAuditLogsPage } from './pages/admin/AdminAuditLogsPage';
 import { AdminAccessGuard } from './components/admin/AdminAccessGuard';
+import { AdminSuppliersPage } from './pages/admin/AdminSuppliersPage';
+import { AdminSupplierCreatePage } from './pages/admin/AdminSupplierCreatePage';
+import { AdminSupplierEditPage } from './pages/admin/AdminSupplierEditPage';
+import { AdminSupplierDetailPage } from './pages/admin/AdminSupplierDetailPage';
+import { AdminSupplierAnalyticsPage } from './pages/admin/AdminSupplierAnalyticsPage';
 
 const ScrollToTop: React.FC = () => {
   const { pathname } = useLocation();
@@ -132,6 +137,11 @@ export const AppContent: React.FC = () => {
             <Route path="/admin/products" element={<AdminAccessGuard module="products"><AdminProductsPage /></AdminAccessGuard>} />
             <Route path="/admin/products/new" element={<AdminAccessGuard module="products" action="create"><AdminProductCreatePage /></AdminAccessGuard>} />
             <Route path="/admin/products/:id/edit" element={<AdminAccessGuard module="products" action="edit"><AdminProductEditPage /></AdminAccessGuard>} />
+            <Route path="/admin/suppliers" element={<AdminAccessGuard module="suppliers"><AdminSuppliersPage /></AdminAccessGuard>} />
+            <Route path="/admin/suppliers/new" element={<AdminAccessGuard module="suppliers" action="create"><AdminSupplierCreatePage /></AdminAccessGuard>} />
+            <Route path="/admin/suppliers/analytics" element={<AdminAccessGuard module="suppliers"><AdminSupplierAnalyticsPage /></AdminAccessGuard>} />
+            <Route path="/admin/suppliers/:id" element={<AdminAccessGuard module="suppliers"><AdminSupplierDetailPage /></AdminAccessGuard>} />
+            <Route path="/admin/suppliers/:id/edit" element={<AdminAccessGuard module="suppliers" action="edit"><AdminSupplierEditPage /></AdminAccessGuard>} />
             <Route path="/admin/categories" element={<AdminAccessGuard module="products"><AdminCategoriesPage /></AdminAccessGuard>} />
             <Route path="/admin/collections" element={<AdminAccessGuard module="products"><AdminCollectionsPage /></AdminAccessGuard>} />
             <Route path="/admin/variants" element={<AdminAccessGuard module="products"><AdminVariantsPage /></AdminAccessGuard>} />
@@ -147,11 +157,11 @@ export const AppContent: React.FC = () => {
             {/* <Route path="/admin/shipping" element={<AdminAccessGuard module="orders"><AdminShippingPage /></AdminAccessGuard>} /> */}
             <Route path="/admin/customers" element={<AdminAccessGuard module="customers"><AdminCustomersPage /></AdminAccessGuard>} />
             <Route path="/admin/customers/:id" element={<AdminAccessGuard module="customers"><AdminCustomerDetailPage /></AdminAccessGuard>} />
-            <Route path="/admin/marketing/coupons" element={<AdminAccessGuard module="marketing"><AdminCouponsPage /></AdminAccessGuard>} />
-            <Route path="/admin/marketing/promotions" element={<AdminAccessGuard module="marketing"><AdminPromotionsPage /></AdminAccessGuard>} />
-            <Route path="/admin/marketing/banners" element={<AdminAccessGuard module="marketing"><AdminBannersPage /></AdminAccessGuard>} />
+            <Route path="/admin/marketing/coupons" element={<AdminAccessGuard module="coupons_banners"><AdminCouponsPage /></AdminAccessGuard>} />
+            <Route path="/admin/marketing/promotions" element={<AdminAccessGuard module="coupons_banners"><AdminPromotionsPage /></AdminAccessGuard>} />
+            <Route path="/admin/marketing/banners" element={<AdminAccessGuard module="coupons_banners"><AdminBannersPage /></AdminAccessGuard>} />
             <Route path="/admin/banners" element={<Navigate to="/admin/marketing/banners" replace />} />
-            <Route path="/admin/marketing/abandoned-carts" element={<AdminAccessGuard module="marketing"><AdminAbandonedCartsPage /></AdminAccessGuard>} />
+            <Route path="/admin/marketing/abandoned-carts" element={<AdminAccessGuard module="coupons_banners"><AdminAbandonedCartsPage /></AdminAccessGuard>} />
             <Route path="/admin/notifications" element={<AdminAccessGuard module="notifications"><AdminNotificationsPage /></AdminAccessGuard>} />
             <Route path="/admin/content" element={<AdminAccessGuard module="cms"><AdminContentPage /></AdminAccessGuard>} />
             <Route path="/admin/content/faqs" element={<AdminAccessGuard module="cms"><AdminFaqsPage /></AdminAccessGuard>} />

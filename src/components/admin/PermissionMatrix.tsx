@@ -17,15 +17,21 @@ import { useConfirm } from '../../context/ConfirmContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import {
   buildRolePatchPayload,
+  getPermissionRegistry,
+  mapRoleMatrixErrorCode,
   resetRolesMatrix,
   settingsErrorMessage,
   updateRolePermissions,
 } from '../../service/settings';
 import type { AdminRole } from '../../types';
 import {
+  DEFAULT_SUPER_ADMIN_ONLY_CELLS,
+} from '../../utils/rbac';
+import {
   RBAC_ACTIONS,
   RBAC_MODULE_KEYS,
   RBAC_ROLES,
+  type PermissionRegistryResponse,
   type PermissionValue,
   type RbacAction,
   type RbacModuleKey,
@@ -92,6 +98,24 @@ export const PermissionMatrix: React.FC<PermissionMatrixProps> = ({
   const [isResetting, setIsResetting] = useState(false);
   const [failedRole, setFailedRole] = useState<RbacRole | null>(null);
   const isDirtyRef = useRef(false);
+  const [registry, setRegistry] = useState<PermissionRegistryResponse | null>(null);
+
+  useEffect(() => {
+    getPermissionRegistry()
+      .then(setRegistry)
+      .catch((err) => console.warn('Could not load permission registry from server, using defaults:', err));
+  }, []);
+
+  const superAdminOnlySet = useMemo(() => {
+    return new Set(registry?.superAdminOnly || DEFAULT_SUPER_ADMIN_ONLY_CELLS);
+  }, [registry]);
+
+  const activeModules = useMemo(() => {
+    if (registry?.modules && registry.modules.length > 0) {
+      return registry.modules;
+    }
+    return modules;
+  }, [registry, modules]);
 
   // Default to the first editable role (ADMIN) on first open for a logged-in SUPER_ADMIN
   useEffect(() => {
@@ -189,6 +213,16 @@ export const PermissionMatrix: React.FC<PermissionMatrixProps> = ({
   const handleCellToggle = async (moduleKey: RbacModuleKey, action: RbacAction) => {
     if (!canEditActiveRole || isSaving || isResetting || !draftMatrix) return;
 
+    // Locked cells reserved for Super Admin only cannot be toggled for other roles
+    if (superAdminOnlySet.has(`${moduleKey}:${action}`) && (activeRole as string) !== 'SUPER_ADMIN') {
+      return;
+    }
+
+    // Special modules with no configurable permissions
+    if (moduleKey === 'ai_knowledge_logs' || moduleKey === 'audit_trail_logs') {
+      return;
+    }
+
     const currentMod = draftMatrix[activeRole]?.[moduleKey];
     if (!currentMod) return;
     const currentValue = currentMod[action];
@@ -206,6 +240,22 @@ export const PermissionMatrix: React.FC<PermissionMatrixProps> = ({
         title: 'Grant admin management privilege?',
         message: 'Granting this lets this role manage admin accounts. Continue?',
         confirmLabel: 'Continue',
+        isDestructive: true,
+      });
+      if (!ok) return;
+    }
+
+    // Extra confirmation for risky grants (delete/export actions, or sensitive modules)
+    const RISKY_ACTIONS: RbacAction[] = ['delete', 'export'];
+    const RISKY_MODULES: RbacModuleKey[] = ['system_settings', 'audit_trail_logs', 'admin_management'];
+    const isRiskyAction = RISKY_ACTIONS.includes(action);
+    const isRiskyModule = RISKY_MODULES.includes(moduleKey);
+    if (nextValue === true && (isRiskyAction || isRiskyModule) && moduleKey !== 'admin_management') {
+      const modLabel = modules.find(m => m.key === moduleKey)?.label ?? moduleKey;
+      const ok = await confirm({
+        title: `Grant ${action} permission?`,
+        message: `Granting ${action.toUpperCase()} on "${modLabel}" is a sensitive operation. This role will be able to ${action === 'delete' ? 'permanently delete records' : action === 'export' ? 'export data' : 'modify system configuration'}. Continue?`,
+        confirmLabel: 'Grant',
         isDestructive: true,
       });
       if (!ok) return;
@@ -268,6 +318,27 @@ export const PermissionMatrix: React.FC<PermissionMatrixProps> = ({
     setIsSaving(true);
     setFailedRole(null);
 
+    // Build a human-readable diff list and show confirmation before saving
+    const moduleLabel = (key: string) => modules.find(m => m.key === key)?.label ?? key.replace(/_/g, ' ');
+    const diffLines = changedRoles.flatMap(({ role: r, changes }) =>
+      Object.entries(changes).flatMap(([mKey, actMap]) =>
+        Object.entries(actMap ?? {}).map(
+          ([act, val]) =>
+            `${r.replace(/_/g, ' ')}: ${moduleLabel(mKey)} › ${act.toUpperCase()}: ${val ? '✓ GRANTED' : '✗ REVOKED'}`
+        )
+      )
+    );
+    const ok = await confirm({
+      title: `Save ${totalUnsavedCount} permission change${totalUnsavedCount === 1 ? '' : 's'}?`,
+      message: diffLines.join('\n'),
+      confirmLabel: 'Save',
+      isDestructive: false,
+    });
+    if (!ok) {
+      setIsSaving(false);
+      return;
+    }
+
     let lastServerMatrix = null;
     const savedRoleNames: string[] = [];
 
@@ -300,14 +371,11 @@ export const PermissionMatrix: React.FC<PermissionMatrixProps> = ({
         });
       } catch (err: any) {
         setFailedRole(item.role);
-        const status = err?.response?.status;
-        const message =
-          status === 403
-            ? 'Only Super Admin can change permissions'
-            : settingsErrorMessage(
-                err,
-                `Couldn't save permissions for ${item.role.replace(/_/g, ' ')}`
-              );
+        const fallbackMsg = settingsErrorMessage(
+          err,
+          `Couldn't save permissions for ${item.role.replace(/_/g, ' ')}`
+        );
+        const message = mapRoleMatrixErrorCode(err, fallbackMsg);
         showToast(message, 'error');
         setIsSaving(false);
         return;
@@ -364,7 +432,7 @@ export const PermissionMatrix: React.FC<PermissionMatrixProps> = ({
     setFailedRole((prev) => (prev === activeRole ? null : prev));
 
     try {
-      await resetRolesMatrix([activeRole]);
+      await resetRolesMatrix(activeRole);
       const refreshed = await refreshPermissions({ background: true });
       if (refreshed) {
         setDraftMatrix((prev) => {
@@ -512,7 +580,21 @@ export const PermissionMatrix: React.FC<PermissionMatrixProps> = ({
         )}
       </div>
 
-      {activeRole === 'ADMIN' && !isLoading && !error && (
+      {registry?.rules && registry.rules.length > 0 && !isLoading && (
+        <div className="px-4 py-3 bg-stone-50 border-b border-allura-border/60 space-y-1 text-[11px] text-stone-600">
+          <div className="flex items-center gap-1.5 font-semibold text-stone-800">
+            <Info size={13} className="text-allura-goldDark shrink-0" />
+            <span>RBAC Matrix Rules:</span>
+          </div>
+          <ul className="list-disc list-inside space-y-0.5 text-[11px] text-stone-600 pl-1">
+            {registry.rules.map((rule, idx) => (
+              <li key={idx}>{rule}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {activeRole === 'ADMIN' && !isLoading && !error && !registry?.rules && (
         <div className="px-4 py-2.5 bg-stone-50 border-b border-allura-border/60 flex items-start gap-2 text-[11px] text-stone-600">
           <Info size={14} className="text-allura-goldDark shrink-0 mt-0.5" />
           <span>
@@ -598,7 +680,8 @@ export const PermissionMatrix: React.FC<PermissionMatrixProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-allura-border/60">
-              {modules.map((mod) => {
+              {activeModules.map((mod) => {
+                const isSpecialUnconfigurable = mod.key === 'ai_knowledge_logs' || mod.key === 'audit_trail_logs';
                 const modPerms = targetPerms[mod.key];
                 const serverModPerms = serverTargetPerms?.[mod.key];
 
@@ -607,9 +690,45 @@ export const PermissionMatrix: React.FC<PermissionMatrixProps> = ({
                     <td className="p-4">
                       <p className="font-medium text-allura-text">{mod.label}</p>
                       <p className="text-[10px] text-allura-muted">{mod.description}</p>
+                      {isSpecialUnconfigurable && (
+                        <p className="text-[10px] text-amber-700 italic mt-0.5">
+                          No configurable permissions yet
+                        </p>
+                      )}
                     </td>
 
                     {ACTION_HEADERS.map(({ key: action, label: colLabel }) => {
+                      const isSuperAdminOnlyCell =
+                        superAdminOnlySet.has(`${mod.key}:${action}`) && activeRole !== 'SUPER_ADMIN';
+
+                      if (isSpecialUnconfigurable) {
+                        return (
+                          <td key={action} className="p-4 text-center">
+                            <span
+                              className="text-stone-300 font-mono text-xs select-none cursor-help"
+                              title="No such feature in this module"
+                              aria-label={`${mod.label}, ${colLabel}, not applicable`}
+                            >
+                              —
+                            </span>
+                          </td>
+                        );
+                      }
+
+                      if (isSuperAdminOnlyCell) {
+                        return (
+                          <td key={action} className="p-4 text-center">
+                            <span
+                              className="w-7 h-7 rounded-lg inline-flex items-center justify-center bg-stone-100 text-stone-400 border border-stone-200 select-none cursor-not-allowed mx-auto"
+                              title="Only Super Admin can manage staff"
+                              aria-label={`${mod.label}, ${colLabel}, locked (Only Super Admin can manage staff)`}
+                            >
+                              <Lock size={12} className="text-stone-400" />
+                            </span>
+                          </td>
+                        );
+                      }
+
                       const flag: PermissionValue = modPerms ? modPerms[action] : null;
                       const serverFlag: PermissionValue = serverModPerms ? serverModPerms[action] : null;
                       const isCellDirty =
@@ -622,7 +741,8 @@ export const PermissionMatrix: React.FC<PermissionMatrixProps> = ({
                         <td key={action} className="p-4 text-center">
                           {flag === null ? (
                             <span
-                              className="text-stone-300 font-mono text-xs select-none"
+                              className="text-stone-300 font-mono text-xs select-none cursor-help"
+                              title="No such feature in this module"
                               aria-label={`${mod.label}, ${colLabel}, not applicable`}
                             >
                               —
@@ -700,7 +820,7 @@ export const PermissionMatrix: React.FC<PermissionMatrixProps> = ({
               type="button"
               onClick={() => void handleSaveChanges()}
               disabled={isSaving}
-              className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-accent-gold text-stone-950 text-xs font-bold hover:opacity-90 transition-opacity disabled:opacity-60"
+              className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-brand-cream text-brand-brown hover:bg-white text-xs font-bold transition-all shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {isSaving ? (
                 <Loader2 size={13} className="animate-spin" />

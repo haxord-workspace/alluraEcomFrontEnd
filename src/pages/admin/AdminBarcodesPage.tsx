@@ -9,24 +9,54 @@ import {
   XCircle,
   Loader2,
   RefreshCw,
+  PackageSearch,
+  ExternalLink,
+  X,
 } from 'lucide-react';
 import { BarcodeScannerModal } from '../../components/admin/BarcodeScannerModal';
+import { PrintTagDialog, type PrintTagTarget } from '../../components/admin/barcodes/PrintTagDialog';
+import { BulkPrintDialog, type BulkPrintProduct, type BulkPrintSource } from '../../components/admin/barcodes/BulkPrintDialog';
+import { ProductPickerDialog, type PickerProduct } from '../../components/admin/barcodes/ProductPickerDialog';
 import { getAdminProducts } from '../../service/adminProducts';
-import { getAdminVariants, getVariantBarcodePrintImage } from '../../service/adminVariants';
+import { getAdminVariants } from '../../service/adminVariants';
 import { generateBarcode, validateBarcode } from '../../service/barcode';
+import { releaseLabelPdfUrl, type PrintLabelPdfOptions } from '../../service/barcodeLabels';
 import type { AdminProduct, AdminProductVariant } from '../../types';
 import { getBackendErrorMessage } from '../../utils/apiResponse';
 import { useShop } from '../../context/ShopContext';
+import { usePermissions } from '../../hooks/usePermissions';
+import { useLabelPresets } from '../../hooks/useLabelPresets';
+
+/** The last label PDF, kept for an "Open PDF" link (Safari / popup-blocked fallback) */
+interface LastLabelPdf {
+  url: string;
+  blocked: boolean;
+}
+
+/** The print iframe may still be reading the PDF; free it only after that has finished */
+const PDF_RELEASE_DELAY_MS = 60_000;
 
 export const AdminBarcodesPage: React.FC = () => {
   const { showToast } = useShop();
+  const { can } = usePermissions();
+  // Backend: products_catalog:view or inventory_stock:view may print labels
+  const canPrintLabels = can('products', 'view') || can('inventory', 'view');
+  const labelPresets = useLabelPresets(canPrintLabels);
   const [products, setProducts] = useState<AdminProduct[]>([]);
   const [variants, setVariants] = useState<AdminProductVariant[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [busyId, setBusyId] = useState<string | null>(null);
+
+  // Label printing
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [showUnassigned, setShowUnassigned] = useState(false);
+  const [printTagTarget, setPrintTagTarget] = useState<PrintTagTarget | null>(null);
+  const [bulkSource, setBulkSource] = useState<BulkPrintSource | null>(null);
+  const [isProductPickerOpen, setIsProductPickerOpen] = useState(false);
+  const [lastPdf, setLastPdf] = useState<LastLabelPdf | null>(null);
+  const lastPdfUrlRef = React.useRef<string | null>(null);
 
   // Generate & validate tool
   const [isGeneratorOpen, setIsGeneratorOpen] = useState(false);
@@ -52,6 +82,12 @@ export const AdminBarcodesPage: React.FC = () => {
       ]);
       setVariants(variantData);
       setProducts(productData);
+      // Drop selections for variants that no longer exist
+      const ids = new Set(variantData.map(v => v.id));
+      setSelectedIds(prev => {
+        const kept = [...prev].filter(id => ids.has(id));
+        return kept.length === prev.size ? prev : new Set(kept);
+      });
     } catch (err: any) {
       setError(getBackendErrorMessage(err, 'Failed to load barcode data'));
     } finally {
@@ -64,7 +100,9 @@ export const AdminBarcodesPage: React.FC = () => {
   const assigned = variants.filter(v => v.barcode?.value);
   const unassigned = variants.filter(v => !v.barcode?.value);
 
-  const filtered = assigned.filter(v => {
+  // By default the table lists assigned barcodes only (as before); "Show unassigned" adds the rest
+  const tableVariants = showUnassigned ? variants : assigned;
+  const filtered = tableVariants.filter(v => {
     const q = searchQuery.toLowerCase();
     const productName = productMap[v.productId]?.name || '';
     return (
@@ -74,47 +112,116 @@ export const AdminBarcodesPage: React.FC = () => {
     );
   });
 
-  const handlePrintTag = async (variantId: string) => {
-    setBusyId(variantId);
-    try {
-      const url = await getVariantBarcodePrintImage(variantId);
-      const printWindow = window.open('', '_blank');
-      if (printWindow) {
-        printWindow.document.write(`
-          <html>
-            <head>
-              <title>Print Barcode</title>
-              <style>
-                body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; }
-                img { max-width: 100%; max-height: 100%; }
-                @media print {
-                  @page { margin: 0; }
-                  body { display: block; height: auto; }
-                  img { width: auto; height: auto; max-width: 100%; }
-                }
-              </style>
-            </head>
-            <body>
-              <img src="${url}" onload="window.print(); window.close();" />
-            </body>
-          </html>
-        `);
-        printWindow.document.close();
-      } else {
-        // Fallback if popup blocker prevented the window
-        window.open(url, '_blank');
-      }
-    } catch (err: any) {
-      console.error('Failed to load barcode image:', err);
-      showToast(getBackendErrorMessage(err, 'Failed to load barcode print image'), 'error');
-    } finally {
-      setBusyId(null);
-    }
+  // ─── Label printing ─────────────────────────────────────────────────────────
+
+  // Free the last PDF when the page goes away (after the print iframe is done with it)
+  useEffect(() => () => {
+    const url = lastPdfUrlRef.current;
+    if (url) window.setTimeout(() => releaseLabelPdfUrl(url), PDF_RELEASE_DELAY_MS);
+  }, []);
+
+  const keepLastPdf = (url: string, blocked: boolean) => {
+    const previous = lastPdfUrlRef.current;
+    if (previous && previous !== url) window.setTimeout(() => releaseLabelPdfUrl(previous), PDF_RELEASE_DELAY_MS);
+    lastPdfUrlRef.current = url;
+    setLastPdf({ url, blocked });
   };
 
-  const handlePrintLabels = () => {
-    window.print();
+  const dismissLastPdf = () => {
+    const url = lastPdfUrlRef.current;
+    if (url) window.setTimeout(() => releaseLabelPdfUrl(url), PDF_RELEASE_DELAY_MS);
+    lastPdfUrlRef.current = null;
+    setLastPdf(null);
   };
+
+  const pdfHandlers: PrintLabelPdfOptions = {
+    onPdfReady: url => keepLastPdf(url, false),
+    onFallback: ({ url, opened }) => {
+      keepLastPdf(url, !opened);
+      showToast(
+        opened
+          ? 'Opened the label PDF in a new tab. Print it from there.'
+          : 'Your browser blocked the print window. Use "Open PDF" above the table to print the labels.',
+        opened ? 'info' : 'error'
+      );
+    },
+  };
+
+  const handleLabelsPrinted = (message: string) => showToast(message, 'success');
+
+  const toBulkRow = (v: AdminProductVariant) => ({
+    variantId: v.id,
+    sku: v.sku,
+    productName: productMap[v.productId]?.name || v.productId,
+    barcode: v.barcode?.value || null,
+  });
+
+  const openPrintTag = (v: AdminProductVariant) => {
+    if (!canPrintLabels || !v.barcode?.value) return;
+    setPrintTagTarget({
+      variantId: v.id,
+      sku: v.sku,
+      productName: productMap[v.productId]?.name || v.productId,
+      barcode: v.barcode.value,
+    });
+  };
+
+  const selectedVariants = variants.filter(v => selectedIds.has(v.id));
+  const hiddenSelectedCount = selectedVariants.filter(v => !filtered.some(f => f.id === v.id)).length;
+
+  const openBulkForSelection = () => {
+    if (selectedVariants.length === 0) return;
+    setBulkSource({ kind: 'variants', rows: selectedVariants.map(toBulkRow) });
+  };
+
+  // "Print Label Sheet": the new PDF bulk print. Uses the selected rows, or every listed row with a barcode.
+  const handlePrintLabels = () => {
+    if (!canPrintLabels) return;
+    if (selectedVariants.length > 0) {
+      openBulkForSelection();
+      return;
+    }
+    const rows = filtered.filter(v => v.barcode?.value);
+    if (rows.length === 0) {
+      showToast('No barcodes to print. Assign barcodes or clear your search first.', 'info');
+      return;
+    }
+    setBulkSource({ kind: 'variants', rows: rows.map(toBulkRow) });
+  };
+
+  const pickerProducts: PickerProduct[] = React.useMemo(() => {
+    const counts: Record<string, number> = {};
+    variants.forEach(v => { counts[v.productId] = (counts[v.productId] || 0) + 1; });
+    return products
+      .map(p => ({ id: p.id, name: p.name, sku: p.sku || '', status: p.status || '', variantCount: counts[p.id] || 0 }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [products, variants]);
+
+  const handleProductsChosen = (chosen: BulkPrintProduct[]) => {
+    setIsProductPickerOpen(false);
+    setBulkSource({ kind: 'products', products: chosen });
+  };
+
+  const toggleSelected = (variantId: string) =>
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(variantId)) next.delete(variantId);
+      else next.add(variantId);
+      return next;
+    });
+
+  // "Select all" = the rows currently listed (after search / filter). Other selections are kept.
+  const allVisibleSelected = filtered.length > 0 && filtered.every(v => selectedIds.has(v.id));
+  const someVisibleSelected = filtered.some(v => selectedIds.has(v.id));
+  const toggleAllVisible = () =>
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      filtered.forEach(v => (allVisibleSelected ? next.delete(v.id) : next.add(v.id)));
+      return next;
+    });
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const tableColumnCount = canPrintLabels ? 7 : 6;
 
   const handleOpenGenerator = () => {
     setGeneratedValue(null);
@@ -169,7 +276,7 @@ export const AdminBarcodesPage: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <button
             onClick={fetchAll}
             className="p-2 text-stone-500 hover:text-stone-800 hover:bg-stone-100 rounded-xl transition-colors"
@@ -196,7 +303,15 @@ export const AdminBarcodesPage: React.FC = () => {
 
           <button
             onClick={handlePrintLabels}
-            className="px-4 py-2 border border-stone-200 bg-white hover:bg-stone-50 text-stone-800 rounded-xl text-xs font-sans font-semibold transition-colors flex items-center gap-1.5"
+            disabled={!canPrintLabels || isLoading}
+            title={
+              canPrintLabels
+                ? selectedIds.size > 0
+                  ? `Print labels for the ${selectedIds.size} selected variant(s)`
+                  : 'Print labels for every listed barcode'
+                : "You don't have permission to print labels"
+            }
+            className="px-4 py-2 border border-stone-200 bg-white hover:bg-stone-50 text-stone-800 rounded-xl text-xs font-sans font-semibold transition-colors flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Printer size={14} />
             <span>Print Label Sheet</span>
@@ -217,6 +332,7 @@ export const AdminBarcodesPage: React.FC = () => {
         <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-xs space-y-1">
           <span className="text-[10px] font-sans font-bold uppercase tracking-wider text-stone-400">Unassigned</span>
           <p className="font-serif text-2xl font-bold text-[#561C08]">{unassigned.length}</p>
+          <p className="text-[10px] font-sans text-stone-400 leading-snug">Assign barcodes to print labels for these.</p>
         </div>
         <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-xs space-y-1">
           <span className="text-[10px] font-sans font-bold uppercase tracking-wider text-stone-400">Barcode Standard</span>
@@ -237,7 +353,81 @@ export const AdminBarcodesPage: React.FC = () => {
               className="w-full pl-10 pr-4 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-sans text-stone-900 focus:outline-none focus:border-stone-800"
             />
           </div>
+
+          <div className="flex flex-wrap items-center justify-end gap-2 w-full sm:w-auto">
+            <label className="flex items-center gap-2 text-xs font-sans text-stone-600 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={showUnassigned}
+                onChange={e => setShowUnassigned(e.target.checked)}
+                className="h-3.5 w-3.5 accent-[#561C08]"
+              />
+              <span>Show unassigned</span>
+            </label>
+            {canPrintLabels && (
+              <button
+                type="button"
+                onClick={() => setIsProductPickerOpen(true)}
+                disabled={isLoading || !!error}
+                className="px-3 py-1.5 border border-stone-200 bg-white hover:bg-stone-50 text-stone-800 rounded-lg text-xs font-sans font-semibold transition-colors flex items-center gap-1.5 disabled:opacity-50"
+              >
+                <PackageSearch size={14} />
+                <span>Print by product</span>
+              </button>
+            )}
+          </div>
         </div>
+
+        {canPrintLabels && selectedIds.size > 0 && (
+          <div className="mx-4 px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl flex flex-wrap items-center justify-between gap-2 text-xs font-sans">
+            <p className="text-stone-700" aria-live="polite">
+              <span className="font-bold">{selectedIds.size}</span> selected
+              {hiddenSelectedCount > 0 && <span className="text-stone-400"> ({hiddenSelectedCount} not shown by the current search)</span>}
+            </p>
+            <div className="flex items-center gap-3">
+              <button type="button" onClick={clearSelection} className="text-stone-500 hover:text-stone-900 underline">
+                Clear selection
+              </button>
+              <button
+                type="button"
+                onClick={openBulkForSelection}
+                className="px-3 py-1.5 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-lg font-bold uppercase tracking-wider flex items-center gap-1.5"
+              >
+                <Printer size={13} />
+                <span>Print selected ({selectedIds.size})</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {lastPdf && (
+          <div
+            className={`mx-4 px-3 py-2 border rounded-xl flex flex-wrap items-center justify-between gap-2 text-xs font-sans ${
+              lastPdf.blocked ? 'bg-amber-50 border-amber-200 text-amber-800' : 'bg-stone-50 border-stone-200 text-stone-600'
+            }`}
+            role="status"
+          >
+            <p>
+              {lastPdf.blocked
+                ? 'Your browser blocked the print window. Open the PDF and print it from there.'
+                : 'Labels were sent to the print dialog. No print dialog? Open the PDF and print it from there.'}
+            </p>
+            <div className="flex items-center gap-2">
+              <a
+                href={lastPdf.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-3 py-1.5 border border-stone-200 bg-white hover:bg-stone-100 text-stone-800 rounded-lg font-semibold flex items-center gap-1.5"
+              >
+                <ExternalLink size={13} />
+                <span>Open PDF</span>
+              </a>
+              <button type="button" onClick={dismissLastPdf} aria-label="Dismiss" className="p-1.5 text-stone-400 hover:text-stone-800 rounded-lg">
+                <X size={14} />
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="overflow-x-auto">
           {isLoading ? (
@@ -256,6 +446,22 @@ export const AdminBarcodesPage: React.FC = () => {
             <table className="w-full text-left text-xs font-sans border-collapse">
               <thead>
                 <tr className="bg-stone-50 border-b border-stone-200 text-stone-500 uppercase tracking-wider text-[10px]">
+                  {canPrintLabels && (
+                    <th className="w-10 py-4 pl-4 pr-0">
+                      <input
+                        type="checkbox"
+                        checked={allVisibleSelected}
+                        ref={el => {
+                          if (el) el.indeterminate = !allVisibleSelected && someVisibleSelected;
+                        }}
+                        disabled={filtered.length === 0}
+                        onChange={toggleAllVisible}
+                        aria-label="Select all listed rows"
+                        title="Select all listed rows"
+                        className="h-3.5 w-3.5 accent-[#561C08] align-middle"
+                      />
+                    </th>
+                  )}
                   <th className="p-4">Barcode Number</th>
                   <th className="p-4">Type</th>
                   <th className="p-4">Linked Product Ensemble</th>
@@ -267,10 +473,31 @@ export const AdminBarcodesPage: React.FC = () => {
               <tbody className="divide-y divide-stone-100">
                 {filtered.map(v => {
                   const product = productMap[v.productId];
+                  const hasBarcode = !!v.barcode?.value;
+                  const isSelected = selectedIds.has(v.id);
                   return (
-                    <tr key={v.id} className="hover:bg-stone-50/70 transition-colors">
-                      <td className="p-4 font-mono font-bold text-stone-800">{v.barcode?.value}</td>
-                      <td className="p-4 font-mono text-stone-500">{v.barcode?.type}</td>
+                    <tr key={v.id} className={`hover:bg-stone-50/70 transition-colors ${isSelected ? 'bg-stone-50' : ''}`}>
+                      {canPrintLabels && (
+                        <td className="w-10 py-4 pl-4 pr-0">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleSelected(v.id)}
+                            aria-label={`Select row ${v.sku}`}
+                            className="h-3.5 w-3.5 accent-[#561C08] align-middle"
+                          />
+                        </td>
+                      )}
+                      <td className="p-4 font-mono font-bold text-stone-800">
+                        {hasBarcode ? (
+                          v.barcode?.value
+                        ) : (
+                          <span className="inline-block px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-800 font-sans text-[10px] font-bold uppercase tracking-wider">
+                            Unassigned
+                          </span>
+                        )}
+                      </td>
+                      <td className="p-4 font-mono text-stone-500">{v.barcode?.type || '—'}</td>
                       <td className="p-4">
                         <p className="font-medium text-stone-900 font-serif">{product?.name || v.productId}</p>
                       </td>
@@ -279,21 +506,29 @@ export const AdminBarcodesPage: React.FC = () => {
                         {v.pricing?.currency} {v.pricing?.sellingPrice?.toLocaleString()}
                       </td>
                       <td className="p-4 text-right">
-                        <button
-                          onClick={() => handlePrintTag(v.id)}
-                          disabled={busyId === v.id}
-                          className="px-3 py-1.5 border border-stone-200 rounded-lg text-xs font-sans text-stone-600 hover:text-stone-900 hover:bg-stone-100 transition-colors disabled:opacity-50"
+                        {/* Wrapper carries the tooltip: disabled buttons don't get hover events everywhere */}
+                        <span
+                          className="inline-block"
+                          title={!canPrintLabels ? "You don't have permission to print labels" : !hasBarcode ? 'Assign a barcode first' : undefined}
                         >
-                          {busyId === v.id ? 'Loading...' : 'Print Tag'}
-                        </button>
+                          <button
+                            type="button"
+                            onClick={() => openPrintTag(v)}
+                            disabled={!canPrintLabels || !hasBarcode}
+                            aria-label={hasBarcode ? `Print tag for ${v.sku}` : `Print tag for ${v.sku} (assign a barcode first)`}
+                            className="px-3 py-1.5 border border-stone-200 rounded-lg text-xs font-sans text-stone-600 hover:text-stone-900 hover:bg-stone-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-stone-600"
+                          >
+                            Print Tag
+                          </button>
+                        </span>
                       </td>
                     </tr>
                   );
                 })}
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="p-12 text-center text-stone-500">
-                      No assigned barcodes found. {searchQuery && 'Try clearing your search.'}
+                    <td colSpan={tableColumnCount} className="p-12 text-center text-stone-500">
+                      {showUnassigned ? 'No variants found.' : 'No assigned barcodes found.'} {searchQuery && 'Try clearing your search.'}
                     </td>
                   </tr>
                 )}
@@ -373,6 +608,35 @@ export const AdminBarcodesPage: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Label printing dialogs */}
+      {canPrintLabels && printTagTarget && (
+        <PrintTagDialog
+          target={printTagTarget}
+          presets={labelPresets}
+          pdfHandlers={pdfHandlers}
+          onClose={() => setPrintTagTarget(null)}
+          onPrinted={handleLabelsPrinted}
+          onVariantMissing={fetchAll}
+        />
+      )}
+      {canPrintLabels && bulkSource && (
+        <BulkPrintDialog
+          source={bulkSource}
+          presets={labelPresets}
+          pdfHandlers={pdfHandlers}
+          onClose={() => setBulkSource(null)}
+          onPrinted={handleLabelsPrinted}
+          onVariantMissing={fetchAll}
+        />
+      )}
+      {canPrintLabels && isProductPickerOpen && (
+        <ProductPickerDialog
+          products={pickerProducts}
+          onClose={() => setIsProductPickerOpen(false)}
+          onConfirm={handleProductsChosen}
+        />
       )}
 
       {/* Barcode Scanner Modal */}

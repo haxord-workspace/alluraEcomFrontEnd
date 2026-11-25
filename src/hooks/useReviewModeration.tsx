@@ -5,6 +5,8 @@ import { useShop } from '../context/ShopContext';
 import { ReviewDetailDrawer } from '../components/admin/reviews/ReviewDetailDrawer';
 import { ModerateReviewModal } from '../components/admin/reviews/ModerateReviewModal';
 import { RespondReviewModal } from '../components/admin/reviews/RespondReviewModal';
+import { usePermissions } from './usePermissions';
+import { REVIEWS_ADMIN_MODULE } from '../config/reviews';
 import { getAdminReview } from '../service/adminReviews';
 import { ASSUMED_MODERATION_RESULT_STATUS, canModerateReview } from '../service/reviewMappers';
 import { nextReviewSeq } from './useReviewEntityStore';
@@ -43,6 +45,10 @@ export const useReviewModeration = ({ store, findRow, onStale, lookups }: UseRev
   const [drawerRefresh, setDrawerRefresh] = useState(0);
   const [moderatingId, setModeratingId] = useState<string | null>(null);
   const [respondingId, setRespondingId] = useState<string | null>(null);
+  const { can } = usePermissions();
+  const canPublish = can(REVIEWS_ADMIN_MODULE, 'publish');
+  const canEdit = can(REVIEWS_ADMIN_MODULE, 'edit');
+  const canModerateAction = canPublish || canEdit;
 
   /** One review, resolved from the single source of truth (list row + details + writes) */
   const reviewById = useCallback(
@@ -136,22 +142,26 @@ export const useReviewModeration = ({ store, findRow, onStale, lookups }: UseRev
         refreshToken={drawerRefresh}
         renderActions={review => (
           <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => setModeratingId(review.id)}
-              disabled={!canModerateReview(review)}
-              title={canModerateReview(review) ? undefined : 'No moderation actions for this status'}
-              className="inline-flex items-center gap-1.5 min-h-11 px-4 rounded-xl bg-[#561C08] hover:bg-[#561C08]/90 text-white text-xs font-sans font-bold disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              <ShieldCheck size={14} /> Moderate
-            </button>
-            <button
-              type="button"
-              onClick={() => setRespondingId(review.id)}
-              className="inline-flex items-center gap-1.5 min-h-11 px-4 rounded-xl border border-stone-300 bg-white text-stone-700 hover:bg-stone-100 text-xs font-sans font-bold"
-            >
-              <MessageSquareReply size={14} /> {review.adminResponse ? 'Edit response' : 'Respond'}
-            </button>
+            {canModerateAction && (
+              <button
+                type="button"
+                onClick={() => setModeratingId(review.id)}
+                disabled={!canModerateReview(review)}
+                title={canModerateReview(review) ? undefined : 'No moderation actions for this status'}
+                className="inline-flex items-center gap-1.5 min-h-11 px-4 rounded-xl bg-[#561C08] hover:bg-[#561C08]/90 text-white text-xs font-sans font-bold disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <ShieldCheck size={14} /> Moderate
+              </button>
+            )}
+            {canEdit && (
+              <button
+                type="button"
+                onClick={() => setRespondingId(review.id)}
+                className="inline-flex items-center gap-1.5 min-h-11 px-4 rounded-xl border border-stone-300 bg-white text-stone-700 hover:bg-stone-100 text-xs font-sans font-bold"
+              >
+                <MessageSquareReply size={14} /> {review.adminResponse ? 'Edit response' : 'Respond'}
+              </button>
+            )}
           </div>
         )}
       />

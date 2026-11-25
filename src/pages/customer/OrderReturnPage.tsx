@@ -4,20 +4,16 @@ import { ArrowLeft, MessageCircle, Info } from 'lucide-react';
 import { useShop } from '../../context/ShopContext';
 import { useCustomerOrder } from '../../hooks/useCustomerOrder';
 import { ItemVariantMeta } from '../../components/common/ItemVariantMeta';
-import { getReturnEligibility, RETURN_WINDOW_DAYS } from '../../utils/returnEligibility';
-import { normalizeWhatsAppNumber, openWhatsApp } from '../../utils/whatsapp';
+import { useExchangeEligibility } from '../../hooks/useExchangeEligibility';
 import {
-  buildReturnWhatsAppUrl,
-  getItemDisplayPrice,
-  type ReturnRequestType,
-} from '../../utils/buildReturnWhatsAppMessage';
+  EXCHANGE_WINDOW_DAYS,
+  formatExchangeDeadline,
+  getExchangeEligibility,
+} from '../../utils/exchangeEligibility';
+import { normalizeWhatsAppNumber, openWhatsApp } from '../../utils/whatsapp';
+import { buildReturnWhatsAppUrl, getItemDisplayPrice } from '../../utils/buildReturnWhatsAppMessage';
 
-const REQUEST_TYPES: { value: ReturnRequestType; label: string; hint: string }[] = [
-  { value: 'Return', label: 'Return', hint: 'Send the item back' },
-  { value: 'Exchange', label: 'Exchange', hint: 'Swap for another size / colour' },
-];
-
-const RETURN_REASONS = [
+const EXCHANGE_REASONS = [
   'Size issue',
   'Wrong item received',
   'Damaged / defective',
@@ -32,7 +28,7 @@ const WHATSAPP_UNAVAILABLE = 'WhatsApp support is not available right now, pleas
 const labelClass = 'block text-[11px] font-sans font-bold uppercase tracking-wider text-allura-muted mb-2';
 const errorClass = 'text-[11px] font-sans text-rose-700 mt-1.5';
 
-type Field = 'type' | 'reason' | 'comments';
+type Field = 'reason' | 'comments';
 
 export const OrderReturnPage: React.FC = () => {
   const { orderId } = useParams<{ orderId: string }>();
@@ -40,13 +36,12 @@ export const OrderReturnPage: React.FC = () => {
   const { storeSettings, showToast, formatExactPrice } = useShop();
   const { order, isLoading: isLoadingOrder } = useCustomerOrder(orderId);
 
-  // The product comes from the "Return or Exchange Request" button it was opened from (?item=<index>)
+  // The product comes from the "Exchange" button it was opened from (?item=<index>)
   const itemParam = searchParams.get('item');
   const itemIndex = itemParam !== null && /^\d+$/.test(itemParam) ? Number(itemParam) : -1;
   const item = order?.items[itemIndex];
 
-  const [requestType, setRequestType] = useState<ReturnRequestType | ''>('');
-  /** Quantity to return / exchange; null until changed, meaning the full ordered quantity */
+  /** Quantity to exchange; null until changed, meaning the full ordered quantity */
   const [quantity, setQuantity] = useState<number | null>(null);
   const [reason, setReason] = useState('');
   const [comments, setComments] = useState('');
@@ -57,12 +52,13 @@ export const OrderReturnPage: React.FC = () => {
 
   const errors = useMemo(() => {
     const e: Partial<Record<Field, string>> = {};
-    if (!requestType) e.type = 'Choose Return or Exchange.';
     if (!reason) e.reason = 'Choose a reason.';
     if (reason === 'Other' && !comments.trim()) e.comments = 'Please tell us more when the reason is "Other".';
     return e;
-  }, [requestType, reason, comments]);
+  }, [reason, comments]);
   const isValid = Object.keys(errors).length === 0;
+  // Re-evaluated live: the form closes itself when the 7-day window ends while it is open
+  const eligibility = useExchangeEligibility(order);
 
   if (isLoadingOrder) {
     return (
@@ -73,7 +69,7 @@ export const OrderReturnPage: React.FC = () => {
     );
   }
 
-  if (!order) {
+  if (!order || !eligibility) {
     return (
       <div className="max-w-2xl mx-auto px-4 py-16 text-center space-y-4">
         <h2 className="font-serif text-2xl text-allura-text">Order Not Found</h2>
@@ -84,8 +80,6 @@ export const OrderReturnPage: React.FC = () => {
     );
   }
 
-  const eligibility = getReturnEligibility(order);
-
   const header = (
     <div>
       <Link
@@ -95,9 +89,9 @@ export const OrderReturnPage: React.FC = () => {
         <ArrowLeft size={14} />
         <span>Back to Order {order.orderNumber}</span>
       </Link>
-      <h1 className="font-serif text-2xl sm:text-4xl text-allura-text font-normal">Return or Exchange Request</h1>
+      <h1 className="font-serif text-2xl sm:text-4xl text-allura-text font-normal">Exchange Request</h1>
       <p className="text-xs font-sans text-allura-muted mt-1">
-        Easy {RETURN_WINDOW_DAYS}-day exchange from the date of delivery. Our team will continue with you on WhatsApp.
+        Exchanges are available within {EXCHANGE_WINDOW_DAYS} days of delivery. Our team will continue with you on WhatsApp.
       </p>
     </div>
   );
@@ -131,8 +125,15 @@ export const OrderReturnPage: React.FC = () => {
 
   const handleSubmit = (e: React.SubmitEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setTouched({ type: true, reason: true, comments: true });
-    if (!isValid || !requestType) return;
+    setTouched({ reason: true, comments: true });
+    if (!isValid) return;
+
+    // Re-check against the clock at the moment of submitting, not the last render
+    const current = getExchangeEligibility(order, Date.now());
+    if (!current.eligible) {
+      showToast(current.reason, 'error');
+      return;
+    }
 
     const number = normalizeWhatsAppNumber(storeSettings?.boutiqueProfile?.whatsappNumber);
     if (!number) {
@@ -141,17 +142,17 @@ export const OrderReturnPage: React.FC = () => {
     }
 
     const url = buildReturnWhatsAppUrl(number, order, {
-      type: requestType,
+      type: 'Exchange',
       items: [{ item, quantity: selectedQty }],
       reason,
       comments,
-      preferredVariant: requestType === 'Exchange' ? preferredVariant : undefined,
+      preferredVariant,
     });
     // Opened synchronously inside the submit handler so popup blockers allow it
     openWhatsApp(url);
   };
 
-  const deadlineText = eligibility.deadline?.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  const deadlineText = formatExchangeDeadline(eligibility.deadline);
 
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-16 space-y-6 sm:space-y-8">
@@ -166,39 +167,7 @@ export const OrderReturnPage: React.FC = () => {
           Eligible until <strong className="text-allura-text">{deadlineText}</strong>
         </p>
 
-        {/* 1. Request type */}
-        <fieldset>
-          <legend className={labelClass}>Request Type *</legend>
-          <div className="grid grid-cols-2 gap-3">
-            {REQUEST_TYPES.map(opt => (
-              <label
-                key={opt.value}
-                className={`p-3 sm:p-4 rounded-xl border cursor-pointer transition-all text-xs font-sans ${
-                  requestType === opt.value ? 'border-allura-gold bg-allura-gold/10' : 'border-allura-border hover:border-allura-gold/60'
-                }`}
-              >
-                <span className="flex items-center gap-2">
-                  <input
-                    type="radio"
-                    name="request_type"
-                    value={opt.value}
-                    checked={requestType === opt.value}
-                    onChange={() => {
-                      setRequestType(opt.value);
-                      touch('type');
-                    }}
-                    className="accent-allura-gold"
-                  />
-                  <span className="font-bold text-allura-text">{opt.label}</span>
-                </span>
-                <span className="block text-allura-muted pl-5 mt-0.5">{opt.hint}</span>
-              </label>
-            ))}
-          </div>
-          {touched.type && errors.type && <p className={errorClass}>{errors.type}</p>}
-        </fieldset>
-
-        {/* 2. Product (pre-selected from the button it was opened from) */}
+        {/* 1. Product (pre-selected from the button it was opened from) */}
         <div>
           <p className={labelClass}>Product</p>
           <div className="p-3 rounded-xl border border-allura-gold bg-allura-gold/10">
@@ -221,11 +190,11 @@ export const OrderReturnPage: React.FC = () => {
 
             {item.quantity > 1 && (
               <div className="flex items-center gap-2 mt-3 text-xs font-sans">
-                <label htmlFor="return-qty" className="text-allura-muted">
-                  Quantity to {requestType ? requestType.toLowerCase() : 'return'}:
+                <label htmlFor="exchange-qty" className="text-allura-muted">
+                  Quantity to exchange:
                 </label>
                 <select
-                  id="return-qty"
+                  id="exchange-qty"
                   value={selectedQty}
                   onChange={e => setQuantity(Number(e.target.value))}
                   className="px-2 py-1 bg-allura-bg border border-allura-border rounded-lg text-allura-text focus:outline-none focus:border-allura-gold"
@@ -241,13 +210,13 @@ export const OrderReturnPage: React.FC = () => {
           </div>
         </div>
 
-        {/* 3. Reason */}
+        {/* 2. Reason */}
         <div>
-          <label htmlFor="return-reason" className={labelClass}>
-            Reason *
+          <label htmlFor="exchange-reason" className={labelClass}>
+            Exchange Reason *
           </label>
           <select
-            id="return-reason"
+            id="exchange-reason"
             value={reason}
             onChange={e => {
               setReason(e.target.value);
@@ -260,7 +229,7 @@ export const OrderReturnPage: React.FC = () => {
             <option value="" disabled>
               Select a reason
             </option>
-            {RETURN_REASONS.map(r => (
+            {EXCHANGE_REASONS.map(r => (
               <option key={r} value={r}>
                 {r}
               </option>
@@ -269,13 +238,13 @@ export const OrderReturnPage: React.FC = () => {
           {touched.reason && errors.reason && <p className={errorClass}>{errors.reason}</p>}
         </div>
 
-        {/* 4. Comments */}
+        {/* 3. Comments */}
         <div>
-          <label htmlFor="return-comments" className={labelClass}>
+          <label htmlFor="exchange-comments" className={labelClass}>
             Comments {reason === 'Other' ? '*' : '(Optional)'}
           </label>
           <textarea
-            id="return-comments"
+            id="exchange-comments"
             value={comments}
             onChange={e => setComments(e.target.value)}
             onBlur={() => touch('comments')}
@@ -288,23 +257,21 @@ export const OrderReturnPage: React.FC = () => {
           {touched.comments && errors.comments && <p className={errorClass}>{errors.comments}</p>}
         </div>
 
-        {/* 5. Exchange preference */}
-        {requestType === 'Exchange' && (
-          <div>
-            <label htmlFor="return-preferred" className={labelClass}>
-              Preferred Size / Color (Optional)
-            </label>
-            <input
-              id="return-preferred"
-              type="text"
-              value={preferredVariant}
-              onChange={e => setPreferredVariant(e.target.value)}
-              maxLength={100}
-              placeholder="e.g. Size M, Maroon"
-              className="w-full p-3 bg-allura-bg border border-allura-border rounded-xl text-xs font-sans text-allura-text focus:outline-none focus:border-allura-gold"
-            />
-          </div>
-        )}
+        {/* 4. Exchange preference */}
+        <div>
+          <label htmlFor="exchange-preferred" className={labelClass}>
+            Preferred Size / Color (Optional)
+          </label>
+          <input
+            id="exchange-preferred"
+            type="text"
+            value={preferredVariant}
+            onChange={e => setPreferredVariant(e.target.value)}
+            maxLength={100}
+            placeholder="e.g. Size M, Maroon"
+            className="w-full p-3 bg-allura-bg border border-allura-border rounded-xl text-xs font-sans text-allura-text focus:outline-none focus:border-allura-gold"
+          />
+        </div>
 
         <div className="pt-2 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3">
           <p className="text-[11px] font-sans text-allura-muted">

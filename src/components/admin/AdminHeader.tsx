@@ -6,7 +6,7 @@ import {
   Menu,
   ChevronDown,
   LogOut,
-  // Check,
+  Check,
   Mail,
   Smartphone,
   AlertTriangle,
@@ -15,11 +15,14 @@ import {
   X,
 } from 'lucide-react';
 import { useAdmin } from '../../context/AdminContext';
+import { useShop } from '../../context/ShopContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import { useCloseOnScroll } from '../../hooks/useCloseOnScroll';
+import { useAdminPushNotifications } from '../../hooks/useAdminPushNotifications';
 import { Link, useNavigate } from 'react-router-dom';
 // import type { AdminRole } from '../../types';
 import { getAdminNotifications, notificationErrorMessage } from '../../service/notifications';
+import { isPushSupported } from '../../service/firebase';
 import type { Notification, NotificationChannel } from '../../types/notification';
 
 interface AdminHeaderProps {
@@ -58,7 +61,7 @@ const ChannelDot: React.FC<{ channel: NotificationChannel }> = ({ channel }) =>
 export const AdminHeader: React.FC<AdminHeaderProps> = ({ onMobileMenuToggle }) => {
   const {
     currentAdmin,
-    // setRole,
+    setRole,
     setIsCommandOpen,
     isAdminNotificationsOpen,
     setIsAdminNotificationsOpen,
@@ -66,10 +69,44 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({ onMobileMenuToggle }) 
   } = useAdmin();
   const { role, realRole, can } = usePermissions();
   const canViewNotifications = can('push_email_alerts', 'view');
+  const { showToast } = useShop();
 
-  // const [isRoleDropdownOpen, setIsRoleDropdownOpen] = useState(false);
+  // Browser notification permission + FCM registration (reuses the existing
+  // firebase.ts token/messaging plumbing and registerDeviceToken endpoint).
+  const { requestAndRegister } = useAdminPushNotifications(canViewNotifications);
+
+  // After login, if permission hasn't been decided yet, trigger the native
+  // browser prompt once per session (no custom modal — see case B/C below
+  // for denied/granted handling).
+  useEffect(() => {
+    if (!canViewNotifications || !isPushSupported()) return;
+    if (Notification.permission !== 'default') return;
+    const askedKey = 'allura_admin_push_asked_session';
+    try {
+      if (sessionStorage.getItem(askedKey)) return;
+      sessionStorage.setItem(askedKey, '1');
+    } catch {
+      // ignore storage errors
+    }
+    requestAndRegister();
+  }, [canViewNotifications, requestAndRegister]);
+
+  const [isRoleDropdownOpen, setIsRoleDropdownOpen] = useState(false);
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
   const navigate = useNavigate();
+
+  const previewRoles: ('SUPER_ADMIN' | 'ADMIN' | 'CATALOG_MANAGER' | 'ORDER_MANAGER')[] = [
+    'SUPER_ADMIN',
+    'ADMIN',
+    'CATALOG_MANAGER',
+    'ORDER_MANAGER',
+  ];
+  const isRealSuperAdmin = realRole === 'SUPER_ADMIN';
+
+  const handleRoleChange = (r: 'SUPER_ADMIN' | 'ADMIN' | 'CATALOG_MANAGER' | 'ORDER_MANAGER') => {
+    setRole(r);
+    setIsRoleDropdownOpen(false);
+  };
 
   // Real admin notifications (bell) ─ list fetched from GET /admin/notifications
   const [bellItems, setBellItems] = useState<Notification[]>([]);
@@ -143,6 +180,17 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({ onMobileMenuToggle }) 
 
   const toggleBellDropdown = () => {
     const next = !isAdminNotificationsOpen;
+
+    // Browser-notification permission handling, separate from the in-app
+    // notifications list below which stays functional regardless of it.
+    if (next && isPushSupported()) {
+      if (Notification.permission === 'denied') {
+        showToast('Notifications are blocked. Enable them in your browser site settings.', 'info');
+      } else if (Notification.permission === 'default') {
+        requestAndRegister();
+      }
+    }
+
     setIsAdminNotificationsOpen(next);
     if (next) {
       setSeenBeforeOpen(lastSeen);
@@ -233,37 +281,48 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({ onMobileMenuToggle }) 
       {/* Right: Role Switcher, Notifications, Admin Profile */}
       <div className="flex items-center gap-2 sm:gap-3">
 
-        {/* Role Switcher Pill
-        <div className="relative">
-          <button
-            onClick={() => setIsRoleDropdownOpen(!isRoleDropdownOpen)}
-            className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-allura-bgSecondary text-allura-darkBrown border border-allura-gold/30 text-xs font-sans font-semibold hover:bg-stone-200 transition-colors"
-          >
+        {/* Role Switcher Pill — interactive preview for Super Admin; read-only badge for others */}
+        {isRealSuperAdmin ? (
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setIsRoleDropdownOpen(!isRoleDropdownOpen)}
+              className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-allura-bgSecondary text-allura-darkBrown border border-allura-gold/30 text-xs font-sans font-semibold hover:bg-stone-200 transition-colors"
+              title="Preview UI permissions as different role"
+            >
+              <Shield size={13} className="text-allura-goldDark flex-shrink-0" />
+              <span className="hidden md:inline text-[11px] text-allura-muted font-normal">Role:</span>
+              <span className="font-bold font-mono text-[10px] sm:text-[11px] max-w-[75px] sm:max-w-none truncate">{activeRoleLabel}</span>
+              <ChevronDown size={12} className="text-allura-muted flex-shrink-0" />
+            </button>
+
+            {isRoleDropdownOpen && (
+              <div className="absolute right-0 mt-2 w-52 bg-white border border-stone-200 rounded-2xl shadow-xl p-2 space-y-1 z-50 text-xs font-sans animate-slide-up">
+                <span className="block px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-stone-400">
+                  Preview Role Matrix
+                </span>
+                {previewRoles.map(r => (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => handleRoleChange(r)}
+                    className={`w-full text-left px-3 py-2 rounded-xl flex items-center justify-between transition-colors ${role === r ? 'bg-allura-gold/15 text-allura-goldDark font-bold' : 'hover:bg-stone-50 text-stone-700'
+                      }`}
+                  >
+                    <span className="font-mono text-xs">{r}</span>
+                    {role === r && <Check size={14} />}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-allura-bgSecondary text-allura-darkBrown border border-allura-gold/30 text-xs font-sans font-semibold">
             <Shield size={13} className="text-allura-goldDark flex-shrink-0" />
             <span className="hidden md:inline text-[11px] text-allura-muted font-normal">Role:</span>
             <span className="font-bold font-mono text-[10px] sm:text-[11px] max-w-[75px] sm:max-w-none truncate">{activeRoleLabel}</span>
-            <ChevronDown size={12} className="text-allura-muted flex-shrink-0" />
-          </button>
-
-          {isRoleDropdownOpen && (
-            <div className="absolute right-0 mt-2 w-52 bg-white border border-stone-200 rounded-2xl shadow-xl p-2 space-y-1 z-50 text-xs font-sans animate-slide-up">
-              <span className="block px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-stone-400">
-                Switch Operational Role
-              </span>
-              {roles.map(r => (
-                <button
-                  key={r}
-                  onClick={() => handleRoleChange(r)}
-                  className={`w-full text-left px-3 py-2 rounded-xl flex items-center justify-between transition-colors ${role === r ? 'bg-allura-gold/15 text-allura-goldDark font-bold' : 'hover:bg-stone-50 text-stone-700'
-                    }`}
-                >
-                  <span className="font-mono text-xs">{r}</span>
-                  {role === r && <Check size={14} />}
-                </button>
-              ))}
-            </div>
-          )}
-        </div> */}
+          </div>
+        )}
 
         {/* Notifications Dropdown — hidden entirely for roles without view access */}
         {canViewNotifications && (

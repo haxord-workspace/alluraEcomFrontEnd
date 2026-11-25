@@ -4,6 +4,7 @@ import { Bell } from 'lucide-react';
 import { useShop } from '../../context/ShopContext';
 import { NotificationList } from './NotificationList';
 import { useCloseOnScroll } from '../../hooks/useCloseOnScroll';
+import { isPushSupported } from '../../service/firebase';
 
 export const NotificationBell: React.FC = () => {
   const {
@@ -14,6 +15,8 @@ export const NotificationBell: React.FC = () => {
     refreshNotifications,
     markNotificationAsRead,
     markAllNotificationsAsRead,
+    enablePushNotifications,
+    showToast,
   } = useShop();
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -21,6 +24,19 @@ export const NotificationBell: React.FC = () => {
   const close = () => setIsOpen(false);
 
   const toggleOpen = () => {
+    // Native browser-notification permission, separate from the in-app
+    // dropdown below which stays functional regardless of it. Must run
+    // synchronously off this click so the permission prompt stays tied to
+    // the user gesture — enablePushNotifications() only awaits *after*
+    // calling Notification.requestPermission().
+    if (isPushSupported()) {
+      if (Notification.permission === 'denied') {
+        showToast('Notifications are blocked. Enable them in your browser site settings.', 'info');
+      } else if (Notification.permission === 'default') {
+        enablePushNotifications();
+      }
+    }
+
     setIsOpen(v => {
       const next = !v;
       if (next) refreshNotifications();

@@ -120,7 +120,7 @@ export const AdminAbandonedCartsPage: React.FC = () => {
   const { hasPermission } = useAdmin();
   const { showToast } = useShop();
   const confirm = useConfirm();
-  const canAct = hasPermission('marketing', 'edit');
+  const canAct = hasPermission('coupons_banners', 'edit');
 
   const [carts, setCarts] = useState<AbandonedCartRecord[]>([]);
   const [marketingAnalytics, setMarketingAnalytics] = useState<MarketingAnalyticsResponse | null>(null);

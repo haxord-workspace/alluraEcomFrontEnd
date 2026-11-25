@@ -1,11 +1,12 @@
 import type { Order, OrderItem } from '../types';
 import { buildWhatsAppUrl } from './whatsapp';
 
-export type ReturnRequestType = 'Return' | 'Exchange';
+/** Returns are not offered (exchange-only policy) */
+export type ReturnRequestType = 'Exchange';
 
 export interface ReturnRequestSelection {
   item: OrderItem;
-  /** How many of this line the customer wants to return / exchange (1..item.quantity) */
+  /** How many of this line the customer wants to exchange (1..item.quantity) */
   quantity: number;
 }
 
@@ -14,7 +15,7 @@ export interface ReturnRequestDetails {
   items: ReturnRequestSelection[];
   reason: string;
   comments?: string;
-  /** Exchange only */
+  /** Preferred replacement size / colour */
   preferredVariant?: string;
 }
 
@@ -56,7 +57,7 @@ const line = (label: string, value: unknown, indent = ''): string[] => {
 /** Line price shown for an item: backend finalPrice when present, else the unit price */
 export const getItemDisplayPrice = (item: OrderItem): number => item.finalPrice ?? item.unitPrice;
 
-/** Builds the plain-text WhatsApp message for a return / exchange request. Pure. */
+/** Builds the plain-text WhatsApp message for an exchange request. Pure. */
 export const buildReturnWhatsAppMessage = (
   order: Order,
   request: ReturnRequestDetails,

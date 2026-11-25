@@ -16,6 +16,8 @@ import { ASSUMED_REPORT_DECISION_STATUS } from '../../service/reviewMappers';
 import { formatReviewDate } from '../../utils/reviewFormat';
 import { REPORT_REASON_LABELS, REPORT_STATUSES, REPORT_STATUS_LABELS } from '../../types/reviews';
 import type { ReportDecision, ReportModerationAction, ReportStatus, ReviewReport } from '../../types/reviews';
+import { usePermissions } from '../../hooks/usePermissions';
+import { REVIEWS_ADMIN_MODULE } from '../../config/reviews';
 
 const PAGE_SIZES = [10, 20, 50] as const;
 const DEFAULT_LIMIT = 20;
@@ -447,6 +449,8 @@ interface RowProps {
 }
 
 const ActionButtons: React.FC<RowProps & { size: 'sm' | 'lg' }> = ({ report, onViewReview, onDecide, size }) => {
+  const { can } = usePermissions();
+  const canModerateReports = can(REVIEWS_ADMIN_MODULE, 'edit') || can(REVIEWS_ADMIN_MODULE, 'publish');
   const height = size === 'lg' ? 'min-h-11 px-4' : 'min-h-9 px-3';
   return (
     <>
@@ -460,7 +464,7 @@ const ActionButtons: React.FC<RowProps & { size: 'sm' | 'lg' }> = ({ report, onV
           <span>View review</span>
         </button>
       )}
-      {report.status === 'PENDING' && (
+      {canModerateReports && report.status === 'PENDING' && (
         <button
           type="button"
           onClick={() => onDecide(report)}

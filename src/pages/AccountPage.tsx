@@ -17,12 +17,13 @@ import { useShop } from '../context/ShopContext';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { RecentlyViewed } from '../components/customer/RecentlyViewed';
 import { InvoiceModal } from '../components/common/InvoiceModal';
-import { downloadOrderInvoice } from '../service/orders';
 import { OrderCardSkeleton } from '../components/ui/OrderCardSkeleton';
 import { MyReviewsAccountTab } from '../components/reviews/MyReviewsAccountTab';
 import { OrderCardReviewSwap } from '../components/reviews/OrderCardReviewSwap';
 import { formatUserFacingStatus } from '../utils/userFacingText';
 import { ItemVariantMeta } from '../components/common/ItemVariantMeta';
+import { AddressSlipButton } from '../components/common/AddressSlipButton';
+import { canDownloadInvoice } from '../utils/addressSlipEligibility';
 
 export const AccountPage: React.FC = () => {
   const {
@@ -255,13 +256,26 @@ export const AccountPage: React.FC = () => {
                       </Link>
                     </OrderCardReviewSwap>
 
-                    <button
-                      onClick={() => setInvoiceOrder(recentOrder)}
-                      className="px-4 py-2 border border-allura-border rounded-xl text-xs font-sans font-semibold text-allura-text hover:bg-allura-bgSecondary transition-colors flex items-center gap-1.5"
-                    >
-                      <FileText size={14} />
-                      <span>Invoice</span>
-                    </button>
+                    {canDownloadInvoice(recentOrder) || !!recentOrder.invoiceNumber ? (
+                      <button
+                        onClick={() => setInvoiceOrder(recentOrder)}
+                        className="px-4 py-2 border border-allura-border rounded-xl text-xs font-sans font-semibold text-allura-text hover:bg-allura-bgSecondary transition-colors flex items-center gap-1.5"
+                      >
+                        <FileText size={14} />
+                        <span>Invoice</span>
+                      </button>
+                    ) : (
+                      <button
+                        disabled
+                        title="Invoice and address slip will be available once payment is confirmed."
+                        className="px-4 py-2 border border-allura-border rounded-xl text-xs font-sans font-semibold text-allura-muted opacity-60 cursor-not-allowed flex items-center gap-1.5"
+                      >
+                        <FileText size={14} />
+                        <span>Invoice</span>
+                      </button>
+                    )}
+
+                    <AddressSlipButton order={recentOrder} variant="detail" />
                   </div>
                 </div>
               </div>
@@ -559,7 +573,7 @@ export const AccountPage: React.FC = () => {
 
       </div>
 
-      <InvoiceModal order={invoiceOrder} onClose={() => setInvoiceOrder(null)} onDownload={downloadOrderInvoice} />
+      <InvoiceModal order={invoiceOrder} onClose={() => setInvoiceOrder(null)} />
     </>
   );
 };

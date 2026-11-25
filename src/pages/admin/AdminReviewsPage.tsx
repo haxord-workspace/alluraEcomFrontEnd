@@ -1,6 +1,8 @@
 import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Eye, Flag, Package, RefreshCw, ShieldCheck } from 'lucide-react';
+import { Eye, Flag, Package, RefreshCw, ShieldCheck, Download, Trash2, Loader2 } from 'lucide-react';
+import { useConfirm } from '../../context/ConfirmContext';
+import { useShop } from '../../context/ShopContext';
 import { AdminPagination } from '../../components/admin/AdminPagination';
 import { AdminErrorBanner } from '../../components/admin/AdminErrorBanner';
 import { StatusBadge } from '../../components/common/StatusBadge';
@@ -10,10 +12,16 @@ import { useAdminReviewsList } from '../../hooks/useAdminReviewsList';
 import { useReviewModeration } from '../../hooks/useReviewModeration';
 import { useAdminReviewLookups } from '../../hooks/useAdminReviewLookups';
 import { canModerateReview as canModerate } from '../../service/reviewMappers';
-import { getAdminReviews } from '../../service/adminReviews';
+import {
+  getAdminReviews,
+  deleteAdminReview,
+  exportAdminReviewsCsv,
+} from '../../service/adminReviews';
 import { formatReviewDate } from '../../utils/reviewFormat';
 import { REVIEW_RATINGS, REVIEW_STATUSES, REVIEW_STATUS_LABELS } from '../../types/reviews';
 import type { AdminReview, ReviewRating, ReviewStatus } from '../../types/reviews';
+import { usePermissions } from '../../hooks/usePermissions';
+import { REVIEWS_ADMIN_MODULE } from '../../config/reviews';
 
 const PAGE_SIZES = [10, 20, 50] as const;
 const DEFAULT_LIMIT = 20;
@@ -132,6 +140,52 @@ const AdminReviewsPage: React.FC = () => {
   const showReported = list.reviews.some(r => r.isReported === true || (r.reportCount ?? 0) > 0);
   const total = list.pagination?.total ?? 0;
   const isForbidden = list.error?.kind === 'forbidden';
+  const { can } = usePermissions();
+  const confirm = useConfirm();
+  const { showToast } = useShop();
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExportCsv = async () => {
+    setIsExporting(true);
+    try {
+      const blob = await exportAdminReviewsCsv({
+        status: filters.status,
+        productId: filters.productId,
+        rating: filters.rating,
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `allura-reviews-${Date.now()}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      showToast('Reviews exported (capped at 10,000 rows).', 'gold');
+    } catch (err: any) {
+      showToast(err?.message || 'Could not export reviews.', 'error');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleDeleteReview = async (review: AdminReview) => {
+    const ok = await confirm({
+      title: 'Delete review permanently?',
+      message: `Are you sure you want to permanently delete this review from ${review.customer.name || 'this customer'}? This action cannot be undone.`,
+      confirmLabel: 'Delete review',
+      isDestructive: true,
+    });
+    if (!ok) return;
+
+    try {
+      await deleteAdminReview(review.id);
+      showToast('Review permanently deleted.', 'success');
+      reload();
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to delete review.', 'error');
+    }
+  };
 
   const onOpen = useCallback(
     (review: AdminReview) => {
@@ -154,15 +208,29 @@ const AdminReviewsPage: React.FC = () => {
             Product Reviews{list.status === 'ready' ? ` (${total})` : ''}
           </h1>
         </div>
-        <button
-          type="button"
-          onClick={list.reload}
-          disabled={list.status === 'loading'}
-          className="self-start sm:self-auto inline-flex items-center gap-1.5 min-h-10 px-4 rounded-xl border border-stone-200 bg-white text-xs font-sans font-semibold text-stone-700 hover:bg-stone-50 disabled:opacity-50"
-        >
-          <RefreshCw size={14} className={list.status === 'loading' ? 'animate-spin' : ''} />
-          <span>Refresh</span>
-        </button>
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          {can('reviews', 'export') && (
+            <button
+              type="button"
+              onClick={handleExportCsv}
+              disabled={isExporting}
+              className="inline-flex items-center gap-1.5 min-h-10 px-4 rounded-xl border border-stone-200 bg-white text-xs font-sans font-semibold text-stone-700 hover:bg-stone-50 disabled:opacity-50"
+              title="Export reviews CSV (max 10,000 rows)"
+            >
+              {isExporting ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+              <span>Export CSV</span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={list.reload}
+            disabled={list.status === 'loading'}
+            className="inline-flex items-center gap-1.5 min-h-10 px-4 rounded-xl border border-stone-200 bg-white text-xs font-sans font-semibold text-stone-700 hover:bg-stone-50 disabled:opacity-50"
+          >
+            <RefreshCw size={14} className={list.status === 'loading' ? 'animate-spin' : ''} />
+            <span>Refresh</span>
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -258,7 +326,14 @@ const AdminReviewsPage: React.FC = () => {
                   </thead>
                   <tbody className="divide-y divide-stone-100">
                     {rows.map(review => (
-                      <ReviewRow key={review.id} review={review} showReported={showReported} onOpen={onOpen} onModerate={onModerate} />
+                      <ReviewRow
+                        key={review.id}
+                        review={review}
+                        showReported={showReported}
+                        onOpen={onOpen}
+                        onModerate={onModerate}
+                        onDelete={handleDeleteReview}
+                      />
                     ))}
                   </tbody>
                 </table>
@@ -267,7 +342,13 @@ const AdminReviewsPage: React.FC = () => {
               {/* Mobile cards */}
               <ul className="md:hidden divide-y divide-stone-100">
                 {rows.map(review => (
-                  <ReviewMobileCard key={review.id} review={review} onOpen={onOpen} onModerate={onModerate} />
+                  <ReviewMobileCard
+                    key={review.id}
+                    review={review}
+                    onOpen={onOpen}
+                    onModerate={onModerate}
+                    onDelete={handleDeleteReview}
+                  />
                 ))}
               </ul>
             </>
@@ -323,7 +404,25 @@ const ACTION_LABEL: Record<ActionLayout, string> = {
   card: '',
 };
 
-const ReviewActions: React.FC<RowProps & { layout: ActionLayout }> = ({ review, onOpen, onModerate, layout }) => {
+interface RowProps {
+  review: AdminReview;
+  onOpen: (review: AdminReview) => void;
+  onModerate: (review: AdminReview) => void;
+  onDelete?: (review: AdminReview) => void;
+}
+
+const ReviewActions: React.FC<RowProps & { layout: ActionLayout }> = ({
+  review,
+  onOpen,
+  onModerate,
+  onDelete,
+  layout,
+}) => {
+  const { can } = usePermissions();
+  const canPublish = can(REVIEWS_ADMIN_MODULE, 'publish');
+  const canEdit = can(REVIEWS_ADMIN_MODULE, 'edit');
+  const canDelete = can(REVIEWS_ADMIN_MODULE, 'delete');
+  const canModerateAction = canPublish || canEdit;
   const titleSuffix = review.title ? ` "${review.title}"` : '';
   return (
     <div className={layout === 'table' ? 'inline-flex flex-nowrap items-center justify-end gap-1.5' : 'flex items-stretch gap-2'}>
@@ -340,7 +439,7 @@ const ReviewActions: React.FC<RowProps & { layout: ActionLayout }> = ({ review, 
         <Eye size={14} className="shrink-0" />
         <span className={ACTION_LABEL[layout]}>View</span>
       </button>
-      {canModerate(review) && (
+      {canModerateAction && canModerate(review) && (
         <button
           type="button"
           onClick={e => {
@@ -353,6 +452,21 @@ const ReviewActions: React.FC<RowProps & { layout: ActionLayout }> = ({ review, 
         >
           <ShieldCheck size={14} className="shrink-0" />
           <span className={ACTION_LABEL[layout]}>Moderate</span>
+        </button>
+      )}
+      {canDelete && onDelete && (
+        <button
+          type="button"
+          onClick={e => {
+            e.stopPropagation();
+            onDelete(review);
+          }}
+          className={`${ACTION_BASE} ${ACTION_SIZE[layout]} border border-rose-200 bg-rose-50/70 text-rose-700 hover:bg-rose-100 active:bg-rose-200`}
+          aria-label={`Delete review${titleSuffix}`}
+          title="Delete review"
+        >
+          <Trash2 size={13} className="shrink-0 text-rose-600" />
+          <span className={ACTION_LABEL[layout]}>Delete</span>
         </button>
       )}
     </div>
@@ -419,14 +533,8 @@ const ReportedFlag: React.FC<{ review: AdminReview }> = ({ review }) =>
     <span className="text-stone-400">—</span>
   ) : null;
 
-interface RowProps {
-  review: AdminReview;
-  onOpen: (review: AdminReview) => void;
-  onModerate: (review: AdminReview) => void;
-}
-
 const ReviewRow: React.FC<RowProps & { showReported: boolean }> = memo(
-  ({ review, showReported, onOpen, onModerate }) => (
+  ({ review, showReported, onOpen, onModerate, onDelete }) => (
     <tr className="hover:bg-stone-50/70 transition-colors cursor-pointer" onClick={() => onOpen(review)}>
       <td className="p-4 max-w-[220px]">
         <ProductCell review={review} />
@@ -452,14 +560,20 @@ const ReviewRow: React.FC<RowProps & { showReported: boolean }> = memo(
       )}
       <td className="p-4 whitespace-nowrap text-stone-500">{formatReviewDate(review.createdAt) || '—'}</td>
       <td className="p-4 text-right whitespace-nowrap">
-        <ReviewActions review={review} onOpen={onOpen} onModerate={onModerate} layout="table" />
+        <ReviewActions
+          review={review}
+          onOpen={onOpen}
+          onModerate={onModerate}
+          onDelete={onDelete}
+          layout="table"
+        />
       </td>
     </tr>
   )
 );
 ReviewRow.displayName = 'ReviewRow';
 
-const ReviewMobileCard: React.FC<RowProps> = memo(({ review, onOpen, onModerate }) => (
+const ReviewMobileCard: React.FC<RowProps> = memo(({ review, onOpen, onModerate, onDelete }) => (
   <li className="text-xs font-sans">
     <button type="button" onClick={() => onOpen(review)} className="w-full text-left p-4 pb-2 space-y-2.5 hover:bg-stone-50/70">
       <div className="flex items-start justify-between gap-3">
@@ -479,7 +593,13 @@ const ReviewMobileCard: React.FC<RowProps> = memo(({ review, onOpen, onModerate 
       <ReviewThumbs review={review} />
     </button>
     <div className="px-4 pb-4 pt-1">
-      <ReviewActions review={review} onOpen={onOpen} onModerate={onModerate} layout="card" />
+      <ReviewActions
+        review={review}
+        onOpen={onOpen}
+        onModerate={onModerate}
+        onDelete={onDelete}
+        layout="card"
+      />
     </div>
   </li>
 ));

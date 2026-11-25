@@ -15,6 +15,7 @@ import type {
   TrackingStatus,
 } from '../../types/analytics';
 import { Radio, RefreshCw, Loader2, Search, X, Info, ChevronLeft, ChevronRight, ChevronDown, ChevronUp } from 'lucide-react';
+import { ConversionFunnelChart } from '../../components/admin/analytics/ConversionFunnelChart';
 
 // ── Products table: search/filter/sort are partly client-side — see Step 3 note ──
 type ProductsSort = 'revenue' | 'unitsSold' | 'views' | 'purchases' | 'conversion';
@@ -933,31 +934,7 @@ export const AdminAnalyticsPage: React.FC = () => {
           ) : !funnelAnalytics || funnelAnalytics.stages.length === 0 ? (
             !funnelError && <p className="text-center text-stone-400 py-16 text-xs font-sans">No funnel activity in this period.</p>
           ) : (
-            <div className="space-y-4 pt-2">
-              {funnelAnalytics.stages.map((stg, i) => (
-                <div key={stg.key} className="p-4 bg-stone-50 rounded-2xl border border-stone-100 space-y-2 text-xs font-sans">
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="font-bold text-stone-900 font-serif text-base">{stg.label}</span>
-                    <div className="flex items-center gap-3">
-                      <span className="font-mono font-bold text-[#561C08]">{stg.uniqueUsers.toLocaleString()} Users</span>
-                      <span className="text-stone-400 text-xs font-normal font-sans">({stg.conversionFromVisitors}%)</span>
-                    </div>
-                  </div>
-
-                  <div className="w-full bg-stone-200 h-3 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-[#561C08] rounded-full transition-all duration-700"
-                      style={{ width: `${stg.conversionFromVisitors}%` }}
-                    />
-                  </div>
-
-                  <div className="flex justify-between text-[11px] text-stone-500 pt-0.5">
-                    <span>Stage Conversion: <strong>{stg.conversionFromVisitors}%</strong></span>
-                    {i > 0 && <span className="text-rose-700">Dropoff: <strong>{stg.dropoffFromPrevious}%</strong></span>}
-                  </div>
-                </div>
-              ))}
-            </div>
+            <ConversionFunnelChart data={funnelAnalytics} />
           )}
         </div>
       )}
