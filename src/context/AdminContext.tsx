@@ -196,7 +196,9 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, []);
 
   const authAdmin = useSelector((state: RootState) => state.adminAuth.admin);
-  const realRole = normalizeAdminRole(authAdmin?.role);
+  const authPermissions = useSelector((state: RootState) => state.adminAuth.permissions);
+  const adminAuthStatus = useSelector((state: RootState) => state.adminAuth.status);
+  const realRole = normalizeAdminRole(authPermissions?.role || authAdmin?.role);
 
   const [currentAdmin, setCurrentAdmin] = useState<AdminUser>({
     id: '',
@@ -357,9 +359,13 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         return null;
       }
 
-      // If we already have a loaded matrix and this is a background/tab refresh,
-      // do NOT flip `isLoadingPermissions` true or wipe `rolesMatrixState` on error —
-      // otherwise AdminAccessGuard would unmount the current page and reset tab state.
+      // Non-super roles MUST NEVER call getRolesMatrix() (avoids 403)
+      if (realRole !== 'SUPER_ADMIN') {
+        await dispatch(fetchAdminProfile());
+        return null;
+      }
+
+      // Only SUPER_ADMIN calls getRolesMatrix()
       const isBackground = Boolean(options?.background && rolesMatrixRef.current);
       if (isBackground) {
         setIsRefreshingPermissions(true);
@@ -387,11 +393,12 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         }
       }
     },
-    [isAdminAuthenticated, realRole]
+    [isAdminAuthenticated, realRole, dispatch]
   );
 
   useEffect(() => {
-    if (isAdminAuthenticated && realRole) {
+    // Only call getRolesMatrix on mount if the real role is SUPER_ADMIN
+    if (isAdminAuthenticated && realRole === 'SUPER_ADMIN') {
       void refreshPermissions();
     }
   }, [isAdminAuthenticated, realRole, refreshPermissions]);
@@ -507,11 +514,11 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setAuditLogs(prev => [newLog, ...prev]);
   }, [currentAdmin]);
 
-  // Permissions — always backed by the live server roles matrix; fails closed while loading or on error
-  const role: AdminRole | null = realRole ? (roleOverride ?? realRole) : null;
+  // Permissions — backed by /auth/me for staff, and by rolesMatrix for Super Admin / preview
+  const role: AdminRole | null = realRole === 'SUPER_ADMIN' ? (roleOverride ?? realRole) : realRole;
 
   const setRole = (newRole: AdminRole) => {
-    if (!realRole) return;
+    if (realRole !== 'SUPER_ADMIN') return;
     const normalized = normalizeAdminRole(newRole);
     if (!normalized) return;
     setRoleOverride(normalized === realRole ? null : normalized);
@@ -522,38 +529,79 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const effectiveIsLoadingPermissions =
-    isLoadingPermissions ||
-    (isAdminAuthenticated && !!realRole && !rolesMatrixState && !permissionsError);
+    adminAuthStatus === 'loading' ||
+    (realRole === 'SUPER_ADMIN' && isLoadingPermissions && !rolesMatrixState);
 
   const getPermissionState = useCallback(
     (module: AnyModuleKey, action = 'view'): PermissionValue => {
-      if (!isAdminAuthenticated || !role || effectiveIsLoadingPermissions || !rolesMatrixState) {
+      if (!isAdminAuthenticated || !role || effectiveIsLoadingPermissions) {
         return null;
       }
       const canonicalModule = resolveRbacModuleKey(module);
       if (!canonicalModule) return null;
-      const modPerms = rolesMatrixState.matrix[role]?.[canonicalModule];
-      if (!modPerms) return null;
 
       const normalizedAction = action.toLowerCase();
-      if (normalizedAction in modPerms) {
-        return modPerms[normalizedAction as RbacAction];
+      const act =
+        normalizedAction === 'cancel' || normalizedAction === 'refund'
+          ? 'edit'
+          : normalizedAction === 'send'
+            ? 'create'
+            : normalizedAction;
+
+      // 1. If role is overridden (preview mode active by Super Admin)
+      if (roleOverride && rolesMatrixState) {
+        const modPerms = rolesMatrixState.matrix[roleOverride]?.[canonicalModule];
+        return modPerms?.[act as RbacAction] ?? null;
       }
-      // Map legacy UI action names onto the 6 canonical RBAC columns
-      if (normalizedAction === 'cancel' || normalizedAction === 'refund') {
-        return modPerms.edit ?? null;
+
+      // 2. If user is Super Admin
+      if (authPermissions?.superAdmin === true || realRole === 'SUPER_ADMIN') {
+        if (rolesMatrixState?.matrix.SUPER_ADMIN?.[canonicalModule]) {
+          return rolesMatrixState.matrix.SUPER_ADMIN[canonicalModule][act as RbacAction] ?? true;
+        }
+        return true;
       }
-      if (normalizedAction === 'send') {
-        return modPerms.create ?? null;
+
+      // 3. Non-super user: check authPermissions from /auth/me
+      if (authPermissions?.matrix?.[canonicalModule]?.[act] !== undefined) {
+        return authPermissions.matrix[canonicalModule][act];
       }
-      return null;
+
+      const permKey = `${canonicalModule}:${act}`;
+      return authPermissions?.granted?.includes(permKey) ? true : false;
     },
-    [isAdminAuthenticated, role, effectiveIsLoadingPermissions, rolesMatrixState]
+    [isAdminAuthenticated, role, effectiveIsLoadingPermissions, roleOverride, rolesMatrixState, authPermissions, realRole]
   );
 
   const hasPermission = useCallback(
-    (module: AnyModuleKey, action = 'view'): boolean => getPermissionState(module, action) === true,
-    [getPermissionState]
+    (module: AnyModuleKey, action = 'view'): boolean => {
+      if (!isAdminAuthenticated || !role || effectiveIsLoadingPermissions) {
+        return false;
+      }
+
+      // 1. If role is overridden (preview mode by Super Admin)
+      if (roleOverride && rolesMatrixState) {
+        const canonicalModule = resolveRbacModuleKey(module);
+        if (!canonicalModule) return false;
+        const norm = action.toLowerCase();
+        const act = norm === 'cancel' || norm === 'refund' ? 'edit' : norm === 'send' ? 'create' : norm;
+        return rolesMatrixState.matrix[roleOverride]?.[canonicalModule]?.[act as RbacAction] === true;
+      }
+
+      // 2. Super Admin: full access
+      if (authPermissions?.superAdmin === true || realRole === 'SUPER_ADMIN') {
+        return true;
+      }
+
+      // 3. Staff member: evaluate `${module}:${action}` in granted list
+      const canonicalModule = resolveRbacModuleKey(module);
+      if (!canonicalModule) return false;
+      const norm = action.toLowerCase();
+      const act = norm === 'cancel' || norm === 'refund' ? 'edit' : norm === 'send' ? 'create' : norm;
+      const permKey = `${canonicalModule}:${act}`;
+      return Boolean(authPermissions?.granted?.includes(permKey));
+    },
+    [isAdminAuthenticated, role, effectiveIsLoadingPermissions, roleOverride, rolesMatrixState, authPermissions, realRole]
   );
 
   const rolesMatrix = rolesMatrixState?.matrix ?? null;

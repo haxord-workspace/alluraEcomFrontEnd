@@ -8,7 +8,7 @@ import {
   type ModulePermissions,
   type NormalizedRolesMatrix,
   type PermissionValue,
-  // type RbacAction,
+  type RbacAction,
   type RbacModuleKey,
   type RbacModuleMeta,
   type RbacRole,
@@ -19,6 +19,7 @@ import {
 export const DEFAULT_RBAC_MODULES: RbacModuleMeta[] = [
   { key: 'executive_dashboard', label: 'Executive Dashboard', description: 'KPI statistics and sales charts' },
   { key: 'products_catalog', label: 'Products & Catalog', description: 'Product creation, editing, pricing, archive' },
+  { key: 'supplier_management', label: 'Supplier Management', description: 'Suppliers, product sourcing and supplier analytics' },
   { key: 'inventory_stock', label: 'Inventory & Stock', description: 'Stock adjustments, cycle count logs' },
   { key: 'order_processing', label: 'Order Processing', description: 'Status updates, Delhivery AWB dispatch' },
   { key: 'customer_crm', label: 'Customer CRM', description: 'Customer histories, lifetime values' },
@@ -31,11 +32,80 @@ export const DEFAULT_RBAC_MODULES: RbacModuleMeta[] = [
   { key: 'system_settings', label: 'System Settings', description: 'Razorpay, Delhivery, WhatsApp configs' },
   { key: 'audit_trail_logs', label: 'Audit Trail Logs', description: 'Security activity ledger' },
   { key: 'admin_management', label: 'Admin Management', description: 'Role permissions and user access' },
+  { key: 'reviews', label: 'Reviews & Moderation', description: 'Product review moderation, reports and analytics' },
 ];
+
+export const DEFAULT_APPLICABLE_ACTIONS: Record<RbacModuleKey, readonly RbacAction[]> = {
+  executive_dashboard: ['view'],
+  products_catalog: ['view', 'create', 'edit', 'delete', 'publish'],
+  inventory_stock: ['view', 'edit'],
+  supplier_management: ['view', 'create', 'edit', 'delete', 'publish'],
+  order_processing: ['view', 'edit'],
+  customer_crm: ['view', 'edit'],
+  reviews: ['view', 'edit', 'delete', 'publish', 'export'],
+  coupons_banners: ['view', 'create', 'edit', 'delete', 'publish'],
+  cms_store_content: ['view', 'create', 'edit', 'delete', 'publish'],
+  seo_management: ['view', 'edit'],
+  analytics_funnel: ['view'],
+  push_email_alerts: ['view', 'create'],
+  system_settings: ['view', 'edit'],
+  admin_management: ['view', 'create', 'edit', 'delete'],
+  ai_knowledge_logs: [],
+  audit_trail_logs: [],
+};
+
+export const DEFAULT_SUPER_ADMIN_ONLY_CELLS: readonly string[] = [
+  'admin_management:create',
+  'admin_management:edit',
+  'admin_management:delete',
+];
+
+export const DEFAULT_ROLE_DEFAULTS: Record<
+  RbacRole,
+  Partial<Record<RbacModuleKey, Partial<Record<RbacAction, boolean>>>>
+> = {
+  SUPER_ADMIN: {
+    reviews: {
+      view: true,
+      edit: true,
+      delete: true,
+      publish: true,
+      export: true,
+    },
+  },
+  ADMIN: {
+    reviews: {
+      view: true,
+      edit: true,
+      delete: true,
+      publish: true,
+      export: true,
+    },
+  },
+  CATALOG_MANAGER: {
+    reviews: {
+      view: true,
+      edit: true,
+      delete: false,
+      publish: false,
+      export: false,
+    },
+  },
+  ORDER_MANAGER: {
+    reviews: {
+      view: true,
+      edit: false,
+      delete: false,
+      publish: false,
+      export: false,
+    },
+  },
+};
 
 const LEGACY_TO_RBAC_MODULE: Record<string, RbacModuleKey> = {
   dashboard: 'executive_dashboard',
   products: 'products_catalog',
+  suppliers: 'supplier_management',
   inventory: 'inventory_stock',
   orders: 'order_processing',
   customers: 'customer_crm',
@@ -48,6 +118,8 @@ const LEGACY_TO_RBAC_MODULE: Record<string, RbacModuleKey> = {
   settings: 'system_settings',
   auditlogs: 'audit_trail_logs',
   adminmanagement: 'admin_management',
+  reviews: 'reviews',
+  reviewmoderation: 'reviews',
 };
 
 const MODULE_KEY_SET = new Set<string>(RBAC_MODULE_KEYS);
@@ -319,6 +391,35 @@ export const normalizeRolesMatrix = (raw: unknown): NormalizedRolesMatrix => {
     });
     observedRoles.unshift('SUPER_ADMIN');
   }
+
+  // Ensure every canonical module has applicable cells defined even if missing from backend roles-matrix response
+  RBAC_MODULE_KEYS.forEach((modKey) => {
+    const applicable = DEFAULT_APPLICABLE_ACTIONS[modKey] || [];
+    const applicableSet = new Set<RbacAction>(applicable);
+
+    RBAC_ROLES.forEach((r) => {
+      RBAC_ACTIONS.forEach((act) => {
+        if (!applicableSet.has(act)) {
+          // Action has no such feature in this module -> always null ("—")
+          matrix[r][modKey][act] = null;
+        } else if (r === 'SUPER_ADMIN') {
+          // Super Admin has full, locked access to all applicable features
+          matrix.SUPER_ADMIN[modKey][act] = true;
+        } else {
+          // For editable staff roles, if the backend payload did not provide a boolean,
+          // build from the fallback registry defaults rather than leaving it as null ("—")
+          if (matrix[r][modKey][act] === null) {
+            const roleDefaults = DEFAULT_ROLE_DEFAULTS[r]?.[modKey];
+            if (roleDefaults && act in roleDefaults) {
+              matrix[r][modKey][act] = roleDefaults[act] ?? false;
+            } else {
+              matrix[r][modKey][act] = false;
+            }
+          }
+        }
+      });
+    });
+  });
 
   // Keep canonical role ordering for UI tabs while including any API-ordered roles
   const orderedRoles = RBAC_ROLES.filter((r) => observedRoles.length === 0 || observedRoles.includes(r));

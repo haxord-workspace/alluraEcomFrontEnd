@@ -725,7 +725,7 @@ export const AdminBannersPage: React.FC = () => {
             <RefreshCw size={14} className={isRefreshing ? 'animate-spin text-allura-goldDark' : ''} />
           </button>
 
-          {hasPermission('marketing', 'create') && (
+          {hasPermission('coupons_banners', 'create') && (
             <button
               onClick={handleOpenCreate}
               className="px-4 py-2.5 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-xl text-xs font-sans font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 shadow-sm"
@@ -1073,7 +1073,7 @@ export const AdminBannersPage: React.FC = () => {
 
                   <div className="flex flex-wrap items-center gap-2">
                     {/* Publish / Unpublish Toggle Action */}
-                    {hasPermission('marketing', 'edit') && (
+                    {hasPermission('coupons_banners', 'edit') && (
                       <button
                         onClick={() => handleTogglePublish(banner)}
                         disabled={isBusy}
@@ -1101,7 +1101,7 @@ export const AdminBannersPage: React.FC = () => {
                     )}
 
                     {/* Quick Schedule Button */}
-                    {hasPermission('marketing', 'edit') && (
+                    {hasPermission('coupons_banners', 'edit') && (
                       <button
                         onClick={() => handleOpenScheduleModal(banner)}
                         className="px-3 py-1.5 rounded-xl border border-stone-200 hover:bg-stone-100 text-stone-700 text-xs font-semibold flex items-center gap-1 transition-colors"
@@ -1113,7 +1113,7 @@ export const AdminBannersPage: React.FC = () => {
                     )}
 
                     {/* Duplicate Action */}
-                    {hasPermission('marketing', 'create') && (
+                    {hasPermission('coupons_banners', 'create') && (
                       <button
                         onClick={() => handleDuplicate(banner)}
                         disabled={isBusy}
@@ -1126,7 +1126,7 @@ export const AdminBannersPage: React.FC = () => {
                     )}
 
                     {/* Edit Button */}
-                    {hasPermission('marketing', 'edit') && (
+                    {hasPermission('coupons_banners', 'edit') && (
                       <button
                         onClick={() => handleOpenEdit(banner)}
                         className="px-3 py-1.5 rounded-xl border border-stone-200 hover:bg-stone-100 text-stone-800 text-xs font-semibold flex items-center gap-1 transition-colors"
@@ -1137,7 +1137,7 @@ export const AdminBannersPage: React.FC = () => {
                     )}
 
                     {/* Delete Button */}
-                    {hasPermission('marketing', 'delete') && (
+                    {hasPermission('coupons_banners', 'delete') && (
                       <button
                         onClick={() => setDeleteModalBanner(banner)}
                         disabled={isBusy}
@@ -1273,56 +1273,66 @@ export const AdminBannersPage: React.FC = () => {
                       <td className="py-3 px-4 text-right whitespace-nowrap">
                         <div className="inline-flex items-center gap-1">
                           {/* Fast Toggle */}
-                          <button
-                            onClick={() => handleTogglePublish(banner)}
-                            disabled={isBusy}
-                            className={`p-1.5 rounded-lg border text-xs transition-colors ${
-                              banner.status === 'Active'
-                                ? 'border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100'
-                                : 'border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
-                            }`}
-                            title={banner.status === 'Active' ? 'Unpublish to Draft' : 'Publish Live'}
-                          >
-                            {banner.status === 'Active' ? <EyeOff size={13} /> : <Eye size={13} />}
-                          </button>
+                          {hasPermission('coupons_banners', 'publish') && (
+                            <button
+                              onClick={() => handleTogglePublish(banner)}
+                              disabled={isBusy}
+                              className={`p-1.5 rounded-lg border text-xs transition-colors ${
+                                banner.status === 'Active'
+                                  ? 'border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100'
+                                  : 'border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+                              }`}
+                              title={banner.status === 'Active' ? 'Unpublish to Draft' : 'Publish Live'}
+                            >
+                              {banner.status === 'Active' ? <EyeOff size={13} /> : <Eye size={13} />}
+                            </button>
+                          )}
 
                           {/* Quick Edit */}
-                          <button
-                            onClick={() => handleOpenEdit(banner)}
-                            className="p-1.5 rounded-lg border border-stone-200 hover:bg-stone-100 text-stone-700"
-                            title="Edit banner"
-                          >
-                            <Edit3 size={13} />
-                          </button>
+                          {hasPermission('coupons_banners', 'edit') && (
+                            <button
+                              onClick={() => handleOpenEdit(banner)}
+                              className="p-1.5 rounded-lg border border-stone-200 hover:bg-stone-100 text-stone-700"
+                              title="Edit banner"
+                            >
+                              <Edit3 size={13} />
+                            </button>
+                          )}
 
                           {/* Duplicate */}
-                          <button
-                            onClick={() => handleDuplicate(banner)}
-                            disabled={isBusy}
-                            className="p-1.5 rounded-lg border border-stone-200 hover:bg-stone-100 text-stone-700"
-                            title="Duplicate as Draft copy"
-                          >
-                            <Copy size={13} />
-                          </button>
+                          {hasPermission('coupons_banners', 'create') && (
+                            <button
+                              onClick={() => handleDuplicate(banner)}
+                              disabled={isBusy}
+                              className="p-1.5 rounded-lg border border-stone-200 hover:bg-stone-100 text-stone-700"
+                              title="Duplicate as Draft copy"
+                            >
+                              <Copy size={13} />
+                            </button>
+                          )}
 
                           {/* Quick Schedule */}
-                          <button
-                            onClick={() => handleOpenScheduleModal(banner)}
-                            className="p-1.5 rounded-lg border border-stone-200 hover:bg-stone-100 text-stone-700"
-                            title="Schedule launch"
-                          >
-                            <Calendar size={13} />
-                          </button>
+                          {hasPermission('coupons_banners', 'edit') && (
+                            <button
+                              onClick={() => handleOpenScheduleModal(banner)}
+                              className="p-1.5 rounded-lg border border-stone-200 hover:bg-stone-100 text-stone-700"
+                              title="Schedule launch"
+                            >
+                              <Calendar size={13} />
+                            </button>
+                          )}
 
                           {/* Delete */}
-                          <button
-                            onClick={() => setDeleteModalBanner(banner)}
-                            disabled={isBusy}
-                            className="p-1.5 rounded-lg border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100"
-                            title="Delete banner"
-                          >
-                            <Trash2 size={13} />
-                          </button>
+                          {hasPermission('coupons_banners', 'delete') && (
+                            <button
+                              onClick={() => setDeleteModalBanner(banner)}
+                              disabled={isBusy}
+                              className="p-1.5 rounded-lg border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100"
+                              title="Delete banner"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

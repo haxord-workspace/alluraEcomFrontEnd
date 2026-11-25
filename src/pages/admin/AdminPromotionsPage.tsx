@@ -118,10 +118,10 @@ const EMPTY_FORM: FormState = {
 export const AdminPromotionsPage: React.FC = () => {
   const { hasPermission } = useAdmin();
   const { showToast } = useShop();
-  const canCreate = hasPermission('marketing', 'create');
-  const canEdit = hasPermission('marketing', 'edit');
-  const canDelete = hasPermission('marketing', 'delete');
-  const canPublish = hasPermission('marketing', 'publish') || canEdit;
+  const canCreate = hasPermission('coupons_banners', 'create');
+  const canEdit = hasPermission('coupons_banners', 'edit');
+  const canDelete = hasPermission('coupons_banners', 'delete');
+  const canPublish = hasPermission('coupons_banners', 'publish') || canEdit;
 
   const [promotions, setPromotions] = useState<AdminPromotion[]>([]);
   const [total, setTotal] = useState(0);

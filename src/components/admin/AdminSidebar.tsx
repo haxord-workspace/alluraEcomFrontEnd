@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   Package,
   Layers,
   Barcode,
   ShoppingBag,
-  // Truck,
+  Truck,
+  BarChart3,
   // RotateCcw,
   CreditCard,
   Users,
@@ -43,11 +44,13 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   isCollapsed = false,
 }) => {
   const { can, role, realRole } = usePermissions();
+  const location = useLocation();
   const activeRoleLabel = role || realRole || '—';
 
   // Collapsible section state
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
     catalog: true,
+    suppliers: true,
     inventory: true,
     orders: true,
     marketing: true,
@@ -154,6 +157,38 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                 <NavLink to="/admin/barcodes" className={navLinkClass}>
                   <Barcode size={15} />
                   {!isCollapsed && <span>Barcodes & Scanner</span>}
+                </NavLink>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* SUPPLIERS */}
+        {can('supplier_management', 'view') && (
+          <div className="space-y-1">
+            <button
+              onClick={() => toggleSection('suppliers')}
+              className="w-full flex items-center justify-between px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-allura-muted/80 hover:text-allura-text"
+            >
+              <span>Suppliers</span>
+              {!isCollapsed && (
+                openSections.suppliers ? <ChevronDown size={13} /> : <ChevronRight size={13} />
+              )}
+            </button>
+            {(openSections.suppliers || isCollapsed) && (
+              <div className="space-y-0.5 pl-1">
+                <NavLink
+                  to="/admin/suppliers"
+                  className={({ isActive }) =>
+                    navLinkClass({ isActive: isActive && !location.pathname.startsWith('/admin/suppliers/analytics') })
+                  }
+                >
+                  <Truck size={15} />
+                  {!isCollapsed && <span>All suppliers</span>}
+                </NavLink>
+                <NavLink to="/admin/suppliers/analytics" className={navLinkClass}>
+                  <BarChart3 size={15} />
+                  {!isCollapsed && <span>Supplier analytics</span>}
                 </NavLink>
               </div>
             )}

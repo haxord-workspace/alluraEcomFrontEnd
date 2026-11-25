@@ -14,10 +14,11 @@ export const REVIEWS_ENABLED = !isOff(import.meta.env.VITE_REVIEWS_ENABLED);
 
 /**
  * RBAC module that gates the admin review sidebar section and routes.
- * The roles matrix has no reviews module yet; change this one line when it does.
+ * UNCONFIRMED KEY — backend must confirm the exact module key.
+ * Change only this one line when the backend confirms the key.
  * The backend still enforces product-reviews:* per action (handled as a 403).
  */
-export const REVIEWS_ADMIN_MODULE: AnyModuleKey = 'products_catalog';
+export const REVIEWS_ADMIN_MODULE: AnyModuleKey = 'reviews';
 
 /** Customer "My Reviews" page. */
 export const MY_REVIEWS_PATH = '/account/reviews';

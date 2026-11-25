@@ -59,8 +59,16 @@ export const hasAdminSession = () => !!(getAdminAccessToken() || getAdminRefresh
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
+export interface AdminPermissions {
+  role: string;
+  superAdmin: boolean;
+  granted: string[];
+  matrix?: Record<string, Record<string, boolean | null>>;
+}
+
 export interface AdminAuthState {
   admin: Record<string, any> | null;
+  permissions: AdminPermissions | null;
   isAuthenticated: boolean;
   status: 'idle' | 'loading' | 'succeeded' | 'failed';
   error: string | null;
@@ -68,6 +76,7 @@ export interface AdminAuthState {
 
 const initialState: AdminAuthState = {
   admin: null,
+  permissions: null,
   isAuthenticated: false,
   // Always start 'loading' — even when the short-lived access token cookie
   // has already expired, the backend's httpOnly refresh cookie may still be
@@ -103,15 +112,27 @@ const extractJwtRole = (token?: string | null): unknown => {
 
 const extractUserAndRole = (body: any, accessToken?: string | null) => {
   const data = body?.data ?? body;
-  const user = data?.admin || data?.user || data;
+  const user = data?.user || data?.admin || data;
+  const rawPerms = data?.permissions || body?.permissions;
+  const permissions: AdminPermissions | null = rawPerms
+    ? {
+        role: rawPerms.role || user?.role || '',
+        superAdmin: Boolean(rawPerms.superAdmin ?? rawPerms.isSuperAdmin ?? user?.role === 'SUPER_ADMIN'),
+        granted: Array.isArray(rawPerms.granted) ? rawPerms.granted : [],
+        matrix: rawPerms.matrix && typeof rawPerms.matrix === 'object' ? rawPerms.matrix : undefined,
+      }
+    : null;
+
   const rawRole =
+    permissions?.role ??
     user?.role ??
     user?.adminRole ??
     data?.role ??
     body?.role ??
     (Array.isArray(user?.roles) ? user.roles[0] : undefined) ??
     extractJwtRole(accessToken);
-  return { user, rawRole };
+
+  return { user, rawRole, permissions };
 };
 
 export const loginAdmin = createAsyncThunk(
@@ -126,15 +147,9 @@ export const loginAdmin = createAsyncThunk(
       const response = await adminApi.post('/auth/login', { email, password });
       const { accessToken } = storeAdminTokens(response.data);
 
-      let { user, rawRole } = extractUserAndRole(response.data, accessToken);
-
-      // Many login endpoints return only tokens (or minimal user without role); fetch /auth/me to resolve role
-      if (!rawRole) {
-        const meResponse = await adminApi.get('/auth/me');
-        const me = extractUserAndRole(meResponse.data, accessToken || getAdminAccessToken());
-        user = me.user;
-        rawRole = me.rawRole;
-      }
+      // The login response does NOT contain permissions. Always call /auth/me right after login
+      const meResponse = await adminApi.get('/auth/me');
+      const { user, rawRole, permissions } = extractUserAndRole(meResponse.data, accessToken || getAdminAccessToken());
 
       const adminRole = normalizeAdminRole(rawRole);
       if (!adminRole) {
@@ -142,7 +157,16 @@ export const loginAdmin = createAsyncThunk(
         return rejectWithValue('Access denied: Admin privileges are required to sign in here.');
       }
 
-      return { ...(typeof user === 'object' && user ? user : {}), role: adminRole };
+      const effectivePermissions: AdminPermissions = permissions || {
+        role: adminRole,
+        superAdmin: adminRole === 'SUPER_ADMIN',
+        granted: [],
+      };
+
+      return {
+        user: { ...(typeof user === 'object' && user ? user : {}), role: adminRole },
+        permissions: effectivePermissions,
+      };
     } catch (error: any) {
       clearAdminSession();
       return rejectWithValue(
@@ -166,7 +190,7 @@ export const fetchAdminProfile = createAsyncThunk(
     try {
       const { default: adminApi } = await import('../../service/adminApi');
       const response = await adminApi.get('/auth/me');
-      const { user, rawRole } = extractUserAndRole(response.data, getAdminAccessToken());
+      const { user, rawRole, permissions } = extractUserAndRole(response.data, getAdminAccessToken());
       const adminRole = normalizeAdminRole(rawRole);
 
       if (!adminRole) {
@@ -174,7 +198,16 @@ export const fetchAdminProfile = createAsyncThunk(
         return rejectWithValue('Access denied: Active session is not an admin account.');
       }
 
-      return { ...(typeof user === 'object' && user ? user : {}), role: adminRole };
+      const effectivePermissions: AdminPermissions = permissions || {
+        role: adminRole,
+        superAdmin: adminRole === 'SUPER_ADMIN',
+        granted: [],
+      };
+
+      return {
+        user: { ...(typeof user === 'object' && user ? user : {}), role: adminRole },
+        permissions: effectivePermissions,
+      };
     } catch (error: any) {
       return rejectWithValue(
         getBackendErrorMessage(error, 'Session expired')
@@ -209,13 +242,15 @@ const adminAuthSlice = createSlice({
   name: 'adminAuth',
   initialState,
   reducers: {
-    setAdminAuthenticated: (state, action: PayloadAction<Record<string, any>>) => {
-      state.admin = action.payload;
+    setAdminAuthenticated: (state, action: PayloadAction<{ user: Record<string, any>; permissions?: AdminPermissions }>) => {
+      state.admin = action.payload.user;
+      state.permissions = action.payload.permissions || null;
       state.isAuthenticated = true;
       state.status = 'succeeded';
     },
     clearAdmin: (state) => {
       state.admin = null;
+      state.permissions = null;
       state.isAuthenticated = false;
       state.status = 'idle';
       state.error = null;
@@ -231,13 +266,16 @@ const adminAuthSlice = createSlice({
       })
       .addCase(loginAdmin.fulfilled, (state, action) => {
         state.status = 'succeeded';
-        state.admin = action.payload;
+        state.admin = action.payload.user;
+        state.permissions = action.payload.permissions;
         state.isAuthenticated = true;
         state.error = null;
       })
       .addCase(loginAdmin.rejected, (state, action) => {
         state.status = 'failed';
         state.error = action.payload as string;
+        state.admin = null;
+        state.permissions = null;
         state.isAuthenticated = false;
       });
 
@@ -248,13 +286,15 @@ const adminAuthSlice = createSlice({
       })
       .addCase(fetchAdminProfile.fulfilled, (state, action) => {
         state.status = 'succeeded';
-        state.admin = action.payload;
+        state.admin = action.payload.user;
+        state.permissions = action.payload.permissions;
         state.isAuthenticated = true;
         state.error = null;
       })
       .addCase(fetchAdminProfile.rejected, (state) => {
         state.status = 'failed';
         state.admin = null;
+        state.permissions = null;
         state.isAuthenticated = false;
         // Tokens are cleared by adminApi only when the refresh itself is rejected, so a
         // network blip or a 5xx on /auth/me doesn't throw away a still-valid session.
@@ -264,6 +304,7 @@ const adminAuthSlice = createSlice({
     builder
       .addCase(logoutAdmin.fulfilled, (state) => {
         state.admin = null;
+        state.permissions = null;
         state.isAuthenticated = false;
         state.status = 'idle';
         state.error = null;

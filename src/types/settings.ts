@@ -12,6 +12,21 @@
 
 import type { AdminRole } from './index';
 
+/**
+ * The "From" address printed on shipping slips and used as the seller address on invoices.
+ * `null` means it hasn't been set yet — documents fall back to `BoutiqueProfile.address`.
+ */
+export interface PickupAddress {
+  contactName: string;
+  phone: string;
+  addressLine1: string;
+  addressLine2?: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  country: string;
+}
+
 export interface BoutiqueProfile {
   legalName: string;
   tagline: string;
@@ -21,6 +36,8 @@ export interface BoutiqueProfile {
   currency: string;
   timezone: string;
   address: string;
+  /** From GET /admin/settings; absent on older responses, `null` when not configured. */
+  pickupAddress?: PickupAddress | null;
 }
 
 export interface ShippingTariffs {
@@ -46,6 +63,11 @@ export interface UpdateBoutiqueProfileRequest {
   freeShippingMinOrder?: number;
   standardTariff?: number;
   expressTariff?: number;
+  /**
+   * Replaces the saved dispatch address entirely (never merged) — always send the whole
+   * object. Send `null` to clear it.
+   */
+  pickupAddress?: PickupAddress | null;
 }
 
 // ─── RBAC & Staff Types ──────────────────────────────────────────────────────
@@ -62,6 +84,7 @@ export type RbacRole = (typeof RBAC_ROLES)[number];
 export const RBAC_MODULE_KEYS = [
   'executive_dashboard',
   'products_catalog',
+  'supplier_management',
   'inventory_stock',
   'order_processing',
   'customer_crm',
@@ -74,6 +97,7 @@ export const RBAC_MODULE_KEYS = [
   'system_settings',
   'audit_trail_logs',
   'admin_management',
+  'reviews',
 ] as const;
 
 export type RbacModuleKey = (typeof RBAC_MODULE_KEYS)[number];
@@ -104,6 +128,22 @@ export interface RbacModuleMeta {
   description: string;
 }
 
+export interface PermissionRegistryModule {
+  key: RbacModuleKey;
+  label: string;
+  description: string;
+  actions: RbacAction[];
+}
+
+export interface PermissionRegistryResponse {
+  actions: RbacAction[];
+  modules: PermissionRegistryModule[];
+  superAdminOnly: string[];
+  editableRoles: RbacRole[];
+  defaults: Record<string, Record<string, Record<string, boolean | null>>>;
+  rules: string[];
+}
+
 export interface NormalizedRolesMatrix {
   matrix: RolesMatrixMap;
   modules: RbacModuleMeta[];
@@ -114,6 +154,7 @@ export interface NormalizedRolesMatrix {
 export type LegacyModuleKey =
   | 'dashboard'
   | 'products'
+  | 'suppliers'
   | 'inventory'
   | 'orders'
   | 'customers'
@@ -134,7 +175,7 @@ export interface AdminStaffMember {
   name: string;
   email: string;
   role: AdminRole;
-  status: 'Active' | 'Suspended';
+  status: 'Active' | 'Suspended' | 'active' | 'inactive';
   lastLogin: string;
   lastActiveAt: string | null;
 }
@@ -146,5 +187,6 @@ export type RolePermissionsPatchPayload = {
 };
 
 export type ResetRolesMatrixPayload = {
+  role?: RbacRole;
   roles?: RbacRole[];
 };

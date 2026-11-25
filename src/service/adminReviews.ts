@@ -155,3 +155,38 @@ export const reconcileReviewRatings = async (): Promise<ReconcileRatingsResult> 
     message: getBackendSuccessMessage(response.data, 'Reconcile queued. Ratings will update shortly.'),
   };
 };
+
+/**
+ * DELETE /admin/product-reviews/{reviewId} (reviews:delete)
+ */
+export const deleteAdminReview = async (
+  reviewId: string,
+  reason?: string
+): Promise<{ message: string }> => {
+  assertReviewsEnabled();
+  const response = await adminApi.delete(`/admin/product-reviews/${seg(reviewId)}`, {
+    params: reason ? { reason } : undefined,
+  });
+  return { message: getBackendSuccessMessage(response.data, 'Review permanently deleted.') };
+};
+
+/**
+ * GET /admin/product-reviews/export (reviews:export)
+ * Downloads reviews as CSV blob. Backend caps export at 10,000 rows.
+ */
+export const exportAdminReviewsCsv = async (
+  filters: {
+    status?: string;
+    productId?: string;
+    rating?: number;
+    from?: string;
+    to?: string;
+  } = {}
+): Promise<Blob> => {
+  assertReviewsEnabled();
+  const response = await adminApi.get('/admin/product-reviews/export', {
+    params: buildQueryParams(filters),
+    responseType: 'blob',
+  });
+  return response.data;
+};

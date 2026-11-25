@@ -84,7 +84,7 @@ export const StockAdjustModal: React.FC<StockAdjustModalProps> = ({
           attributes: fresh.attributes || selected.attributes,
         });
       })
-      .catch(() => {});
+      .catch(() => { });
     return () => { cancelled = true; };
   }, [isOpen, selected]);
 
@@ -92,8 +92,8 @@ export const StockAdjustModal: React.FC<StockAdjustModalProps> = ({
     const q = pickerQuery.trim().toLowerCase();
     const list = q
       ? candidates.filter(c =>
-          [c.productName, c.sku, variantLabel(c)].some(v => (v || '').toLowerCase().includes(q))
-        )
+        [c.productName, c.sku, variantLabel(c)].some(v => (v || '').toLowerCase().includes(q))
+      )
       : candidates;
     return list.slice(0, 50);
   }, [candidates, pickerQuery]);
@@ -130,8 +130,8 @@ export const StockAdjustModal: React.FC<StockAdjustModalProps> = ({
         operation === 'Add'
           ? await stockIn(liveRecord.variantId, { quantity: qty, reason: finalReason })
           : operation === 'Remove'
-          ? await stockOut(liveRecord.variantId, { quantity: qty, reason: finalReason })
-          : // "Set Count" is sent to /adjust as the difference from the current on-hand count
+            ? await stockOut(liveRecord.variantId, { quantity: qty, reason: finalReason })
+            : // "Set Count" is sent to /adjust as the difference from the current on-hand count
             await adjustStock(liveRecord.variantId, {
               quantity: Math.abs(delta),
               direction: delta > 0 ? 'IN' : 'OUT',
@@ -141,19 +141,19 @@ export const StockAdjustModal: React.FC<StockAdjustModalProps> = ({
       // Some endpoints may not echo the record back; fall back to the locally computed value
       const merged: InventoryRecord = updated?.variantId
         ? {
-            ...liveRecord,
-            ...updated,
-            productName: liveRecord.productName,
-            image: liveRecord.image,
-            sku: updated.sku || liveRecord.sku,
-            attributes: updated.attributes || liveRecord.attributes,
-          }
+          ...liveRecord,
+          ...updated,
+          productName: liveRecord.productName,
+          image: liveRecord.image,
+          sku: updated.sku || liveRecord.sku,
+          attributes: updated.attributes || liveRecord.attributes,
+        }
         : {
-            ...liveRecord,
-            isTracked: true,
-            quantityOnHand: newStock,
-            quantityAvailable: Math.max(0, newStock - liveRecord.quantityReserved),
-          };
+          ...liveRecord,
+          isTracked: true,
+          quantityOnHand: newStock,
+          quantityAvailable: Math.max(0, newStock - liveRecord.quantityReserved),
+        };
 
       onAdjusted?.(merged);
       showToast(getBackendSuccessMessage(updated, `${liveRecord.sku || liveRecord.productName || 'Variant'}: ${currentStock} → ${newStock} units`), 'success');
@@ -296,11 +296,10 @@ export const StockAdjustModal: React.FC<StockAdjustModalProps> = ({
                       key={op.id}
                       type="button"
                       onClick={() => chooseOperation(op.id)}
-                      className={`p-3 rounded-xl border text-center transition-all space-y-1 ${
-                        active
-                          ? 'border-allura-gold bg-allura-gold/15 text-allura-goldDark shadow-xs'
-                          : 'border-allura-border text-allura-muted hover:border-allura-darkBrown'
-                      }`}
+                      className={`p-3 rounded-xl border text-center transition-all space-y-1 ${active
+                        ? 'border-allura-gold bg-allura-gold/15 text-allura-goldDark shadow-xs'
+                        : 'border-allura-border text-allura-muted hover:border-allura-darkBrown'
+                        }`}
                     >
                       <Icon size={18} className="mx-auto" />
                       <p className={`text-xs ${active ? 'font-bold' : 'font-semibold'}`}>{op.label}</p>
@@ -350,11 +349,10 @@ export const StockAdjustModal: React.FC<StockAdjustModalProps> = ({
                       key={n}
                       type="button"
                       onClick={() => setQuantity(n)}
-                      className={`px-3 py-1 rounded-full border text-[11px] font-semibold transition-colors ${
-                        qty === n
-                          ? 'bg-allura-darkBrown text-white border-allura-darkBrown'
-                          : 'border-allura-border text-allura-muted hover:border-allura-darkBrown hover:text-allura-text'
-                      }`}
+                      className={`px-3 py-1 rounded-full border text-[11px] font-semibold transition-colors ${qty === n
+                        ? 'bg-allura-darkBrown text-white border-allura-darkBrown'
+                        : 'border-allura-border text-allura-muted hover:border-allura-darkBrown hover:text-allura-text'
+                        }`}
                     >
                       {operation === 'Add' ? '+' : '−'}{n}
                     </button>
@@ -389,7 +387,7 @@ export const StockAdjustModal: React.FC<StockAdjustModalProps> = ({
             </div>
 
             {/* Reason */}
-            <div>
+            {/* <div>
               <label className="block text-[10px] font-bold uppercase tracking-wider text-allura-muted mb-2">
                 Reason <span className="normal-case font-normal tracking-normal">(saved to the stock history)</span>
               </label>
@@ -420,7 +418,7 @@ export const StockAdjustModal: React.FC<StockAdjustModalProps> = ({
                   className="mt-2 w-full p-2.5 bg-allura-bg border border-allura-border rounded-xl text-xs text-allura-text focus:outline-none focus:border-allura-gold"
                 />
               )}
-            </div>
+            </div> */}
 
             {/* Actions */}
             <div className="flex justify-end gap-3 pt-3 border-t border-allura-border/60">

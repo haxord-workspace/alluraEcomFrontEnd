@@ -12,11 +12,26 @@ const mapProduct = (p: any, message?: string): AdminProductWithMessage => {
   };
 };
 
+export interface AdminProductListParams {
+  /** Only products linked to this supplier */
+  supplierId?: string;
+}
+
+type ProductWriteFields = Omit<AdminProduct, 'id' | 'createdAt' | 'updatedAt' | 'supplierId'>;
+
+/** Create: send `supplierId` only when a supplier is chosen; never null */
+export type CreateAdminProductPayload = ProductWriteFields & { supplierId?: string };
+
+/** Update: a string sets/changes it, `null` removes it, leaving it out keeps it */
+export type UpdateAdminProductPayload = Partial<ProductWriteFields> & { supplierId?: string | null };
+
 /**
- * GET /admin/products — fetch all products
+ * GET /admin/products — fetch all products (optionally `?supplierId=`)
  */
-export const getAdminProducts = async (): Promise<AdminProduct[]> => {
-  const response = await adminApi.get('/admin/products');
+export const getAdminProducts = async (params: AdminProductListParams = {}): Promise<AdminProduct[]> => {
+  const response = await adminApi.get('/admin/products', {
+    params: params.supplierId ? { supplierId: params.supplierId } : undefined,
+  });
   const data = response.data?.data || response.data;
   return Array.isArray(data) ? data.map(p => mapProduct(p, response.data?.message)) : [];
 };
@@ -34,7 +49,7 @@ export const getAdminProduct = async (id: string): Promise<AdminProductWithMessa
  * POST /admin/products — create new product
  */
 export const createAdminProduct = async (
-  data: Omit<AdminProduct, 'id' | 'createdAt' | 'updatedAt'>
+  data: CreateAdminProductPayload
 ): Promise<AdminProductWithMessage> => {
   const response = await adminApi.post('/admin/products', data);
   const respData = response.data?.data || response.data;
@@ -46,7 +61,7 @@ export const createAdminProduct = async (
  */
 export const updateAdminProduct = async (
   id: string,
-  data: Partial<AdminProduct>
+  data: UpdateAdminProductPayload
 ): Promise<AdminProductWithMessage> => {
   const response = await adminApi.patch(`/admin/products/${id}`, data);
   const respData = response.data?.data || response.data;

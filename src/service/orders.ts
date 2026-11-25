@@ -322,14 +322,25 @@ const buildMilestones = (history: any[], currentRaw: string): TrackingMilestone[
     (a, b) => new Date(a?.changedAt || a?.createdAt || a?.timestamp || 0).getTime() - new Date(b?.changedAt || b?.createdAt || b?.timestamp || 0).getTime()
   );
   // Newest first, as the tracking timeline expects
-  return sorted.reverse().map((h, i) => ({
-    status: prettyStatus(h?.status || h?.to),
-    location: h?.location || '',
-    timestamp: formatDateTime(h?.changedAt || h?.createdAt || h?.timestamp),
-    description: h?.note || h?.reason || '',
-    completed: true,
-    current: i === 0 && toBackendStatus(h?.status || h?.to || '') === toBackendStatus(currentRaw),
-  }));
+  return sorted.reverse().map((h, i) => {
+    const base = h?.note || h?.reason || '';
+    // Each SHIPPED entry carries its own courier/AWB (a correction re-sends SHIPPED
+    // with new values, so earlier entries keep showing what was true at that time)
+    const isShippedEntry = toBackendStatus(h?.status || h?.to || '') === 'SHIPPED';
+    const entryCourier = h?.shippingCarrier || h?.courier;
+    const entryAwb = h?.trackingNumber || h?.awbNumber;
+    const trackingBits = isShippedEntry
+      ? [entryCourier, entryAwb ? `AWB ${entryAwb}` : ''].filter(Boolean).join(' · ')
+      : '';
+    return {
+      status: prettyStatus(h?.status || h?.to),
+      location: h?.location || '',
+      timestamp: formatDateTime(h?.changedAt || h?.createdAt || h?.timestamp),
+      description: trackingBits ? [base, trackingBits].filter(Boolean).join(' — ') : base,
+      completed: true,
+      current: i === 0 && toBackendStatus(h?.status || h?.to || '') === toBackendStatus(currentRaw),
+    };
+  });
 };
 
 /** Maps a backend order (list or detail shape) onto the UI Order type */
@@ -378,6 +389,9 @@ export const mapOrder = (raw: any): Order => {
     discount:
       num(pricing?.couponDiscount, 0) + num(pricing?.promotionDiscount, 0) + num(pricing?.productDiscount, 0) ||
       num(pricing?.discountAmount, pricing?.totalDiscount, pricing?.discount, raw?.discountAmount, raw?.discount),
+    discountLines: (['coupon', 'promotion', 'product'] as const)
+      .map(kind => ({ kind, amount: num(pricing?.[`${kind}Discount`], 0) }))
+      .filter(line => line.amount > 0),
     couponCode: raw?.couponCode || pricing?.couponCode,
     tax: num(pricing?.taxAmount, pricing?.tax, raw?.taxAmount),
     total: num(pricing?.totalAmount, pricing?.total, pricing?.grandTotal, raw?.totalAmount, raw?.total),
@@ -475,42 +489,6 @@ import { getBackendErrorMessage } from '../utils/apiResponse';
 export const orderErrorMessage = (error: any, fallback: string): string =>
   getBackendErrorMessage(error, fallback);
 
-// ── Invoice download (blob) ───────────────────────────────────────────────────
-
-export interface InvoiceDownload {
-  blob: Blob;
-  filename: string;
-}
-
-const filenameFromDisposition = (header: string | undefined, fallback: string): string => {
-  if (!header) return fallback;
-  const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(header);
-  return match ? decodeURIComponent(match[1]) : fallback;
-};
-
-/**
- * Runs a blob-returning request. If the server actually sent a JSON error (still
- * fetched as a Blob because of responseType: 'blob'), it's unpacked back into
- * `error.response.data` so orderErrorMessage() can read the real backend message.
- */
-const fetchInvoiceBlob = async (request: () => Promise<any>, fallbackFilename: string): Promise<InvoiceDownload> => {
-  try {
-    const response = await request();
-    const header = response.headers?.['content-disposition'] ?? response.headers?.['Content-Disposition'];
-    return { blob: response.data as Blob, filename: filenameFromDisposition(header, fallbackFilename) };
-  } catch (error: any) {
-    const data = error?.response?.data;
-    if (data instanceof Blob && /json/i.test(data.type)) {
-      try {
-        error.response.data = JSON.parse(await data.text());
-      } catch {
-        // leave as-is; orderErrorMessage() falls back to a generic message
-      }
-    }
-    throw error;
-  }
-};
-
 // ── Customer ──────────────────────────────────────────────────────────────────
 
 /** GET /orders */
@@ -525,13 +503,6 @@ export const getMyOrder = async (orderId: string): Promise<Order> => {
   const response = await api.get(`/orders/${orderId}`);
   return mapOrder(unwrap(response));
 };
-
-/** GET /orders/{orderId}/invoice */
-export const downloadOrderInvoice = (orderId: string, invoiceNumber?: string): Promise<InvoiceDownload> =>
-  fetchInvoiceBlob(
-    () => api.get(`/orders/${orderId}/invoice`, { responseType: 'blob' }),
-    `invoice-${invoiceNumber || orderId}.pdf`
-  );
 
 /** POST /orders/{orderId}/cancel */
 export const cancelMyOrder = async (orderId: string, reason: string, note?: string): Promise<Order | null> => {
@@ -602,9 +573,3 @@ export async function cancelAdminOrder(
   return data && (data._id || data.id) ? mapOrder(data) : null;
 }
 
-/** GET /admin/orders/{orderId}/invoice */
-export const downloadAdminOrderInvoice = (orderId: string, invoiceNumber?: string): Promise<InvoiceDownload> =>
-  fetchInvoiceBlob(
-    () => adminApi.get(`/admin/orders/${orderId}/invoice`, { responseType: 'blob' }),
-    `invoice-${invoiceNumber || orderId}.pdf`
-  );

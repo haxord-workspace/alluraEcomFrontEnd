@@ -15,6 +15,53 @@ import {
 import { getDashboardActivity, type ActivityLogsResponse } from '../../service/adminDashboard';
 import type { AuditLogItem } from '../../types';
 
+const formatAuditLogDetails = (log: any): string => {
+  const meta = log.metadata;
+  if (!meta) return 'Administrative action logged';
+
+  const event = meta.event;
+  if (event === 'STAFF_CREATED') {
+    return `Created staff account for ${meta.email || meta.name || 'user'} with role ${meta.role || 'ADMIN'}`;
+  }
+  if (event === 'STAFF_ROLE_CHANGED') {
+    return `Changed role for ${meta.email || meta.name || 'user'} from ${meta.oldRole || 'previous'} to ${meta.newRole || meta.role}`;
+  }
+  if (event === 'STAFF_DEACTIVATED') {
+    return `Deactivated staff account for ${meta.email || meta.name || 'user'}`;
+  }
+  if (event === 'STAFF_REACTIVATED') {
+    return `Reactivated staff account for ${meta.email || meta.name || 'user'}`;
+  }
+  if (event === 'REVIEW_DELETED') {
+    return `Deleted review ${meta.reviewId || ''}${meta.reason ? ` (Reason: "${meta.reason}")` : ''}`;
+  }
+  if (event === 'REVIEWS_EXPORTED') {
+    return `Exported reviews CSV (${meta.count ? `${meta.count} records` : 'up to 10,000 records'})`;
+  }
+
+  if (log.entityType === 'ROLE' || meta.changes) {
+    if (meta.changes && typeof meta.changes === 'object') {
+      const summary: string[] = [];
+      Object.entries(meta.changes).forEach(([mod, acts]: [string, any]) => {
+        if (acts && typeof acts === 'object') {
+          Object.entries(acts).forEach(([act, val]) => {
+            summary.push(`${mod} › ${act.toUpperCase()}: ${val ? '✓ GRANTED' : '✗ REVOKED'}`);
+          });
+        }
+      });
+      if (summary.length > 0) {
+        return `Role permissions changed: ${summary.join(', ')}`;
+      }
+    }
+  }
+
+  if (typeof meta === 'string') return meta;
+  if (meta.description) return String(meta.description);
+  if (meta.message) return String(meta.message);
+
+  return JSON.stringify(meta);
+};
+
 export const AdminAuditLogsPage: React.FC = () => {
   const { auditLogs: localAuditLogs, logAdminAction } = useAdmin();
   const { showToast } = useShop();
@@ -58,7 +105,7 @@ export const AdminAuditLogsPage: React.FC = () => {
         action: (log.action as any) || 'Updated',
         module: log.entityType || 'General',
         resource: log.entityId || log.entityType || 'System',
-        details: log.metadata ? JSON.stringify(log.metadata) : 'Administrative action logged',
+        details: formatAuditLogDetails(log),
         ipAddress: log.ipAddress || '127.0.0.1',
       }));
     }

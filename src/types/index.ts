@@ -1,5 +1,6 @@
 import type { CollectionStatus } from '../constants/collectionStatus';
 import type { ActiveStatus } from '../constants/status';
+import type { ProductSupplierRef } from './suppliers';
 
 export type ProductCategory =
   | 'Ethnic Wear'
@@ -69,6 +70,8 @@ export interface AdminProduct {
   };
   status: 'ACTIVE' | 'DRAFT' | 'ARCHIVED';
   images?: { url: string; isPrimary?: boolean }[];
+  /** Admin responses only: populated supplier summary; missing when the product has no supplier */
+  supplierId?: ProductSupplierRef | null;
   createdAt?: string;
   updatedAt?: string;
   [key: string]: any;
@@ -92,9 +95,10 @@ export interface ProductVariant {
   price: number;
   mrp: number;
   costPrice?: number;
-  stockOnHand: number;
-  stockReserved: number;
-  stockAvailable: number;
+  /** Stock fields are undefined when the API didn't send them (the storefront endpoints don't) — unknown, not 0 */
+  stockOnHand?: number;
+  stockReserved?: number;
+  stockAvailable?: number;
   lowStockThreshold?: number;
   images?: { url: string; isPrimary?: boolean; alt?: string }[];
 }
@@ -332,6 +336,8 @@ export interface Order {
   subtotal: number;
   shippingFee: number;
   discount: number;
+  /** Discount split by source (coupon / promotion / product), when the backend sends the parts; sums to `discount` */
+  discountLines?: { kind: 'coupon' | 'promotion' | 'product'; amount: number }[];
   couponCode?: string;
   tax: number;
   total: number;
@@ -374,6 +380,9 @@ export interface OrderHistoryEntry {
   changedAt?: string;
   changedBy?: string | { id?: string; name?: string; email?: string };
   actorType?: string;
+  /** Present on SHIPPED entries; aliases `courier`/`awbNumber` may arrive instead */
+  shippingCarrier?: string;
+  trackingNumber?: string;
   [key: string]: any;
 }
 
@@ -604,6 +613,7 @@ export interface AdminPermissionMatrix {
   settings: { view: boolean; edit: boolean };
   auditLogs: { view: boolean; export: boolean };
   adminManagement: { view: boolean; create: boolean; edit: boolean; delete: boolean };
+  suppliers: { view: boolean; create: boolean; edit: boolean; delete: boolean; publish: boolean };
 }
 
 export interface AdminUser {

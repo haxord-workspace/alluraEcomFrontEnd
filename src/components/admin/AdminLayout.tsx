@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
-import { Outlet, Navigate } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { Outlet, Navigate, useNavigate } from 'react-router-dom';
 import { AdminSidebar } from './AdminSidebar';
 import { AdminHeader } from './AdminHeader';
 import { AdminCommandSearch } from './AdminCommandSearch';
 import { useAdmin } from '../../context/AdminContext';
-import { useSelector } from 'react-redux';
-import type { RootState } from '../../store';
+import { useShop } from '../../context/ShopContext';
+import { useSelector, useDispatch } from 'react-redux';
+import type { RootState, AppDispatch } from '../../store';
+import { fetchAdminProfile } from '../../store/slices/adminAuthSlice';
 
 interface AdminLayoutProps {
   children?: React.ReactNode;
@@ -13,8 +15,52 @@ interface AdminLayoutProps {
 
 export const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
   const { isAdminAuthenticated } = useAdmin();
+  const { showToast } = useShop();
+  const dispatch = useDispatch<AppDispatch>();
+  const navigate = useNavigate();
   const adminAuthStatus = useSelector((state: RootState) => state.adminAuth.status);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const lastFocusRef = useRef<number>(0);
+
+  // Handle global permission denied and account deactivation events
+  useEffect(() => {
+    const handleDenied = (e: Event) => {
+      const detail = (e as CustomEvent)?.detail;
+      const msg = detail?.message || 'Access denied: You do not have permission for this action.';
+      showToast(msg, 'error');
+      // Refetch /auth/me to update permission flags and adjust button visibility immediately
+      if (isAdminAuthenticated) {
+        dispatch(fetchAdminProfile());
+      }
+    };
+
+    const handleAuthError = (e: Event) => {
+      const detail = (e as CustomEvent)?.detail;
+      const msg = detail?.message || 'Session expired or deactivated. Please sign in again.';
+      showToast(msg, 'error');
+      navigate('/admin/login', { replace: true });
+    };
+
+    window.addEventListener('allura:permission-denied', handleDenied);
+    window.addEventListener('allura:admin-auth-error', handleAuthError);
+    return () => {
+      window.removeEventListener('allura:permission-denied', handleDenied);
+      window.removeEventListener('allura:admin-auth-error', handleAuthError);
+    };
+  }, [showToast, dispatch, navigate, isAdminAuthenticated]);
+
+  // Window focus throttling: refresh /auth/me at most once every 60 seconds
+  useEffect(() => {
+    const onFocus = () => {
+      const now = Date.now();
+      if (isAdminAuthenticated && now - lastFocusRef.current >= 60000) {
+        lastFocusRef.current = now;
+        dispatch(fetchAdminProfile());
+      }
+    };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [isAdminAuthenticated, dispatch]);
 
   // While /auth/me is in flight on page refresh, wait — don't redirect yet
   if (adminAuthStatus === 'loading') {

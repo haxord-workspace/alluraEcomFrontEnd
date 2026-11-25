@@ -961,7 +961,7 @@ export const HomePage: React.FC = () => {
             QUESTIONS & ANSWERS
           </h2>
           <p className="text-xs sm:text-sm text-[#561C08] font-body max-w-lg mx-auto leading-relaxed">
-            Everything you need to know about our handcrafted modest designs, custom sizing, express shipping across Kerala, and easy returns.
+            Everything you need to know about our handcrafted modest designs, custom sizing, express shipping across Kerala, and easy exchanges.
           </p>
         </div>
 

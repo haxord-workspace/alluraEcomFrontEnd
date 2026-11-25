@@ -8,6 +8,7 @@ import { useShop } from '../../context/ShopContext';
 import { useAppDispatch } from '../../store/hooks';
 import { fetchCustomerProfile } from '../../store/slices/authSlice';
 import type { CustomerProfile } from '../../types';
+import { hasPendingShopAction } from '../../utils/pendingShopAction';
 
 // After signing in, go to the Home page, unless the customer was sent here from a specific page
 // (e.g. checkout or wishlist), in which case return them there. The Account page and the auth
@@ -61,6 +62,8 @@ export const GoogleSignInButton: React.FC<GoogleSignInButtonProps> = ({
 
     setIsLoading(true);
     setError(null);
+    // Checked before signing in: ShopContext finishes a pending Add to Bag / Buy Now and navigates itself
+    const resumesShopAction = hasPendingShopAction();
 
     try {
       // 1. Call POST /auth/google with body { credential: response.credential }
@@ -122,6 +125,8 @@ export const GoogleSignInButton: React.FC<GoogleSignInButtonProps> = ({
       // 4. Navigate to destination
       if (onSuccess) {
         onSuccess();
+      } else if (resumesShopAction) {
+        // ShopContext navigates to the bag / checkout once the action completes
       } else if (redirectTo) {
         navigate(redirectTo, { replace: true });
       } else {

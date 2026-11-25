@@ -32,6 +32,18 @@ import {
 import type { CartSnapshot, CartTotals, CartValidationResult } from '../service/cart';
 import { validateCoupon } from '../service/coupons';
 import { newMetaEventId, metaHeaders, trackMetaEvent } from '../utils/metaPixel';
+import {
+  savePendingShopAction,
+  readPendingShopAction,
+  clearPendingShopAction,
+  markPendingShopActionProcessing,
+  isAuthFlowPath,
+  type PendingShopIntent,
+  type RestoreShopSelection,
+} from '../utils/pendingShopAction';
+
+/** Size / colour labels match ignoring case and surrounding spaces ("Free Size" === "free size ") */
+const sameLabel = (a?: string, b?: string) => (a || '').trim().toLowerCase() === (b || '').trim().toLowerCase();
 import { getMyOrders, getMyOrder, cancelMyOrder, orderErrorMessage, enrichOrder } from '../service/orders';
 import {
   getMyNotifications,
@@ -77,8 +89,10 @@ interface ShopContextType {
   /**
    * Adds to the bag. Resolves true when the item is in the bag.
    * Pass { silent: true } (e.g. for Buy Now) to skip the toast and keep the bag drawer closed.
+   * For a guest, the selection is remembered (as `intent`, default 'add_to_bag') and finished
+   * automatically after they sign in.
    */
-  addToCart: (product: Product, size?: string, color?: ProductColor, quantity?: number, options?: { silent?: boolean }) => Promise<boolean>;
+  addToCart: (product: Product, size?: string, color?: ProductColor, quantity?: number, options?: { silent?: boolean; intent?: PendingShopIntent }) => Promise<boolean>;
   removeFromCart: (productId: string, size: string, colorName: string) => Promise<void>;
   updateQuantity: (productId: string, size: string, colorName: string, quantity: number) => Promise<void>;
   clearCart: () => Promise<void>;
@@ -197,12 +211,17 @@ const INITIAL_AI_MESSAGES: AIMessage[] = [
 import { useAppDispatch } from '../store/hooks';
 import { fetchCustomerProfile } from '../store/slices/authSlice';
 import api, { hasCustomerSession, storeCustomerTokens, clearCustomerTokens, CUSTOMER_SESSION_EXPIRED_EVENT } from '../service/api';
+import { formatINR } from '../utils/formatINR';
 
 export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
   // The admin portal doesn't use the storefront catalog or the customer's cart / wishlist
-  const isAdminRoute = useLocation().pathname.startsWith('/admin');
+  const location = useLocation();
+  const isAdminRoute = location.pathname.startsWith('/admin');
+  // Read inside callbacks so they don't have to be re-created on every navigation
+  const locationRef = useRef(location);
+  locationRef.current = location;
 
   useEffect(() => {
     // Restore the customer's profile after a refresh, but only if they are actually logged in
@@ -278,6 +297,13 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Cart state (server is the source of truth; loaded once the customer is known)
   const [cart, setCart] = useState<CartItem[]>([]);
+  // Latest bag lines, for callbacks that must not depend on (and be re-created by) every cart change
+  const cartRef = useRef<CartItem[]>(cart);
+  // True once the server bag has been read for the signed-in customer (GET /cart or a mutation's echo)
+  const cartLoadedRef = useRef(false);
+  useEffect(() => {
+    cartRef.current = cart;
+  }, [cart]);
   const [cartId, setCartId] = useState<string | undefined>(undefined);
   const [cartTotals, setCartTotals] = useState<CartTotals>({});
   const [isCartLoading, setIsCartLoading] = useState(false);
@@ -577,10 +603,14 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (snapshot.id) setCartId(snapshot.id);
     setCart(snapshot.items);
     setCartTotals(snapshot.totals);
+    cartLoadedRef.current = true;
   }, []);
 
+  // Latest GET /cart in flight, so a resumed sign-in action can wait for it instead of racing it
+  const cartRequestRef = useRef<Promise<CartSnapshot> | null>(null);
   const refreshCart = useCallback(async () => {
     if (!customer || !hasCustomerSession()) {
+      cartLoadedRef.current = false;
       setCart([]);
       setCartTotals({});
       setCartId(undefined);
@@ -588,8 +618,10 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     if (isAdminRoute) return;
     setIsCartLoading(true);
+    const request = getCart(lookupProduct);
+    cartRequestRef.current = request;
     try {
-      applyCartSnapshot(await getCart(lookupProduct));
+      applyCartSnapshot(await request);
     } catch (e) {
       console.error('Failed to load cart:', e);
     } finally {
@@ -616,10 +648,28 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
     size = '',
     color: ProductColor = NO_COLOR,
     quantity = 1,
-    options: { silent?: boolean } = {}
+    options: { silent?: boolean; intent?: PendingShopIntent } = {}
   ): Promise<boolean> => {
     if (!customer) {
-      navigate('/auth/login');
+      // Remember the selection so it can be finished right after login / sign-up
+      const current = locationRef.current;
+      const chosen = product.variants?.find(
+        v => sameLabel(v.size, size) && sameLabel(v.color?.name, color.name)
+      );
+      savePendingShopAction({
+        action: options.intent || 'add_to_bag',
+        productId: product.id,
+        productSlug: product.slug,
+        productName: product.name,
+        variantId: chosen?.id,
+        sku: chosen?.sku,
+        size,
+        colorName: color.name,
+        quantity,
+        returnUrl: isAuthFlowPath(current.pathname) ? '/' : `${current.pathname}${current.search}`,
+        product: product.variants ? product : undefined,
+      });
+      navigate('/auth/login', { state: { from: current } });
       return false;
     }
     try {
@@ -649,6 +699,32 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Warning: product says it has variants but none were loaded.
         // We will proceed to add without a variantId.
         console.warn(`Product ${product.id} hasVariants but no variants array found. Adding base product.`);
+      }
+
+      // Buy Now buys the quantity chosen now: if this exact piece is already in the bag, set that
+      // line to the chosen quantity instead of adding on top (1 chosen + 2 already in bag ≠ 3 at checkout)
+      if (options.intent === 'buy_now') {
+        let lines = cartRef.current;
+        if (!cartLoadedRef.current) {
+          // The bag never loaded (GET /cart can fail intermittently): check it once before deciding
+          try {
+            const snapshot = await getCart(lookupProduct);
+            applyCartSnapshot(snapshot);
+            cartLoadedRef.current = true;
+            lines = snapshot.items;
+          } catch {
+            /* still unknown: fall through to a normal add */
+          }
+        }
+        const line = lines.find(item =>
+          variant?.id
+            ? item.variantId === variant.id
+            : item.product.id === product.id && sameLabel(item.selectedSize, size) && sameLabel(item.selectedColor?.name, color.name)
+        );
+        if (line?.id) {
+          if (line.quantity !== quantity) await applyOrRefresh(await updateCartItem(line.id, quantity, lookupProduct));
+          return true;
+        }
       }
 
       // Meta: same event ID for the Pixel (below) and the backend's CAPI call (headers)
@@ -683,7 +759,128 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
       showToast(cartErrorMessage(error, 'Could not add this piece to your Bag'), 'error');
       return false;
     }
-  }, [addRecentlyViewed, showToast, customerId, navigate, lookupProduct, applyOrRefresh]);
+  }, [addRecentlyViewed, showToast, customerId, navigate, lookupProduct, applyOrRefresh, applyCartSnapshot]);
+
+  // A guest who leaves the sign-in screens without signing in has abandoned the action:
+  // forget it, so a later, unrelated login keeps the normal redirect.
+  useEffect(() => {
+    if (!customer && !isAdminRoute && !isAuthFlowPath(location.pathname)) clearPendingShopAction();
+  }, [location.pathname, customerId, isAdminRoute]);
+
+  // After login / sign-up / Google sign-in (or a refresh mid-way), finish the Add to Bag / Buy Now
+  // the customer started as a guest: Add to Bag -> /cart, Buy Now -> /checkout. This takes priority
+  // over the auth pages' own redirects (they check hasPendingShopAction and stand aside).
+  const resumingShopActionRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!customer || !hasCustomerSession() || isAdminRoute || resumingShopActionRef.current) return;
+    const pending = readPendingShopAction();
+    if (!pending) return;
+    // 'processing' that this page didn't start = the page was refreshed while it ran: never run it twice
+    const interrupted = pending.status === 'processing';
+    resumingShopActionRef.current = pending.id;
+    markPendingShopActionProcessing(pending);
+
+    const isBuyNow = pending.action === 'buy_now';
+    const destination = isBuyNow ? '/checkout' : '/cart';
+    // Back to the product page with the same size / colour / quantity still selected
+    const backToProduct = () =>
+      navigate(pending.returnUrl, {
+        replace: true,
+        state: {
+          restoreSelection: { size: pending.size, colorName: pending.colorName, quantity: pending.quantity },
+        } satisfies RestoreShopSelection,
+      });
+
+    (async () => {
+      try {
+        // The bag load that sign-in just started (GET /cart): wait for it so it can't overwrite this add,
+        // and use it to see whether this piece is already in the bag
+        let bag: CartSnapshot | null = null;
+        try {
+          bag = (await cartRequestRef.current) || null;
+        } catch {
+          bag = null;
+        }
+
+        let product: Product;
+        try {
+          // Reuse the product loaded on the page; only fetch it when that copy isn't available
+          product = pending.product || (await getStoreProduct(pending.productId));
+        } catch {
+          showToast(`${pending.productName || 'This piece'} is no longer available`, 'error');
+          navigate(pending.returnUrl, { replace: true });
+          return;
+        }
+
+        // Resolve the exact variant that was selected: by id first, then by the size / colour labels
+        const variants = product.variants || [];
+        const variant =
+          (pending.variantId && variants.find(v => v.id === pending.variantId)) ||
+          variants.find(v => sameLabel(v.size, pending.size) && sameLabel(v.color?.name, pending.colorName)) ||
+          (variants.length === 1 ? variants[0] : undefined);
+        if (variants.length > 0 && !variant) {
+          showToast(`Please choose a size and colour for ${product.name}`, 'error');
+          backToProduct();
+          return;
+        }
+        const size = variant?.size || pending.size;
+        const color =
+          variant?.color?.name
+            ? variant.color
+            : product.colors?.find(c => sameLabel(c.name, pending.colorName)) || { ...NO_COLOR, name: pending.colorName };
+
+        const bagLine = bag?.items.find(item =>
+          variant?.id
+            ? item.variantId === variant.id
+            : item.product.id === product.id && sameLabel(item.selectedSize, size) && sameLabel(item.selectedColor?.name, color.name)
+        );
+
+        if (interrupted && bagLine) {
+          // The add finished before the refresh: don't add it again, just continue
+          navigate(destination, { replace: true });
+          return;
+        }
+        // (interrupted but not in the bag = the earlier attempt never landed, so it is safe to retry below)
+
+        // Only reject on stock the backend actually reported; unknown stock is left to the cart API,
+        // which is the source of truth and returns its own out-of-stock message
+        if (typeof variant?.stockAvailable === 'number' && variant.stockAvailable <= 0) {
+          showToast(`${product.name}${size ? ` (${size})` : ''} is out of stock`, 'error');
+          backToProduct();
+          return;
+        }
+
+        let ok: boolean;
+        if (isBuyNow && bagLine?.id) {
+          // Buy Now for a piece that is already in the bag: buy the quantity chosen now,
+          // instead of adding it on top of the earlier quantity
+          ok = true;
+          if (bagLine.quantity !== pending.quantity) {
+            try {
+              await applyOrRefresh(await updateCartItem(bagLine.id, pending.quantity, lookupProduct));
+            } catch (error: any) {
+              showToast(cartErrorMessage(error, 'Could not update this piece in your Bag'), 'error');
+              ok = false;
+            }
+          }
+        } else {
+          // Existing add-to-bag path (POST /cart/items); quiet here because we go to the bag / checkout page
+          ok = await addToCart(product, size, color, pending.quantity, {
+            silent: true,
+            // If the bag couldn't be read above, Buy Now re-checks it so it still won't add on top
+            intent: isBuyNow ? 'buy_now' : undefined,
+          });
+          if (ok && !isBuyNow) showToast(`Added ${product.name}${size ? ` (${size})` : ''} to your Bag`, 'gold');
+        }
+
+        if (ok) navigate(destination, { replace: true });
+        else backToProduct();
+      } finally {
+        clearPendingShopAction(pending.id);
+        resumingShopActionRef.current = null;
+      }
+    })();
+  }, [customerId, isAdminRoute, addToCart, applyOrRefresh, lookupProduct, navigate, showToast]);
 
   const removeFromCart = useCallback(async (productId: string, size: string, colorName: string) => {
     const line = findCartLine(productId, size, colorName);
@@ -1489,7 +1686,7 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
         courier: targetOrder.tracking?.courier || 'Delhivery Express',
       };
     } else if (lower.includes('return') || lower.includes('exchange') || lower.includes('policy')) {
-      replyText = "We offer a seamless 7-day doorstep return and size exchange service across India. You can submit an exchange request directly from your Account Orders page or WhatsApp our concierge.";
+      replyText = "We offer a seamless 7-day size exchange service across India (no returns). You can submit an exchange request directly from your Account Orders page or WhatsApp our concierge.";
     } else {
       replyText = "Here are a few of our most beloved best-sellers from the current season atelier edit:";
       suggested = products.slice(0, 3);
@@ -1517,14 +1714,7 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return '₹ ' + Math.round(price).toLocaleString('en-IN');
   };
 
-  const formatExactPrice = useCallback(
-    (price: number) =>
-      '₹ ' + (Number(price) || 0).toLocaleString('en-IN', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      }),
-    []
-  );
+  const formatExactPrice = useCallback((price: number) => formatINR(price), []);
 
   return (
     <ShopContext.Provider

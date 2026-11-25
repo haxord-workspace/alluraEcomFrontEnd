@@ -1,6 +1,7 @@
 import React, { useId, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { useConfirm } from '../../../context/ConfirmContext';
+import { usePermissions } from '../../../hooks/usePermissions';
 import { ReviewDialog } from '../../reviews/ReviewDialog';
 import { StarRatingDisplay } from '../../reviews/StarRating';
 import { StatusBadge } from '../../common/StatusBadge';
@@ -42,7 +43,17 @@ interface ModerateReviewModalProps {
 /** Approve / reject / hide / restore one review. Offers only the actions valid for its status. */
 export const ModerateReviewModal: React.FC<ModerateReviewModalProps> = ({ review, onClose, onModerated }) => {
   const confirm = useConfirm();
-  const actions = ASSUMED_MODERATION_TRANSITIONS[review.status] ?? [];
+  const { can } = usePermissions();
+  const canPublish = can('reviews', 'publish');
+  const canEdit = can('reviews', 'edit');
+
+  const allActions = ASSUMED_MODERATION_TRANSITIONS[review.status] ?? [];
+  const actions = allActions.filter((act) => {
+    if (act === 'APPROVE' || act === 'REJECT') return canPublish;
+    if (act === 'HIDE' || act === 'RESTORE') return canEdit;
+    return true;
+  });
+
   const [action, setAction] = useState<ModerationAction | null>(actions.length === 1 ? actions[0] : null);
   const [reason, setReason] = useState('');
   const [reasonError, setReasonError] = useState('');

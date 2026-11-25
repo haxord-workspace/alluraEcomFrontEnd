@@ -15,6 +15,7 @@ interface AdminAccessGuardProps {
 const moduleDisplayNames: Record<RbacModuleKey, string> = {
   executive_dashboard: 'Executive Dashboard',
   products_catalog: 'Products & Catalog',
+  supplier_management: 'Supplier Management',
   inventory_stock: 'Inventory & Stock Management',
   order_processing: 'Orders & Fulfillment Operations',
   customer_crm: 'Customer CRM & Patrons',
@@ -27,6 +28,8 @@ const moduleDisplayNames: Record<RbacModuleKey, string> = {
   system_settings: 'Store System Settings',
   audit_trail_logs: 'System Security Audit Logs',
   admin_management: 'Staff Roles & Permission Matrix',
+  // UNCONFIRMED KEY — matches REVIEWS_ADMIN_MODULE constant
+  reviews: 'Reviews & Moderation',
 };
 
 export const AdminAccessGuard: React.FC<AdminAccessGuardProps> = ({

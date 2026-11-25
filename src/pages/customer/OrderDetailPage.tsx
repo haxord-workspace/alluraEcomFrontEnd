@@ -11,19 +11,22 @@ import {
   Clock,
   Truck,
   XCircle,
-  Lock
+  Lock,
+  Copy,
+  Check
 } from 'lucide-react';
 import { useShop } from '../../context/ShopContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { InvoiceModal } from '../../components/common/InvoiceModal';
+import { AddressSlipButton } from '../../components/common/AddressSlipButton';
+import { canDownloadInvoice } from '../../utils/addressSlipEligibility';
 import { ItemVariantMeta } from '../../components/common/ItemVariantMeta';
 import { OrderDetailSkeleton } from '../../components/ui/OrderDetailSkeleton';
 import { useCustomerOrder } from '../../hooks/useCustomerOrder';
 import { useOrderPayment } from '../../hooks/useOrderPayment';
-import { downloadOrderInvoice } from '../../service/orders';
 import { OrderItemReviewAction } from '../../components/reviews/OrderItemReviewAction';
 import { shouldShowOrderTracking } from '../../utils/reviewEligibility';
-import { getReturnEligibility } from '../../utils/returnEligibility';
+import { useExchangeEligibility } from '../../hooks/useExchangeEligibility';
 import {
   getUserFacingCancelReason,
   formatUserFacingStatus,
@@ -45,6 +48,8 @@ export const OrderDetailPage: React.FC = () => {
   const { formatPrice, formatExactPrice, invoiceOrder, setInvoiceOrder, cancelCustomerOrder, customer, loadOrder, showToast } = useShop();
   const { order, isLoading: isLoadingOrder } = useCustomerOrder(orderId);
   const { payForOrder, isPaying } = useOrderPayment();
+  // Must run on every render (even while order is still loading) to satisfy the Rules of Hooks
+  const exchangeEligibility = useExchangeEligibility(order);
 
   // Online orders whose payment hasn't gone through yet (closed popup, failed attempt)
   const needsPayment =
@@ -83,6 +88,17 @@ export const OrderDetailPage: React.FC = () => {
   const [cancelReason, setCancelReason] = useState(CANCEL_REASONS[0]);
   const [cancelNote, setCancelNote] = useState('');
   const [isCancelling, setIsCancelling] = useState(false);
+  const [isAwbCopied, setIsAwbCopied] = useState(false);
+
+  const copyAwb = async (awb: string) => {
+    try {
+      await navigator.clipboard.writeText(awb);
+      setIsAwbCopied(true);
+      window.setTimeout(() => setIsAwbCopied(false), 2000);
+    } catch {
+      // Clipboard API unavailable — nothing to fall back to safely, so no-op
+    }
+  };
 
   const handleCancel = async () => {
     if (!order) return;
@@ -113,7 +129,7 @@ export const OrderDetailPage: React.FC = () => {
   }
 
   const isCancelled = /cancell?ed/i.test(String(order.orderStatus || ''));
-  const returnEligibility = getReturnEligibility(order);
+  const isShippedOrLater = ['Shipped', 'Out for Delivery', 'Delivered'].includes(order.orderStatus);
 
   const cancelEntry = order.history
     ? [...order.history].reverse().find(h => String(h.status || h.to || '').toUpperCase() === 'CANCELLED')
@@ -185,7 +201,7 @@ export const OrderDetailPage: React.FC = () => {
             </Link>
             )}
 
-            {(['Paid', 'Captured'].includes(order.paymentStatus) || !!order.invoiceNumber) ? (
+            {(canDownloadInvoice(order) || !!order.invoiceNumber) ? (
               <button
                 onClick={() => setInvoiceOrder(order)}
                 className="px-4 py-2 border border-allura-border rounded-xl text-xs font-sans font-semibold text-allura-text hover:bg-allura-bgSecondary transition-colors flex items-center gap-1.5"
@@ -196,13 +212,15 @@ export const OrderDetailPage: React.FC = () => {
             ) : (
               <button
                 disabled
-                title="Invoice available after payment"
+                title="Invoice and address slip will be available once payment is confirmed."
                 className="px-4 py-2 border border-allura-border rounded-xl text-xs font-sans font-semibold text-allura-muted opacity-60 cursor-not-allowed flex items-center gap-1.5"
               >
                 <FileText size={14} />
                 <span>Invoice</span>
               </button>
             )}
+
+            <AddressSlipButton order={order} variant="detail" />
 
             {needsPayment && (
               <button
@@ -225,22 +243,13 @@ export const OrderDetailPage: React.FC = () => {
             </button>
           )} */}
 
-            {/* Eligible orders get a per-product button in the items list below */}
-            {!returnEligibility.eligible && order.orderStatus === 'Delivered' && (
-                <div className="flex flex-col gap-1 max-w-xs">
-                  <button
-                    type="button"
-                    disabled
-                    aria-describedby="return-unavailable-reason"
-                    className="px-4 py-2 border border-allura-border rounded-xl text-xs font-sans font-bold text-allura-muted opacity-60 cursor-not-allowed flex items-center gap-1.5 self-start"
-                  >
-                    <RotateCcw size={14} />
-                    <span>Return or Exchange Request</span>
-                  </button>
-                  <span id="return-unavailable-reason" className="text-[11px] font-sans text-allura-muted">
-                    {returnEligibility.reason}
-                  </span>
-                </div>
+            {/* Eligible orders get a per-product button in the items list below. When the order is
+                Delivered but the window has closed (or the delivery date is unknown), show the expiry
+                message instead of a disabled button. */}
+            {exchangeEligibility && !exchangeEligibility.eligible && order.orderStatus === 'Delivered' && (
+                <p className="max-w-xs text-[11px] font-sans text-allura-muted">
+                  {exchangeEligibility.reason}
+                </p>
             )}
           </div>
         </div>
@@ -322,13 +331,13 @@ export const OrderDetailPage: React.FC = () => {
                         {formatPrice(item.unitPrice * item.quantity)}
                       </p>
                       <OrderItemReviewAction order={order} item={item} />
-                      {returnEligibility.eligible && (
+                      {exchangeEligibility?.eligible && (
                         <Link
                           to={`/account/orders/${order.id}/return?item=${idx}`}
                           className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 border border-amber-300 bg-amber-50 text-amber-800 rounded-lg text-[11px] font-sans font-bold hover:bg-amber-100 transition-colors"
                         >
                           <RotateCcw size={13} />
-                          <span>Return or Exchange Request</span>
+                          <span>Exchange Request</span>
                         </Link>
                       )}
                     </div>
@@ -337,43 +346,76 @@ export const OrderDetailPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Courier & AWB Card */}
-            <div className="bg-allura-card border border-allura-border rounded-2xl p-6 shadow-subtle space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="font-serif text-lg text-allura-text font-normal flex items-center gap-2">
-                  <Truck size={18} className="text-allura-goldDark" />
-                  <span>Courier & Logistics Details</span>
-                </h3>
-                <span className="text-xs font-sans text-allura-goldDark font-bold uppercase tracking-wider">
-                  {order.tracking?.courier || 'Delhivery Luxury Express'}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs font-sans text-allura-muted pt-2">
-                <div>
-                  <p className="text-[10px] uppercase font-bold tracking-wider text-allura-muted/70">Waybill (AWB)</p>
-                  <p className="font-mono text-sm font-bold text-allura-text mt-0.5">
-                    {order.tracking?.awb || 'DLHV894719283IN'}
-                  </p>
+            {/* Courier & AWB Card — only once there's an actual shipment to show */}
+            {!isCancelled && isShippedOrLater && (
+              <div className="bg-allura-card border border-allura-border rounded-2xl p-6 shadow-subtle space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="font-serif text-lg text-allura-text font-normal flex items-center gap-2">
+                    <Truck size={18} className="text-allura-goldDark shrink-0" />
+                    <span>Courier & Logistics Details</span>
+                  </h3>
+                  {order.tracking?.courier && (
+                    <span className="text-xs font-sans text-allura-goldDark font-bold uppercase tracking-wider text-right break-words">
+                      {order.tracking.courier}
+                    </span>
+                  )}
                 </div>
-                <div>
-                  <p className="text-[10px] uppercase font-bold tracking-wider text-allura-muted/70">Estimated Arrival</p>
-                  <p className="text-sm font-medium text-allura-text mt-0.5">
-                    {order.tracking?.estimatedDelivery || 'Within 3 Business Days'}
-                  </p>
-                </div>
-              </div>
 
-              <p className={`text-xs font-sans p-3 rounded-xl border ${
-                isCancelled
-                  ? 'text-rose-800 bg-rose-50/80 border-rose-200'
-                  : 'text-emerald-800 bg-emerald-50/70 border-emerald-200'
-              }`}>
-                Current Status: <strong className={isCancelled ? 'text-rose-900' : ''}>
-                  {isCancelled ? 'Cancelled' : toReadableText(order.tracking?.currentStatus || 'Dispatched from Perinthalmanna Atelier')}
-                </strong>
-              </p>
-            </div>
+                {order.tracking?.awb ? (
+                  <>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs font-sans text-allura-muted pt-2">
+                      <div className="min-w-0">
+                        <p className="text-[10px] uppercase font-bold tracking-wider text-allura-muted/70">Waybill (AWB)</p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <p className="font-mono text-sm font-bold text-allura-text break-all">
+                            {order.tracking.awb}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => copyAwb(order.tracking!.awb)}
+                            className="shrink-0 p-1 rounded-lg text-allura-muted hover:text-allura-goldDark hover:bg-allura-bgSecondary transition-colors"
+                            aria-label="Copy AWB number"
+                            title="Copy AWB number"
+                          >
+                            {isAwbCopied ? <Check size={14} className="text-emerald-700" /> : <Copy size={14} />}
+                          </button>
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase font-bold tracking-wider text-allura-muted/70">Estimated Arrival</p>
+                        <p className="text-sm font-medium text-allura-text mt-0.5">
+                          {order.tracking?.estimatedDelivery || 'Shared once dispatched'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {order.tracking.trackingUrl && (
+                      <a
+                        href={order.tracking.trackingUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-xs font-sans font-bold text-allura-goldDark hover:underline"
+                      >
+                        <Truck size={13} />
+                        <span>Track shipment</span>
+                      </a>
+                    )}
+
+                    <p className={`text-xs font-sans p-3 rounded-xl border ${
+                      isCancelled
+                        ? 'text-rose-800 bg-rose-50/80 border-rose-200'
+                        : 'text-emerald-800 bg-emerald-50/70 border-emerald-200'
+                    }`}>
+                      Current Status: <strong>{toReadableText(order.tracking.currentStatus || order.orderStatus)}</strong>
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-xs font-sans text-allura-muted p-3 rounded-xl border border-allura-border bg-allura-bgSecondary/50">
+                    Tracking details will be updated soon.
+                  </p>
+                )}
+              </div>
+            )}
 
           </div>
 
@@ -452,7 +494,7 @@ export const OrderDetailPage: React.FC = () => {
         </div>
       </div>
 
-      <InvoiceModal order={invoiceOrder} onClose={() => setInvoiceOrder(null)} onDownload={downloadOrderInvoice} />
+      <InvoiceModal order={invoiceOrder} onClose={() => setInvoiceOrder(null)} />
 
       {/* Cancel order dialog */}
       {isCancelOpen && (

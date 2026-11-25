@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { SeoPreviewEditor } from '../../components/admin/SeoPreviewEditor';
 import { useShop } from '../../context/ShopContext';
+import { usePermissions } from '../../hooks/usePermissions';
 import {
   getEntitySEO,
   updateEntitySEO,
@@ -25,6 +26,8 @@ import { API_BASE_URL } from '../../service/api';
 
 export const AdminSeoPage: React.FC = () => {
   const { showToast } = useShop();
+  const { can } = usePermissions();
+  const canEdit = can('seo_management', 'edit');
 
   const [entityType, setEntityType] = useState<SEOEntityType>('HOMEPAGE');
   const [entityId, setEntityId] = useState<string>('main');
@@ -373,27 +376,29 @@ export const AdminSeoPage: React.FC = () => {
         </div>
 
         {/* Action Buttons */}
-        <div className="border-t border-stone-100 pt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <button
-            type="button"
-            onClick={handleReset}
-            disabled={isResetting || !entityId.trim()}
-            className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-stone-200 text-stone-600 hover:text-stone-900 hover:bg-stone-50 text-xs font-semibold uppercase tracking-wider transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
-          >
-            <RotateCcw size={13} />
-            <span>{isResetting ? 'Resetting...' : 'Reset to System Defaults'}</span>
-          </button>
+        {canEdit && (
+          <div className="border-t border-stone-100 pt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <button
+              type="button"
+              onClick={handleReset}
+              disabled={isResetting || !entityId.trim()}
+              className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-stone-200 text-stone-600 hover:text-stone-900 hover:bg-stone-50 text-xs font-semibold uppercase tracking-wider transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
+            >
+              <RotateCcw size={13} />
+              <span>{isResetting ? 'Resetting...' : 'Reset to System Defaults'}</span>
+            </button>
 
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={isSaving || !entityId.trim()}
-            className="w-full sm:w-auto px-6 py-2.5 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-sm disabled:opacity-50"
-          >
-            <Save size={14} />
-            <span>{isSaving ? 'Saving & Purging Cache...' : 'Save SEO Overrides'}</span>
-          </button>
-        </div>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={isSaving || !entityId.trim()}
+              className="w-full sm:w-auto px-6 py-2.5 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-sm disabled:opacity-50"
+            >
+              <Save size={14} />
+              <span>{isSaving ? 'Saving & Purging Cache...' : 'Save SEO Overrides'}</span>
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -143,3 +143,15 @@
   70% { transform: scale(1.2); opacity: 1; }
   100% { transform: scale(1); }
 }
+
+/* Gentle fade + slide-up entrance (e.g. product highlight badges) */
+@keyframes allura-fade-slide-up {
+  0% { opacity: 0; transform: translateY(6px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+.allura-fade-slide-up {
+  animation: allura-fade-slide-up 0.4s ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .allura-fade-slide-up { animation: none; }
+}

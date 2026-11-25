@@ -33,9 +33,11 @@ const mapStoreVariant = (raw: any): ProductVariant => {
     size: raw.attributes?.size || '',
     price: toNumber(raw.pricing?.sellingPrice) ?? 0,
     mrp: toNumber(raw.pricing?.mrp) ?? 0,
-    stockOnHand: raw.stockOnHand ?? raw.inventory?.quantityOnHand ?? 0,
-    stockReserved: raw.stockReserved ?? raw.inventory?.quantityReserved ?? 0,
-    stockAvailable: raw.stockAvailable ?? raw.inventory?.quantityAvailable ?? 0,
+    // The public endpoints don't include inventory: leave it unknown instead of reporting 0 (sold out).
+    // The cart API is the source of truth and rejects a variant that is really out of stock.
+    stockOnHand: toNumber(raw.stockOnHand ?? raw.inventory?.quantityOnHand),
+    stockReserved: toNumber(raw.stockReserved ?? raw.inventory?.quantityReserved),
+    stockAvailable: toNumber(raw.stockAvailable ?? raw.inventory?.quantityAvailable),
     images: Array.isArray(raw.images) ? raw.images : [],
   };
 };

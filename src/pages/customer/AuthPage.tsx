@@ -14,6 +14,7 @@ import {
 import { useFieldValidation } from '../../hooks/useFieldValidation';
 import { FormField } from '../../components/common/FormField';
 import { GoogleSignInButton } from '../../components/auth/GoogleSignInButton';
+import { hasPendingShopAction } from '../../utils/pendingShopAction';
 
 // Input ids, also used to focus the first invalid field on submit
 const SIGN_UP_IDS: Record<keyof SignUpValues, string> = {
@@ -135,6 +136,9 @@ export const AuthPage: React.FC = () => {
       }
     }
     setIsLoading(true);
+    // Checked before signing in: once signed in, ShopContext finishes the pending Add to Bag /
+    // Buy Now and navigates (bag or checkout) itself, so this page must not redirect as well
+    const resumesShopAction = hasPendingShopAction();
     try {
       if (isLoginMode) {
         await loginUser({ email: authEmail, password: authPassword });
@@ -150,6 +154,7 @@ export const AuthPage: React.FC = () => {
         });
       }
       setIsSuccess(true);
+      if (resumesShopAction) return; // keep the success / loading state until ShopContext navigates
       setTimeout(() => {
         setIsLoading(false);
         const from = postLoginPath((location.state as any)?.from?.pathname);
@@ -163,6 +168,18 @@ export const AuthPage: React.FC = () => {
       }
       setIsLoading(false);
     }
+  };
+
+  // Google sign-in ends here too, so it follows the same rules as email login: a pending
+  // Add to Bag / Buy Now wins (ShopContext goes to the bag / checkout), otherwise the usual redirect.
+  // Without this, the signed-in customer stayed on this page and was shown "Complete Your Profile".
+  const handleGoogleSuccess = () => {
+    setIsSuccess(true);
+    if (hasPendingShopAction()) {
+      setIsLoading(true); // existing spinner until ShopContext navigates
+      return;
+    }
+    navigate(postLoginPath((location.state as any)?.from?.pathname), { replace: true });
   };
 
   const toggleAuthMode = () => {
@@ -219,7 +236,7 @@ export const AuthPage: React.FC = () => {
         </div>
 
         {/* Dynamic State views */}
-        {isCompleteProfile || (customer && !isSuccess) ? (
+        {isCompleteProfile || (customer && !isSuccess && !hasPendingShopAction()) ? (
           <form onSubmit={handleSaveProfile} noValidate className="space-y-5 text-left pt-2">
             <div className="text-center pb-2">
               <h1 className="font-serif text-2xl text-allura-text font-normal">
@@ -581,7 +598,7 @@ export const AuthPage: React.FC = () => {
               <span className="text-[10px] font-sans uppercase tracking-widest text-allura-muted">Or</span>
             </div>
 
-            <GoogleSignInButton />
+            <GoogleSignInButton onSuccess={handleGoogleSuccess} />
 
             <div className="text-center pt-2 border-t border-allura-border/60 mt-4">
               <button
