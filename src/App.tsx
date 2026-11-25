@@ -62,7 +62,7 @@ import { AdminLayout } from './components/admin/AdminLayout';
 import { AdminLoginPage } from './pages/admin/AdminLoginPage';
 import { AdminDashboardPage } from './pages/admin/AdminDashboardPage';
 import { AdminProductsPage } from './pages/admin/AdminProductsPage';
-import { AdminProductCreatePage } from './pages/admin/AdminProductCreatePage';
+// import { AdminProductCreatePage } from './pages/admin/AdminProductCreatePage';
 import { AdminProductEditPage } from './pages/admin/AdminProductEditPage';
 import { AdminCategoriesPage } from './pages/admin/AdminCategoriesPage';
 import { AdminCollectionsPage } from './pages/admin/AdminCollectionsPage';
@@ -135,7 +135,7 @@ export const AppContent: React.FC = () => {
             <Route path="/admin" element={<AdminAccessGuard module="dashboard"><AdminDashboardPage /></AdminAccessGuard>} />
             <Route path="/admin/dashboard" element={<AdminAccessGuard module="dashboard"><AdminDashboardPage /></AdminAccessGuard>} />
             <Route path="/admin/products" element={<AdminAccessGuard module="products"><AdminProductsPage /></AdminAccessGuard>} />
-            <Route path="/admin/products/new" element={<AdminAccessGuard module="products" action="create"><AdminProductCreatePage /></AdminAccessGuard>} />
+            {/* <Route path="/admin/products/new" element={<AdminAccessGuard module="products" action="create"><AdminProductCreatePage /></AdminAccessGuard>} /> */}
             <Route path="/admin/products/:id/edit" element={<AdminAccessGuard module="products" action="edit"><AdminProductEditPage /></AdminAccessGuard>} />
             <Route path="/admin/suppliers" element={<AdminAccessGuard module="suppliers"><AdminSuppliersPage /></AdminAccessGuard>} />
             <Route path="/admin/suppliers/new" element={<AdminAccessGuard module="suppliers" action="create"><AdminSupplierCreatePage /></AdminAccessGuard>} />

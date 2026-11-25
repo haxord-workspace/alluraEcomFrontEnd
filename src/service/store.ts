@@ -1,5 +1,5 @@
 import api from './api';
-import { colorHex } from '../data/colorPalette';
+import { colorHex, decodeColor } from '../data/colorPalette';
 import { toNumber } from '../utils/number';
 import type { Product, ProductColor, ProductVariant, Category } from '../types';
 
@@ -29,7 +29,7 @@ const mapStoreVariant = (raw: any): ProductVariant => {
     id: raw.id || raw._id,
     sku: raw.sku || '',
     barcode: raw.barcode?.value || '',
-    color: typeof colorAttr === 'object' && colorAttr ? colorAttr : colorAttr ? { name: String(colorAttr), hex: colorHex(String(colorAttr)) || DEFAULT_HEX } : NO_COLOR,
+    color: typeof colorAttr === 'object' && colorAttr ? colorAttr : colorAttr ? { name: decodeColor(String(colorAttr)).name, hex: colorHex(String(colorAttr)) || DEFAULT_HEX } : NO_COLOR,
     size: raw.attributes?.size || '',
     price: toNumber(raw.pricing?.sellingPrice) ?? 0,
     mrp: toNumber(raw.pricing?.mrp) ?? 0,

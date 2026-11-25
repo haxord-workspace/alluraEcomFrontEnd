@@ -30,6 +30,7 @@ import { AddToBagLabel, addToBagButtonState } from '../components/ui/AddToBagLab
 import { SEOHead } from '../components/common/SEOHead';
 import { ProductDetailSkeleton } from '../components/ui/ProductDetailSkeleton';
 import { ProductImageZoom } from '../components/product/ProductImageZoom';
+import { isDarkColor } from '../utils/colorConversion';
 import { LazyProductReviews } from '../components/reviews/LazyProductReviews';
 import { ProductRatingInline } from '../components/reviews/ProductRatingInline';
 
@@ -90,11 +91,29 @@ export const ProductDetailPage: React.FC = () => {
       .then(fetched => {
         if (cancelled) return;
         setProduct(fetched);
-        setSelectedColorIdx(0);
         setActiveImageIdx(0);
         setQuantity(1);
 
-        const firstColor = fetched.colors?.[0];
+        // Pick the first colour that actually has stock, instead of blindly defaulting to
+        // index 0 — a colour with no variants (no stock info) is treated as available.
+        const isMatch = (variantColor?: { name?: string }, targetName?: string, colorsCount?: number) => {
+          if (!targetName) return true;
+          const vName = variantColor?.name?.trim();
+          if (!vName) return (colorsCount || 0) <= 1;
+          return vName.toLowerCase() === targetName.toLowerCase().trim();
+        };
+        let initialColorIdx = 0;
+        if (fetched.colors?.length && fetched.variants?.length) {
+          const idxWithStock = fetched.colors.findIndex(c => {
+            const matching = fetched.variants!.filter(v => isMatch(v.color, c.name, fetched.colors.length));
+            if (matching.length === 0) return true;
+            return matching.some(v => v.stockAvailable === undefined || v.stockAvailable > 0);
+          });
+          if (idxWithStock >= 0) initialColorIdx = idxWithStock;
+        }
+        setSelectedColorIdx(initialColorIdx);
+
+        const firstColor = fetched.colors?.[initialColorIdx];
         let initialSize = '';
         if (fetched.variants && fetched.variants.length > 0) {
           const matching = fetched.variants.filter(v =>
@@ -151,6 +170,26 @@ export const ProductDetailPage: React.FC = () => {
     }
     return vName.toLowerCase() === targetColorName.toLowerCase().trim();
   }, [product?.colors?.length]);
+
+  // Whether each colour has any variant in stock (unknown stock counts as available)
+  const colorStockByName = useMemo(() => {
+    const map = new Map<string, boolean>();
+    if (!product) return map;
+    (product.colors || []).forEach(color => {
+      const key = color.name.toLowerCase().trim();
+      if (!product.variants || product.variants.length === 0) {
+        map.set(key, true);
+        return;
+      }
+      const matching = product.variants.filter(v => isColorMatching(v.color, color.name));
+      if (matching.length === 0) {
+        map.set(key, true);
+        return;
+      }
+      map.set(key, matching.some(v => v.stockAvailable === undefined || v.stockAvailable > 0));
+    });
+    return map;
+  }, [product, isColorMatching]);
 
   // Dynamically compute the sizes available for the currently selected color
   const availableSizes = useMemo(() => {
@@ -290,7 +329,7 @@ export const ProductDetailPage: React.FC = () => {
 
   const handleWhatsAppEnquiry = () => {
     const text = encodeURIComponent(
-      `Hello Allura Stylist, I am interested in ${product.name} (SKU: ${product.sku}, Price: ${formatPrice(displayPrice)}, Size: ${selectedSize || 'N/A'}, Color: ${currentColor?.name || 'N/A'}). Can you help me finalize my order?`
+      `Hello Allura Stylist, I am interested in ${product.name} (SKU: ${selectedVariant?.sku || product.sku}, Price: ${formatPrice(displayPrice)}, Size: ${selectedSize || 'N/A'}, Color: ${currentColor?.name || 'N/A'}). Can you help me finalize my order?`
     );
     window.open(`https://wa.me/919037991774?text=${text}`, '_blank');
   };
@@ -473,27 +512,38 @@ export const ProductDetailPage: React.FC = () => {
                     COLOUR: <span className="font-normal text-allura-muted">{currentColor?.name}</span>
                   </span>
                 </div>
-                <div className="flex items-center gap-3">
-                  {product.colors.map((color, idx) => (
-                    <button
-                      key={color.name}
-                      onClick={() => handleColorSelect(idx)}
-                      className={`flex items-center gap-2 p-1.5 pr-3 rounded-full border transition-all ${selectedColorIdx === idx
-                        ? 'border-allura-goldDark bg-allura-bgSecondary/60 shadow-xs ring-1 ring-allura-goldDark'
-                        : 'border-allura-border hover:border-allura-gold'
-                        }`}
-                    >
-                      <span
-                        className="w-4 h-4 rounded-full border border-allura-border flex items-center justify-center"
-                        style={{ backgroundColor: color.hex }}
+                <div className="flex flex-wrap items-center gap-3" role="group" aria-label="Select colour">
+                  {product.colors.map((color, idx) => {
+                    const hasStock = colorStockByName.get(color.name.toLowerCase().trim()) ?? true;
+                    const isSelected = selectedColorIdx === idx;
+                    return (
+                      <button
+                        key={color.name}
+                        type="button"
+                        onClick={() => handleColorSelect(idx)}
+                        aria-pressed={isSelected}
+                        aria-label={`${color.name} (${color.hex})${hasStock ? '' : ' — out of stock'}`}
+                        title={`${color.name} — ${color.hex}${hasStock ? '' : ' (out of stock)'}`}
+                        className={`flex items-center gap-2 p-1.5 pr-3 rounded-full border transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-allura-goldDark ${isSelected
+                          ? 'border-allura-goldDark bg-allura-bgSecondary/60 shadow-xs ring-1 ring-allura-goldDark'
+                          : 'border-allura-border hover:border-allura-gold'
+                          } ${hasStock ? '' : 'opacity-60'}`}
                       >
-                        {selectedColorIdx === idx && (
-                          <Check size={10} className={color.hex === '#1C1B1A' ? 'text-white' : 'text-allura-darkBrown'} />
-                        )}
-                      </span>
-                      <span className="text-xs font-sans font-medium text-allura-text">{color.name}</span>
-                    </button>
-                  ))}
+                        <span
+                          className="relative w-4 h-4 rounded-full border border-allura-border flex items-center justify-center shrink-0"
+                          style={{ backgroundColor: color.hex }}
+                        >
+                          {isSelected && (
+                            <Check size={10} className={isDarkColor(color.hex) ? 'text-white' : 'text-allura-darkBrown'} />
+                          )}
+                          {!hasStock && (
+                            <span className="absolute inset-0 rounded-full" style={{ background: 'linear-gradient(to top right, transparent 46%, rgba(120,113,108,0.8) 48%, rgba(120,113,108,0.8) 52%, transparent 54%)' }} />
+                          )}
+                        </span>
+                        <span className="text-xs font-sans font-medium text-allura-text">{color.name}</span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -525,11 +575,14 @@ export const ProductDetailPage: React.FC = () => {
                     return (
                       <button
                         key={size}
+                        type="button"
                         onClick={() => setSelectedSize(size)}
+                        disabled={isOutOfStock}
+                        aria-disabled={isOutOfStock}
                         className={`min-w-[48px] h-11 px-4 rounded text-xs font-sans font-semibold transition-all duration-200 relative ${isSelected
                           ? 'bg-allura-darkBrown text-allura-card border border-allura-darkBrown shadow-xs'
                           : 'border border-allura-border bg-allura-card text-allura-text hover:border-allura-gold'
-                          } ${isOutOfStock ? 'opacity-60' : ''}`}
+                          } ${isOutOfStock ? 'opacity-50 cursor-not-allowed line-through decoration-1 hover:border-allura-border' : ''}`}
                         title={isOutOfStock ? `${size} (Out of stock)` : size}
                       >
                         {size}
@@ -635,7 +688,7 @@ export const ProductDetailPage: React.FC = () => {
                   <div className="p-4 pt-1 text-xs text-allura-muted font-sans space-y-2 border-t border-allura-border/40">
                     <p>{product.description}</p>
                     {/* <p><strong>Styling Tip:</strong> {product.stylingTips}</p> */}
-                    <p><strong>SKU:</strong> {product.sku}</p>
+                    <p><strong>SKU:</strong> {selectedVariant?.sku || product.sku}</p>
                   </div>
                 )}
               </div>

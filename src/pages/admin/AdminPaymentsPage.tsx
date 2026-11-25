@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Search, RefreshCw, ChevronLeft, ChevronRight, Eye, X, SlidersHorizontal, Copy, Check } from 'lucide-react';
+import { Search, RefreshCw, ChevronLeft, ChevronRight, Eye, SlidersHorizontal, Copy, Check } from 'lucide-react';
 import { StatusBadge } from '../../components/common/StatusBadge';
+import { Modal } from '../../components/common/Modal';
 import {
   getAdminPayments,
   getAdminPayment,
@@ -463,18 +464,23 @@ export const AdminPaymentsPage: React.FC = () => {
       </div>
 
       {/* Detail modal */}
-      {selectedId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={closeDetail}>
-          <div
-            className="bg-white rounded-2xl shadow-xl max-w-lg w-full p-6 space-y-4"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="flex items-start justify-between">
+      <Modal
+        open={!!selectedId}
+        onClose={closeDetail}
+        isDirty={false}
+        backdropClassName="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+        panelClassName="relative bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[90vh] flex flex-col focus:outline-none"
+        closeButtonClassName="absolute top-3 right-3 z-20 w-10 h-10 flex items-center justify-center rounded-lg text-black hover:text-stone-700 hover:bg-stone-100 transition-colors"
+        labelledBy="payment-detail-title"
+      >
+        {selectedId && (
+          <div className="p-6 space-y-4 overflow-y-auto flex-1">
+            <div className="flex items-start justify-between pr-8">
               <div>
                 <span className="text-[10px] font-sans font-bold tracking-[0.2em] text-allura-goldDark uppercase">
                   PAYMENT DETAIL
                 </span>
-                <h2 className="font-serif text-xl text-black font-semibold mt-0.5">{selectedId}</h2>
+                <h2 id="payment-detail-title" className="font-serif text-xl text-black font-semibold mt-0.5">{selectedId}</h2>
               </div>
               <div className="flex items-center gap-1.5">
                 <button
@@ -487,13 +493,6 @@ export const AdminPaymentsPage: React.FC = () => {
                 >
                   <RefreshCw size={12} className={detailLoading ? 'animate-spin' : ''} />
                   <span>Refresh</span>
-                </button>
-                <button
-                  onClick={closeDetail}
-                  className="p-1.5 text-black hover:text-stone-700 hover:bg-stone-100 rounded-lg transition-colors"
-                  aria-label="Close"
-                >
-                  <X size={16} />
                 </button>
               </div>
             </div>
@@ -640,8 +639,8 @@ export const AdminPaymentsPage: React.FC = () => {
               </div>
             ) : null}
           </div>
-        </div>
-      )}
+        )}
+      </Modal>
     </div>
   );
 };

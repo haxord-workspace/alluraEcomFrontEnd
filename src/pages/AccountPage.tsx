@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Package,
@@ -17,6 +17,7 @@ import { useShop } from '../context/ShopContext';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { RecentlyViewed } from '../components/customer/RecentlyViewed';
 import { InvoiceModal } from '../components/common/InvoiceModal';
+import { Modal } from '../components/common/Modal';
 import { OrderCardSkeleton } from '../components/ui/OrderCardSkeleton';
 import { MyReviewsAccountTab } from '../components/reviews/MyReviewsAccountTab';
 import { OrderCardReviewSwap } from '../components/reviews/OrderCardReviewSwap';
@@ -66,8 +67,10 @@ export const AccountPage: React.FC = () => {
     isDefaultShipping: false,
     isDefaultBilling: false,
   });
+  const addAddressSnapshotRef = useRef('');
 
   const recentOrder = orders[0];
+  const isAddAddressDirty = isAddAddressOpen && addAddressSnapshotRef.current !== JSON.stringify(newAddress);
 
   const handleAddAddress = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -372,7 +375,10 @@ export const AccountPage: React.FC = () => {
                 <p className="text-xs font-sans text-allura-muted">Manage your home and work delivery locations.</p>
               </div>
               <button
-                onClick={() => setIsAddAddressOpen(true)}
+                onClick={() => {
+                  addAddressSnapshotRef.current = JSON.stringify(newAddress);
+                  setIsAddAddressOpen(true);
+                }}
                 className="px-4 py-2 bg-allura-darkBrown hover:bg-allura-softBrown text-white rounded-xl text-xs font-sans font-bold uppercase tracking-wider flex items-center gap-1.5"
               >
                 <Plus size={14} />
@@ -419,10 +425,17 @@ export const AccountPage: React.FC = () => {
             </div>
 
             {/* Add Address Form Modal */}
-            {isAddAddressOpen && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-allura-darkBrown/60 backdrop-blur-sm">
-                <div className="bg-allura-card border border-allura-border rounded-2xl max-w-md w-full p-6 space-y-4 shadow-luxury">
-                  <h3 className="font-serif text-xl text-allura-text font-normal">Add Delivery Address</h3>
+            <Modal
+              open={isAddAddressOpen}
+              onClose={() => setIsAddAddressOpen(false)}
+              isBusy={false}
+              isDirty={isAddAddressDirty}
+              discardConfirmMessage="You have an unfinished address. Discard it?"
+              backdropClassName="fixed inset-0 z-50 flex items-center justify-center p-4 bg-allura-darkBrown/60 backdrop-blur-sm"
+              panelClassName="relative bg-allura-card border border-allura-border rounded-2xl max-w-md w-full max-h-[90vh] flex flex-col shadow-luxury focus:outline-none"
+            >
+                <div className="overflow-y-auto p-6 space-y-4">
+                  <h3 className="font-serif text-xl text-allura-text font-normal pr-8">Add Delivery Address</h3>
                   <form onSubmit={handleAddAddress} className="space-y-3 text-xs font-sans">
                     <div>
                       <label className="block font-bold text-allura-muted uppercase text-[10px] mb-1">Full Name</label>
@@ -498,8 +511,7 @@ export const AccountPage: React.FC = () => {
                     </div>
                   </form>
                 </div>
-              </div>
-            )}
+            </Modal>
           </div>
         )}
 

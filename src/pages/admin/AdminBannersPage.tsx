@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { 
   Plus, 
   Monitor, 
@@ -18,7 +18,6 @@ import {
   Eye,
   Loader2,
   Search,
-  X,
   Copy,
   LayoutGrid,
   List,
@@ -33,6 +32,7 @@ import { useAdmin } from '../../context/AdminContext';
 import { useShop } from '../../context/ShopContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { ConfirmModal } from '../../components/common/ConfirmModal';
+import { Modal } from '../../components/common/Modal';
 import { ImageUploadDropzone } from '../../components/admin/ImageUploadDropzone';
 import {
   getAdminBanners,
@@ -211,6 +211,13 @@ export const AdminBannersPage: React.FC = () => {
   const [status, setStatus] = useState<'Active' | 'Scheduled' | 'Draft'>('Active');
   const [formStartAt, setFormStartAt] = useState('');
   const [formEndAt, setFormEndAt] = useState('');
+  const bannerFormSnapshotRef = useRef('');
+  const scheduleFormSnapshotRef = useRef('');
+  const currentBannerFormValues = {
+    title, headline, subtitle, badge, eyebrow, offerPill, ctaText, targetUrl,
+    secondaryCtaText, secondaryTargetUrl, desktopImage, mobileImage, placement,
+    status, formStartAt, formEndAt,
+  };
 
   // Fetch banners strictly from Backend API
   const fetchBanners = useCallback(async (quiet = false) => {
@@ -272,6 +279,11 @@ export const AdminBannersPage: React.FC = () => {
     setFormStartAt('');
     setFormEndAt('');
     setIsModalOpen(true);
+    bannerFormSnapshotRef.current = JSON.stringify({
+      title: '', headline: '', subtitle: '', badge: 'PERINTHALMANNA ATELIER', eyebrow: 'CURATED ATELIER WEAR',
+      offerPill: '', ctaText: 'SHOP NOW', targetUrl: '/shop', secondaryCtaText: '', secondaryTargetUrl: '',
+      desktopImage: '', mobileImage: '', placement: 'HOME_HERO', status: 'Active', formStartAt: '', formEndAt: '',
+    });
   };
 
   // Handle Form Open for Edit
@@ -295,6 +307,24 @@ export const AdminBannersPage: React.FC = () => {
     setFormStartAt(banner.startsAt ? new Date(banner.startsAt).toISOString().slice(0, 16) : '');
     setFormEndAt(banner.endsAt ? new Date(banner.endsAt).toISOString().slice(0, 16) : '');
     setIsModalOpen(true);
+    bannerFormSnapshotRef.current = JSON.stringify({
+      title: banner.headline || banner.title || '',
+      headline: banner.headline || banner.title || '',
+      subtitle: banner.subtitle || banner.description || '',
+      badge: banner.badge || 'PERINTHALMANNA ATELIER',
+      eyebrow: banner.eyebrow || 'CURATED ATELIER WEAR',
+      offerPill: banner.offerPill || '',
+      ctaText: banner.ctaText || 'SHOP NOW',
+      targetUrl: banner.targetUrl || '/shop',
+      secondaryCtaText: banner.secondaryCtaText || '',
+      secondaryTargetUrl: banner.secondaryTargetUrl || '',
+      desktopImage: banner.desktopImage,
+      mobileImage: banner.mobileImage || banner.desktopImage,
+      placement: (banner.placement as BannerPlacement) || (banner.position === 'Editorial' ? 'HOME_PROMOTION' : 'HOME_HERO'),
+      status: banner.status,
+      formStartAt: banner.startsAt ? new Date(banner.startsAt).toISOString().slice(0, 16) : '',
+      formEndAt: banner.endsAt ? new Date(banner.endsAt).toISOString().slice(0, 16) : '',
+    });
   };
 
   // 1-Click apply template
@@ -516,8 +546,11 @@ export const AdminBannersPage: React.FC = () => {
     setScheduleModalBanner(banner);
     const defaultStart = new Date(Date.now() + 3600 * 1000).toISOString().slice(0, 16);
     const defaultEnd = new Date(Date.now() + 7 * 86400 * 1000).toISOString().slice(0, 16);
-    setScheduleStartAt(banner.startsAt ? new Date(banner.startsAt).toISOString().slice(0, 16) : defaultStart);
-    setScheduleEndAt(banner.endsAt ? new Date(banner.endsAt).toISOString().slice(0, 16) : defaultEnd);
+    const initialStart = banner.startsAt ? new Date(banner.startsAt).toISOString().slice(0, 16) : defaultStart;
+    const initialEnd = banner.endsAt ? new Date(banner.endsAt).toISOString().slice(0, 16) : defaultEnd;
+    setScheduleStartAt(initialStart);
+    setScheduleEndAt(initialEnd);
+    scheduleFormSnapshotRef.current = JSON.stringify({ start: initialStart, end: initialEnd });
   };
 
   const handleConfirmSchedule = async () => {
@@ -641,6 +674,11 @@ export const AdminBannersPage: React.FC = () => {
       return matchesPlacement && matchesStatus && matchesSearch;
     });
   }, [banners, placementFilter, statusFilter, searchQuery]);
+
+  const isBannerFormDirty = isModalOpen && bannerFormSnapshotRef.current !== JSON.stringify(currentBannerFormValues);
+  const isScheduleFormDirty =
+    !!scheduleModalBanner &&
+    scheduleFormSnapshotRef.current !== JSON.stringify({ start: scheduleStartAt, end: scheduleEndAt });
 
   return (
     <div className="space-y-6 pb-20">
@@ -1345,12 +1383,18 @@ export const AdminBannersPage: React.FC = () => {
       )}
 
       {/* 9. Create / Edit Modal with Real-Time Interactive Storefront Live Preview */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-stone-900/60 backdrop-blur-sm animate-fade-in overflow-y-auto">
-          <div className="bg-white border border-stone-200 rounded-3xl w-full max-w-5xl max-h-[92vh] overflow-hidden flex flex-col text-xs font-sans shadow-2xl my-auto">
-            
+      <Modal
+        open={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        isBusy={isSaving}
+        isDirty={isBannerFormDirty}
+        discardConfirmMessage="You have unsaved changes to this banner. Discard them?"
+        closeButtonClassName="absolute top-4 right-4 sm:top-5 sm:right-5 z-20 w-10 h-10 flex items-center justify-center rounded-xl text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition-colors disabled:opacity-40"
+        backdropClassName="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-stone-900/60 backdrop-blur-sm animate-fade-in overflow-y-auto"
+        panelClassName="relative bg-white border border-stone-200 rounded-3xl w-full max-w-5xl max-h-[92vh] overflow-hidden flex flex-col text-xs font-sans shadow-2xl my-auto focus:outline-none"
+      >
             {/* Modal Header */}
-            <div className="flex items-center justify-between border-b border-stone-100 p-5 sm:p-6 bg-stone-50/50">
+            <div className="flex items-center justify-between border-b border-stone-100 p-5 sm:p-6 pr-14 sm:pr-16 bg-stone-50/50">
               <div>
                 <h3 className="font-serif text-2xl text-stone-900 font-normal">
                   {editingBanner ? 'Edit Hero Banner & CTAs' : 'Create New Hero Banner'}
@@ -1359,13 +1403,6 @@ export const AdminBannersPage: React.FC = () => {
                   Configure headline, typography overlays, responsive photography, and action buttons with live storefront preview.
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => setIsModalOpen(false)}
-                className="p-1.5 rounded-xl text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition-colors"
-              >
-                <X size={18} />
-              </button>
             </div>
 
             {bannerFormError && (
@@ -1812,15 +1849,20 @@ export const AdminBannersPage: React.FC = () => {
 
             </div>
 
-          </div>
-        </div>
-      )}
+      </Modal>
 
       {/* 10. Quick Schedule Modal */}
-      {scheduleModalBanner && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white border border-stone-200 rounded-3xl w-full max-w-md p-6 space-y-4 text-xs font-sans shadow-2xl">
-            <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+      <Modal
+        open={!!scheduleModalBanner}
+        onClose={() => setScheduleModalBanner(null)}
+        isBusy={isScheduling}
+        isDirty={isScheduleFormDirty}
+        discardConfirmMessage="You have unsaved changes to this schedule. Discard them?"
+        closeButtonClassName="absolute top-4 right-4 z-20 w-9 h-9 flex items-center justify-center rounded-lg text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition-colors disabled:opacity-40"
+        backdropClassName="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-sm animate-fade-in"
+        panelClassName="relative bg-white border border-stone-200 rounded-3xl w-full max-w-md p-6 space-y-4 text-xs font-sans shadow-2xl max-h-[90vh] flex flex-col focus:outline-none"
+      >
+            <div className="flex items-center justify-between border-b border-stone-100 pb-3 pr-8">
               <div className="flex items-center gap-2">
                 <div className="p-2 bg-amber-50 text-amber-900 rounded-xl border border-amber-200">
                   <Calendar size={16} />
@@ -1830,17 +1872,10 @@ export const AdminBannersPage: React.FC = () => {
                     Schedule Automated Launch
                   </h3>
                   <p className="text-[11px] text-stone-500">
-                    "{scheduleModalBanner.headline || scheduleModalBanner.title}"
+                    "{scheduleModalBanner?.headline || scheduleModalBanner?.title}"
                   </p>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => setScheduleModalBanner(null)}
-                className="p-1 text-stone-400 hover:text-stone-700"
-              >
-                <X size={16} />
-              </button>
             </div>
 
             <div className="space-y-3">
@@ -1892,9 +1927,7 @@ export const AdminBannersPage: React.FC = () => {
                 <span>Confirm Schedule</span>
               </button>
             </div>
-          </div>
-        </div>
-      )}
+      </Modal>
 
       {/* 11. Delete Confirmation Modal */}
       <ConfirmModal

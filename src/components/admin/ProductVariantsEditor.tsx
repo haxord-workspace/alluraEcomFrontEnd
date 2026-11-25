@@ -13,9 +13,13 @@ import {
   Sparkles,
   Search,
   X,
+  Pencil,
+  Palette,
 } from 'lucide-react';
-import { COLOR_PALETTE, SIZE_PRESETS, colorHex } from '../../data/colorPalette';
+import { SIZE_PRESETS, colorHex, encodeColor, decodeColor } from '../../data/colorPalette';
 import { fileToResizedDataUrl } from './ProductImagesEditor';
+import { ColorPickerPopover, COLOR_PICKER_PORTAL_ATTR } from './ColorPicker';
+import type { PickedColor } from './ColorPicker';
 
 export interface VariantRow {
   /** Present for variants that already exist on the backend */
@@ -52,7 +56,7 @@ const slug = (v: string) => v.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '-').r
 
 /** e.g. TES44-MAROON-XL */
 export const buildVariantSku = (productSku: string, color: string, size: string) =>
-  [slug(productSku) || 'SKU', slug(color), slug(size)].filter(Boolean).join('-');
+  [slug(productSku) || 'SKU', slug(decodeColor(color).name), slug(size)].filter(Boolean).join('-');
 
 const comboKey = (color: string, size: string) => `${color.trim().toLowerCase()}|${size.trim().toLowerCase()}`;
 
@@ -94,7 +98,10 @@ const SearchableColorSelect: React.FC<SearchableColorSelectProps> = ({
   // Close when clicking outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      // A click inside the (portaled) advanced colour picker isn't "outside" this dropdown
+      if (target instanceof Element && target.closest(`[${COLOR_PICKER_PORTAL_ATTR}]`)) return;
+      if (containerRef.current && !containerRef.current.contains(target)) {
         setIsOpen(false);
       }
     };
@@ -114,24 +121,17 @@ const SearchableColorSelect: React.FC<SearchableColorSelectProps> = ({
 
   const trimmedQuery = query.trim();
 
-  // Filter existing palette
-  const filteredColors = useMemo(() => {
-    if (!trimmedQuery) return COLOR_PALETTE;
-    const q = trimmedQuery.toLowerCase();
-    return COLOR_PALETTE.filter(c => c.name.toLowerCase().includes(q));
-  }, [trimmedQuery]);
-
   const hasExactMatch = useMemo(() => {
     if (!trimmedQuery) return false;
     const q = trimmedQuery.toLowerCase();
-    return COLOR_PALETTE.some(c => c.name.toLowerCase() === q);
-  }, [trimmedQuery]);
+    return customColorsInUse.some(name => decodeColor(name).name.toLowerCase() === q);
+  }, [trimmedQuery, customColorsInUse]);
 
-  // Filter custom colors in use
+  // Filter colours already in use on other variants
   const filteredCustomColors = useMemo(() => {
     if (!trimmedQuery) return customColorsInUse;
     const q = trimmedQuery.toLowerCase();
-    return customColorsInUse.filter(name => name.toLowerCase().includes(q));
+    return customColorsInUse.filter(name => decodeColor(name).name.toLowerCase().includes(q));
   }, [trimmedQuery, customColorsInUse]);
 
   const handleSelect = (colorName: string) => {
@@ -139,6 +139,8 @@ const SearchableColorSelect: React.FC<SearchableColorSelectProps> = ({
     setIsOpen(false);
     setQuery('');
   };
+
+  const decodedValue = decodeColor(value);
 
   return (
     <div ref={containerRef} className="relative w-full">
@@ -151,7 +153,7 @@ const SearchableColorSelect: React.FC<SearchableColorSelectProps> = ({
         <div className="flex items-center gap-1.5 min-w-0 truncate">
           <Swatch name={value} size={15} />
           <span className={`truncate ${value ? 'text-stone-900 font-medium' : 'text-stone-400'}`}>
-            {value || placeholder}
+            {decodedValue.name || value || placeholder}
           </span>
         </div>
         <ChevronDown size={13} className={`text-stone-400 shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
@@ -159,7 +161,7 @@ const SearchableColorSelect: React.FC<SearchableColorSelectProps> = ({
 
       {/* Popover Dropdown */}
       {isOpen && (
-        <div className="absolute z-50 top-full left-0 mt-1 w-64 max-h-76 bg-white border border-stone-200 rounded-xl shadow-2xl overflow-hidden flex flex-col animate-fadeIn">
+        <div className="absolute z-50 top-full left-0 mt-1 w-64 bg-white border border-stone-200 rounded-xl shadow-2xl flex flex-col animate-fadeIn">
           {/* Search Bar */}
           <div className="p-2 border-b border-stone-100 bg-stone-50/90 sticky top-0 z-10">
             <div className="relative">
@@ -174,8 +176,8 @@ const SearchableColorSelect: React.FC<SearchableColorSelectProps> = ({
                 onKeyDown={e => {
                   if (e.key === 'Enter') {
                     e.preventDefault();
-                    if (filteredColors.length === 1 && !trimmedQuery.includes(' ')) {
-                      handleSelect(filteredColors[0].name);
+                    if (filteredCustomColors.length === 1) {
+                      handleSelect(filteredCustomColors[0]);
                     } else if (trimmedQuery) {
                       handleSelect(trimmedQuery);
                     }
@@ -234,30 +236,10 @@ const SearchableColorSelect: React.FC<SearchableColorSelectProps> = ({
               </button>
             )}
 
-            {/* Palette matches */}
-            {filteredColors.map(c => {
-              const isSelected = value.toLowerCase() === c.name.toLowerCase();
-              return (
-                <button
-                  key={c.name}
-                  type="button"
-                  onClick={() => handleSelect(c.name)}
-                  className={`w-full flex items-center justify-between p-2 rounded-lg text-xs text-left transition-colors ${
-                    isSelected ? 'bg-stone-100 font-bold text-stone-900' : 'hover:bg-stone-50 text-stone-800'
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <Swatch name={c.name} size={16} />
-                    <span>{c.name}</span>
-                  </div>
-                  {isSelected && <Check size={13} className="text-stone-900" />}
-                </button>
-              );
-            })}
-
-            {/* Custom colors already in use on other variants */}
+            {/* Colours already in use on other variants */}
             {filteredCustomColors.map(name => {
               const isSelected = value.toLowerCase() === name.toLowerCase();
+              const decoded = decodeColor(name);
               return (
                 <button
                   key={name}
@@ -267,21 +249,39 @@ const SearchableColorSelect: React.FC<SearchableColorSelectProps> = ({
                     isSelected ? 'bg-stone-100 font-bold text-stone-900' : 'hover:bg-stone-50 text-stone-800'
                   }`}
                 >
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
                     <Swatch name={name} size={16} />
-                    <span>{name}</span>
-                    <span className="text-[9px] text-stone-400 font-normal italic">(custom)</span>
+                    <span className="truncate">{decoded.name || decoded.hex}</span>
+                    {decoded.hex && <span className="text-[9px] text-stone-400 font-mono shrink-0">{decoded.hex}</span>}
                   </div>
-                  {isSelected && <Check size={13} className="text-stone-900" />}
+                  {isSelected && <Check size={13} className="text-stone-900 shrink-0" />}
                 </button>
               );
             })}
 
-            {filteredColors.length === 0 && filteredCustomColors.length === 0 && !trimmedQuery && (
+            {filteredCustomColors.length === 0 && !trimmedQuery && (
               <div className="p-3 text-center text-xs text-stone-400">
-                No colours found
+                No colours added yet
               </div>
             )}
+
+            {/* Advanced visual picker — pick any colour, with HEX/RGB/HSL and eyedropper */}
+            <ColorPickerPopover
+              initial={value ? (decodedValue as PickedColor) : null}
+              onApply={({ name, hex }) => handleSelect(encodeColor(name || decodedValue.name || 'Custom Colour', hex))}
+              trigger={open => (
+                <button
+                  type="button"
+                  onClick={open}
+                  className="w-full flex items-center gap-2 p-2 rounded-lg hover:bg-stone-50 text-xs text-left text-stone-700 font-semibold transition-colors mt-1"
+                >
+                  <span className="w-5 h-5 rounded-full border border-dashed border-stone-400 bg-white flex items-center justify-center shrink-0 text-stone-500">
+                    <Palette size={11} />
+                  </span>
+                  Pick any colour (visual picker / HEX)
+                </button>
+              )}
+            />
           </div>
         </div>
       )}
@@ -300,7 +300,6 @@ export const ProductVariantsEditor: React.FC<ProductVariantsEditorProps> = ({
   // Quick builder selections
   const [pickedColors, setPickedColors] = useState<string[]>([]);
   const [pickedSizes, setPickedSizes] = useState<string[]>([]);
-  const [customColor, setCustomColor] = useState('');
   const [customSize, setCustomSize] = useState('');
   const [openImagesFor, setOpenImagesFor] = useState<number | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -313,12 +312,25 @@ export const ProductVariantsEditor: React.FC<ProductVariantsEditorProps> = ({
       ? list.filter(v => v.toLowerCase() !== value.toLowerCase())
       : [...list, value];
 
-  const addCustomColor = () => {
-    const name = customColor.trim();
-    if (!name) return;
-    if (!pickedColors.some(c => c.toLowerCase() === name.toLowerCase())) setPickedColors([...pickedColors, name]);
-    setCustomColor('');
+  // Normalised hex values already picked, so the colour picker can warn about duplicates
+  const pickedColorHexes = useMemo(
+    () => pickedColors.map(c => decodeColor(c).hex).filter((h): h is string => !!h),
+    [pickedColors],
+  );
+
+  const addPickedColor = ({ name, hex }: PickedColor) => {
+    const encoded = encodeColor(name || 'Custom Colour', hex);
+    const isDuplicateHex = hex && pickedColors.some(c => decodeColor(c).hex?.toUpperCase() === hex.toUpperCase());
+    if (isDuplicateHex) return;
+    setPickedColors([...pickedColors, encoded]);
   };
+
+  const editPickedColor = (oldValue: string, { name, hex }: PickedColor) => {
+    const encoded = encodeColor(name || decodeColor(oldValue).name || 'Custom Colour', hex);
+    setPickedColors(pickedColors.map(c => (c === oldValue ? encoded : c)));
+  };
+
+  const removePickedColor = (value: string) => setPickedColors(pickedColors.filter(c => c !== value));
 
   const addCustomSize = () => {
     const name = customSize.trim();
@@ -461,11 +473,35 @@ export const ProductVariantsEditor: React.FC<ProductVariantsEditorProps> = ({
     return Array.from(map.values());
   }, [variants]);
 
-  // Collect custom colors in use on variants that are not in COLOR_PALETTE
-  const customColorsInUse = useMemo(() => {
-    const distinct = Array.from(new Set(variants.map(v => v.color.trim()).filter(Boolean)));
-    return distinct.filter(name => !COLOR_PALETTE.some(c => c.name.toLowerCase() === name.toLowerCase()));
-  }, [variants]);
+  // Distinct colours already used on variants, offered for reuse in the per-row picker
+  const customColorsInUse = useMemo(
+    () => Array.from(new Set(variants.map(v => v.color.trim()).filter(Boolean))),
+    [variants],
+  );
+
+  // All hexes currently in use (variants + pending quick-builder picks), for duplicate warnings
+  const allHexesInUse = useMemo(() => {
+    const fromVariants = variants.map(v => decodeColor(v.color).hex).filter((h): h is string => !!h);
+    return Array.from(new Set([...fromVariants, ...pickedColorHexes]));
+  }, [variants, pickedColorHexes]);
+
+  // Rename every variant sharing a colour (used by the "Edit colour" action on a colour group)
+  const renameColorGroup = (oldColor: string, newColor: string) => {
+    const oldKey = oldColor.trim().toLowerCase();
+    const next = variants.map(v => {
+      if ((v.color || '').trim().toLowerCase() !== oldKey) return v;
+      const hadAutoSku = v.sku === buildVariantSku(productSku, v.color, v.size);
+      return { ...v, color: newColor, sku: hadAutoSku ? buildVariantSku(productSku, newColor, v.size) : v.sku };
+    });
+    onChange(next);
+  };
+
+  // Remove a colour and every variant that uses it
+  const removeColorGroup = (color: string) => {
+    const key = color.trim().toLowerCase();
+    if (!window.confirm(`Remove "${decodeColor(color).name || color}" and all its variants?`)) return;
+    onChange(variants.filter(v => (v.color || '').trim().toLowerCase() !== key));
+  };
 
   const duplicateKeys = variants
     .map(v => comboKey(v.color, v.size))
@@ -523,62 +559,67 @@ export const ProductVariantsEditor: React.FC<ProductVariantsEditorProps> = ({
           <div className="flex items-center justify-between mb-1.5">
             <p className="text-[10px] font-bold uppercase tracking-wider text-stone-600">1. Pick colours</p>
             {pickedColors.length > 0 && (
-              <span className="text-[10px] text-stone-500 font-medium">
-                {pickedColors.length} selected ({pickedColors.join(', ')})
-              </span>
+              <span className="text-[10px] text-stone-500 font-medium">{pickedColors.length} selected</span>
             )}
           </div>
-          <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto p-1 bg-white/60 border border-stone-200 rounded-lg">
-            {COLOR_PALETTE.map(c => {
-              const active = pickedColors.some(p => p.toLowerCase() === c.name.toLowerCase());
-              return (
-                <button
-                  key={c.name}
-                  type="button"
-                  onClick={() => setPickedColors(toggle(pickedColors, c.name))}
-                  className={`flex items-center gap-1.5 pl-1.5 pr-2.5 py-1 rounded-full border text-[11px] transition-all ${
-                    active
-                      ? 'border-[#561C08] bg-[#561C08] text-white font-semibold shadow-xs'
-                      : 'border-stone-200 bg-white text-stone-700 hover:border-stone-400'
-                  }`}
-                >
-                  <span
-                    className="w-4 h-4 rounded-full border border-stone-300 flex items-center justify-center shrink-0"
-                    style={{ backgroundColor: c.hex }}
+
+          {pickedColors.length === 0 ? (
+            <div className="p-3 border border-dashed border-stone-300 rounded-lg text-center bg-white/60">
+              <p className="text-[11px] text-stone-400">
+                No colours added yet. Pick any colour visually or enter its HEX code below.
+              </p>
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {pickedColors.map(c => {
+                const decoded = decodeColor(c);
+                return (
+                  <div
+                    key={c}
+                    className="flex items-center gap-1.5 pl-1.5 pr-1.5 py-1 rounded-full border border-stone-200 bg-white text-[11px] text-stone-800 shadow-2xs"
                   >
-                    {active && <Check size={10} className={['#1C1B1A', '#151F30', '#561C08', '#5A1A2B', '#6B1E23', '#5B2A6E', '#2B4C9B', '#2F6B3F', '#1F6F6B', '#004225', '#046307', '#2E3192'].includes(c.hex) ? 'text-white' : 'text-stone-900'} />}
-                  </span>
-                  {c.name}
-                </button>
-              );
-            })}
-            {pickedColors
-              .filter(p => !colorHex(p))
-              .map(p => (
-                <button
-                  key={p}
-                  type="button"
-                  onClick={() => setPickedColors(toggle(pickedColors, p))}
-                  className="flex items-center gap-1.5 pl-1.5 pr-2.5 py-1 rounded-full border border-[#561C08] bg-[#561C08] text-white text-[11px] font-semibold"
-                  title="Remove custom colour"
-                >
-                  <Swatch name={p} size={14} />
-                  {p} ×
-                </button>
-              ))}
-          </div>
-          <div className="flex gap-2 mt-2">
-            <input
-              value={customColor}
-              onChange={e => setCustomColor(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomColor(); } }}
-              placeholder="Or type custom colour, e.g. Rose Gold, Bottle Green"
-              className="flex-1 p-2 bg-white border border-stone-200 rounded-lg text-xs focus:outline-none focus:border-stone-800"
-            />
-            <button type="button" onClick={addCustomColor} className="px-3 rounded-lg bg-stone-200 hover:bg-stone-300 text-xs font-semibold text-stone-700">
-              Add Colour
-            </button>
-          </div>
+                    <Swatch name={c} size={16} />
+                    <span className="font-semibold max-w-[110px] truncate" title={decoded.name}>
+                      {decoded.name || decoded.hex}
+                    </span>
+                    {decoded.hex && <span className="text-[9px] text-stone-400 font-mono">{decoded.hex}</span>}
+                    <ColorPickerPopover
+                      initial={decoded as PickedColor}
+                      existingHexes={pickedColorHexes.filter(h => h !== decoded.hex)}
+                      onApply={color => editPickedColor(c, color)}
+                      trigger={open => (
+                        <button type="button" onClick={open} className="p-0.5 text-stone-400 hover:text-stone-800" title="Edit colour">
+                          <Pencil size={11} />
+                        </button>
+                      )}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removePickedColor(c)}
+                      className="p-0.5 text-stone-400 hover:text-red-600"
+                      title="Remove colour"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <ColorPickerPopover
+            existingHexes={pickedColorHexes}
+            onApply={addPickedColor}
+            trigger={open => (
+              <button
+                type="button"
+                onClick={open}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-dashed border-stone-300 hover:border-stone-600 bg-white text-xs font-semibold text-stone-700 transition-colors"
+              >
+                <Plus size={13} /> Add Colour
+              </button>
+            )}
+          />
         </div>
 
         <div>
@@ -657,14 +698,16 @@ export const ProductVariantsEditor: React.FC<ProductVariantsEditorProps> = ({
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {colorGroups.map(group => {
-              const colorLabel = group.color || 'No colour';
-              const fileInputId = `color-upload-${colorLabel.replace(/[^a-zA-Z0-9]/g, '-')}`;
-              const isOver = draggedColor === colorLabel;
+              const groupKey = group.color || 'No colour';
+              const decodedGroup = decodeColor(group.color);
+              const colorLabel = decodedGroup.name || groupKey;
+              const fileInputId = `color-upload-${groupKey.replace(/[^a-zA-Z0-9]/g, '-')}`;
+              const isOver = draggedColor === groupKey;
 
               return (
                 <div
-                  key={colorLabel}
-                  onDragOver={e => { e.preventDefault(); setDraggedColor(colorLabel); }}
+                  key={groupKey}
+                  onDragOver={e => { e.preventDefault(); setDraggedColor(groupKey); }}
                   onDragLeave={() => setDraggedColor(null)}
                   onDrop={e => {
                     e.preventDefault();
@@ -680,12 +723,37 @@ export const ProductVariantsEditor: React.FC<ProductVariantsEditorProps> = ({
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2 mb-2">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
                       <Swatch name={group.color} size={18} />
-                      <span className="font-bold text-xs text-stone-900">{colorLabel}</span>
-                      <span className="text-[10px] text-stone-500 bg-stone-200/70 px-2 py-0.5 rounded-full font-medium">
+                      <span className="font-bold text-xs text-stone-900 truncate">{colorLabel}</span>
+                      {decodedGroup.hex && (
+                        <span className="text-[9px] text-stone-400 font-mono shrink-0">{decodedGroup.hex}</span>
+                      )}
+                      <span className="text-[10px] text-stone-500 bg-stone-200/70 px-2 py-0.5 rounded-full font-medium shrink-0">
                         {group.count} size{group.count > 1 ? 's' : ''} ({group.sizes.filter(Boolean).join(', ') || 'Standard'})
                       </span>
+                      {group.color && (
+                        <div className="flex items-center gap-0.5 shrink-0">
+                          <ColorPickerPopover
+                            initial={decodedGroup as PickedColor}
+                            existingHexes={allHexesInUse.filter(h => h !== decodedGroup.hex)}
+                            onApply={color => renameColorGroup(group.color, encodeColor(color.name, color.hex))}
+                            trigger={open => (
+                              <button type="button" onClick={open} className="p-1 text-stone-400 hover:text-stone-800" title="Edit this colour">
+                                <Pencil size={11} />
+                              </button>
+                            )}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeColorGroup(group.color)}
+                            className="p-1 text-stone-400 hover:text-red-600"
+                            title="Remove this colour and its variants"
+                          >
+                            <Trash2 size={11} />
+                          </button>
+                        </div>
+                      )}
                     </div>
 
                     {productImages.length > 0 && group.images.length === 0 && (
@@ -919,7 +987,7 @@ export const ProductVariantsEditor: React.FC<ProductVariantsEditorProps> = ({
                       <div className="flex items-center gap-1.5 font-bold text-stone-800">
                         <span>Photos for:</span>
                         <Swatch name={v.color} size={14} />
-                        <span>{v.color || 'No colour'} / {v.size || 'No size'}</span>
+                        <span>{decodeColor(v.color).name || 'No colour'} / {v.size || 'No size'}</span>
                         <span className="text-[10px] text-stone-400 font-normal font-mono">({v.sku})</span>
                       </div>
 
@@ -928,10 +996,10 @@ export const ProductVariantsEditor: React.FC<ProductVariantsEditorProps> = ({
                           type="button"
                           onClick={() => applyImagesToColor(v.color, v.images)}
                           className="text-[11px] font-semibold text-stone-800 bg-stone-100 hover:bg-stone-200 px-2.5 py-1 rounded-md transition-colors flex items-center gap-1"
-                          title={`Apply these ${v.images.length} photo(s) to all other ${v.color} variants`}
+                          title={`Apply these ${v.images.length} photo(s) to all other ${decodeColor(v.color).name} variants`}
                         >
                           <Copy size={11} />
-                          Apply photos to all {v.color} sizes
+                          Apply photos to all {decodeColor(v.color).name} sizes
                         </button>
                       )}
                     </div>

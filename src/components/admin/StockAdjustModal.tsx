@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Package, X, Loader2, Search, Minus, Plus, ArrowRight, ChevronLeft, PackagePlus, PackageMinus, ClipboardCheck } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { Package, Loader2, Search, Minus, Plus, ArrowRight, ChevronLeft, PackagePlus, PackageMinus, ClipboardCheck } from 'lucide-react';
 import { useShop } from '../../context/ShopContext';
 import { getInventoryByVariant, stockIn, stockOut, adjustStock } from '../../service/adminInventory';
 import type { InventoryRecord } from '../../service/adminInventory';
 import { getBackendErrorMessage, getBackendSuccessMessage } from '../../utils/apiResponse';
 import { AdminErrorBanner } from './AdminErrorBanner';
+import { Modal } from '../common/Modal';
 
 export type StockOperation = 'Add' | 'Remove' | 'Set';
 
@@ -54,6 +55,7 @@ export const StockAdjustModal: React.FC<StockAdjustModalProps> = ({
   const [quantity, setQuantity] = useState<number>(1);
   const [reason, setReason] = useState<string>(REASONS[initialOperation][0]);
   const [customReason, setCustomReason] = useState('');
+  const initialSnapshotRef = useRef('');
 
   // Reset the form each time the modal opens
   useEffect(() => {
@@ -61,10 +63,19 @@ export const StockAdjustModal: React.FC<StockAdjustModalProps> = ({
     setSelected(record);
     setPickerQuery('');
     setOperation(initialOperation);
-    setQuantity(initialOperation === 'Set' ? record?.quantityOnHand ?? 0 : 1);
-    setReason(REASONS[initialOperation][0]);
+    const initialQuantity = initialOperation === 'Set' ? record?.quantityOnHand ?? 0 : 1;
+    setQuantity(initialQuantity);
+    const initialReason = REASONS[initialOperation][0];
+    setReason(initialReason);
     setCustomReason('');
     setModalError(null);
+    initialSnapshotRef.current = JSON.stringify({
+      selectedId: record?.variantId ?? null,
+      operation: initialOperation,
+      quantity: initialQuantity,
+      reason: initialReason,
+      customReason: '',
+    });
   }, [isOpen, record, initialOperation]);
 
   // Pull the latest figures for the chosen variant
@@ -117,6 +128,10 @@ export const StockAdjustModal: React.FC<StockAdjustModalProps> = ({
   const delta = newStock - currentStock;
   const removeTooMuch = operation === 'Remove' && qty > currentStock;
   const canSubmit = !!liveRecord && !isSubmitting && !removeTooMuch && (operation === 'Set' ? delta !== 0 : qty > 0);
+  const isDirty =
+    initialSnapshotRef.current !== '' &&
+    initialSnapshotRef.current !==
+      JSON.stringify({ selectedId: selected?.variantId ?? null, operation, quantity, reason, customReason });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -168,16 +183,18 @@ export const StockAdjustModal: React.FC<StockAdjustModalProps> = ({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-allura-darkBrown/60 backdrop-blur-sm animate-fade-in"
-      onClick={onClose}
+    <Modal
+      open={isOpen}
+      onClose={onClose}
+      isBusy={isSubmitting}
+      isDirty={isDirty}
+      discardConfirmMessage="You have an unsaved stock adjustment. Discard it?"
+      backdropClassName="fixed inset-0 z-50 flex items-center justify-center p-4 bg-allura-darkBrown/60 backdrop-blur-sm animate-fade-in"
+      panelClassName="relative bg-allura-card border border-allura-border rounded-2xl w-full max-w-lg max-h-[92vh] shadow-2xl animate-slide-up flex flex-col focus:outline-none"
     >
-      <div
-        className="bg-allura-card border border-allura-border rounded-2xl w-full max-w-lg max-h-[92vh] overflow-y-auto shadow-2xl animate-slide-up"
-        onClick={e => e.stopPropagation()}
-      >
+      <div className="overflow-y-auto">
         {/* Header */}
-        <div className="p-4 bg-allura-bgSecondary/80 border-b border-allura-border flex items-center justify-between sticky top-0 z-10">
+        <div className="p-4 pr-14 bg-allura-bgSecondary/80 border-b border-allura-border flex items-center justify-between sticky top-0 z-10">
           <div className="flex items-center gap-2">
             {!record && selected && (
               <button
@@ -194,9 +211,6 @@ export const StockAdjustModal: React.FC<StockAdjustModalProps> = ({
               {selected ? 'Update Stock' : 'Choose a Variant'}
             </h3>
           </div>
-          <button onClick={onClose} className="p-1 text-allura-muted hover:text-allura-text rounded-md" aria-label="Close">
-            <X size={18} />
-          </button>
         </div>
 
         {modalError && (
@@ -441,6 +455,6 @@ export const StockAdjustModal: React.FC<StockAdjustModalProps> = ({
           </form>
         )}
       </div>
-    </div>
+    </Modal>
   );
 };

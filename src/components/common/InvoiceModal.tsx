@@ -1,9 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { X, Printer, Download, Loader2 } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { Printer, Download, Loader2 } from 'lucide-react';
 import { AlluraLogo } from './AlluraLogo';
 import { useShop } from '../../context/ShopContext';
 import type { Order } from '../../types';
 import { buildInvoiceData, supportLine, type InvoiceTone } from '../../utils/invoice/invoiceData';
+import { Modal } from './Modal';
 
 const TONE_CLASSES: Record<InvoiceTone, string> = {
   success: 'bg-emerald-50 text-emerald-800 border-emerald-200',
@@ -28,52 +29,10 @@ interface InvoiceModalProps {
 export const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, onClose }) => {
   const { showToast, storeSettings } = useShop();
   const [busy, setBusy] = useState<'download' | 'print' | null>(null);
-  const dialogRef = useRef<HTMLDivElement>(null);
-  const closeRef = useRef<HTMLButtonElement>(null);
   const profile = storeSettings?.boutiqueProfile;
 
   // The single view-model for both the on-screen invoice and the PDF
   const invoice = useMemo(() => (order ? buildInvoiceData(order, profile) : null), [order, profile]);
-
-  // Lock the background page scroll while the modal is open
-  useEffect(() => {
-    if (!order) return;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [order]);
-
-  // Esc to close, initial focus, and a Tab focus trap while open
-  useEffect(() => {
-    if (!order) return;
-    closeRef.current?.focus();
-
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-        return;
-      }
-      if (e.key !== 'Tab' || !dialogRef.current) return;
-      // Only visible controls (the action buttons are rendered twice: top bar on desktop, bottom bar on mobile)
-      const focusable = Array.from(
-        dialogRef.current.querySelectorAll<HTMLElement>('button, a[href], input, [tabindex]:not([tabindex="-1"])')
-      ).filter(el => el.offsetParent !== null);
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [order, onClose]);
 
   if (!order || !invoice) return null;
 
@@ -123,25 +82,23 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, onClose }) =>
   );
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-allura-darkBrown/60 backdrop-blur-sm animate-fade-in"
-      onClick={onClose}
+    <Modal
+      open={!!order}
+      onClose={onClose}
+      isBusy={!!busy}
+      isDirty={false}
+      labelledBy="invoice-modal-title"
+      backdropClassName="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-allura-darkBrown/60 backdrop-blur-sm animate-fade-in"
+      panelClassName="relative bg-white border border-stone-200 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-3xl max-h-[94dvh] sm:max-h-[90vh] flex flex-col overflow-hidden shadow-2xl animate-slide-up text-stone-800 focus:outline-none"
+      closeButtonClassName="absolute top-3 right-3 sm:top-4 sm:right-4 z-20 w-10 h-10 flex items-center justify-center rounded-lg text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition-colors disabled:opacity-40"
     >
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="invoice-modal-title"
-        onClick={e => e.stopPropagation()}
-        className="bg-white border border-stone-200 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-3xl max-h-[94dvh] sm:max-h-[90vh] flex flex-col overflow-hidden shadow-2xl animate-slide-up text-stone-800"
-      >
         {/* Top bar (fixed; the invoice scrolls underneath it) */}
         <div className="flex-shrink-0 border-b border-stone-100">
           {/* Drag handle look on mobile sheets */}
           <div className="sm:hidden flex justify-center pt-2">
             <span className="h-1 w-10 rounded-full bg-stone-200" aria-hidden="true" />
           </div>
-          <div className="flex items-center justify-between gap-3 px-4 sm:px-8 py-3 sm:py-4">
+          <div className="flex items-center justify-between gap-3 px-4 sm:px-8 py-3 sm:py-4 pr-14 sm:pr-16">
             <div className="min-w-0">
               <p id="invoice-modal-title" className="text-[11px] font-sans font-bold tracking-[0.2em] text-allura-goldDark uppercase">
                 Invoice
@@ -150,18 +107,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, onClose }) =>
                 {invoice.invoiceNumber || invoice.orderNumber}
               </p>
             </div>
-            <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-              <div className="hidden sm:flex items-center gap-2">{actionButtons}</div>
-              <button
-                type="button"
-                ref={closeRef}
-                onClick={onClose}
-                aria-label="Close invoice"
-                className="p-2 -mr-2 rounded-lg text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition-colors"
-              >
-                <X size={20} />
-              </button>
-            </div>
+            <div className="hidden sm:flex items-center gap-2 shrink-0">{actionButtons}</div>
           </div>
         </div>
 
@@ -371,7 +317,6 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, onClose }) =>
         <div className="sm:hidden flex-shrink-0 grid grid-cols-2 gap-2.5 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t border-stone-100 bg-white">
           {actionButtons}
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 };

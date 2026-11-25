@@ -1,9 +1,10 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Plus, RefreshCw, Search, Loader2, Power, Edit3, Trash2, Calendar, ChevronDown } from 'lucide-react';
 import { useAdmin } from '../../context/AdminContext';
 import { useShop } from '../../context/ShopContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { ConfirmModal } from '../../components/common/ConfirmModal';
+import { Modal } from '../../components/common/Modal';
 import { AdminErrorBanner } from '../../components/admin/AdminErrorBanner';
 import { AdminPagination } from '../../components/admin/AdminPagination';
 import {
@@ -143,6 +144,7 @@ export const AdminPromotionsPage: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const initialFormSnapshotRef = useRef('');
   /** Inline errors keyed by payload path (frontend rules and backend validation details) */
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   /** Status as loaded for edit; the status endpoint is called only when it changes */
@@ -219,14 +221,16 @@ export const AdminPromotionsPage: React.FC = () => {
     setFieldErrors({});
     setLoadedStatus(null);
     setShowExclusions(false);
-    setForm({ ...EMPTY_FORM, startDate: today(), endDate: inDays(30) });
+    const next = { ...EMPTY_FORM, startDate: today(), endDate: inDays(30) };
+    setForm(next);
+    initialFormSnapshotRef.current = JSON.stringify(next);
     setIsFormOpen(true);
   };
 
   const openEdit = (promo: AdminPromotion) => {
     setEditingId(promo.id);
     setFormError(null);
-    setForm({
+    const next: FormState = {
       name: promo.name,
       type: promo.type,
       discountType: promo.discountType,
@@ -245,7 +249,9 @@ export const AdminPromotionsPage: React.FC = () => {
       excludedProducts: promo.excludedProducts,
       excludedCategories: promo.excludedCategories,
       priority: String(promo.priority),
-    });
+    };
+    setForm(next);
+    initialFormSnapshotRef.current = JSON.stringify(next);
     setFieldErrors({});
     setLoadedStatus(promo.status);
     setShowExclusions(promo.excludedProducts.length > 0 || promo.excludedCategories.length > 0);
@@ -607,13 +613,20 @@ export const AdminPromotionsPage: React.FC = () => {
       </div>
 
       {/* Create / Edit modal */}
-      {isFormOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white border border-stone-200 rounded-2xl w-full max-w-xl shadow-2xl animate-slide-up text-xs font-sans max-h-[92vh] flex flex-col overflow-hidden">
+      <Modal
+        open={isFormOpen}
+        onClose={() => { setIsFormOpen(false); setEditingId(null); }}
+        isBusy={isSaving}
+        isDirty={isFormOpen && initialFormSnapshotRef.current !== '' && initialFormSnapshotRef.current !== JSON.stringify(form)}
+        discardConfirmMessage="You have unsaved changes to this promotion. Discard them?"
+        closeButtonClassName="absolute top-3 right-3 z-20 w-10 h-10 flex items-center justify-center rounded-lg text-stone-400 hover:text-stone-800 hover:bg-stone-100 transition-colors disabled:opacity-40"
+        backdropClassName="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-sm animate-fade-in"
+        panelClassName="relative bg-white border border-stone-200 rounded-2xl w-full max-w-xl shadow-2xl animate-slide-up text-xs font-sans max-h-[92vh] flex flex-col overflow-hidden focus:outline-none"
+      >
             <form onSubmit={handleSubmit} className="flex flex-col min-h-0 flex-1">
             {/* Scrollable body; the Cancel / Save footer below stays visible */}
             <div className="flex-1 min-h-0 overflow-y-auto p-6 sm:p-8 space-y-6">
-            <h3 className="font-serif text-2xl text-stone-900 font-normal">
+            <h3 className="font-serif text-2xl text-stone-900 font-normal pr-8">
               {editingId ? 'Edit Promotion' : 'Create Promotion'}
             </h3>
 
@@ -977,9 +990,7 @@ export const AdminPromotionsPage: React.FC = () => {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
+      </Modal>
 
       {/* Delete confirmation */}
       <ConfirmModal

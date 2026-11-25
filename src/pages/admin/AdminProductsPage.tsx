@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   Plus,
@@ -17,6 +17,7 @@ import {
 import { usePermissions } from '../../hooks/usePermissions';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { ConfirmModal } from '../../components/common/ConfirmModal';
+import { Modal } from '../../components/common/Modal';
 import { CategorySelect } from '../../components/admin/CategorySelect';
 import { AdminPagination } from '../../components/admin/AdminPagination';
 import {
@@ -196,6 +197,9 @@ export const AdminProductsPage: React.FC = () => {
   const [originalVariants, setOriginalVariants] = useState<Record<string, string>>({});
   const [isLoadingVariants, setIsLoadingVariants] = useState(false);
   const [saveProgress, setSaveProgress] = useState('');
+  // Baseline snapshot captured once the modal's initial data (incl. async variants) has
+  // loaded, so the dirty check doesn't fire while that load is still in flight.
+  const initialSnapshotRef = useRef('');
   // Supplier is tracked apart from formData so it is only sent when the rules below allow
   const [supplierId, setSupplierId] = useState('');
   const [chosenSupplier, setChosenSupplier] = useState<ProductSupplierRef | null>(null);
@@ -372,12 +376,13 @@ export const AdminProductsPage: React.FC = () => {
     setOriginalSupplier(null);
     setSupplierError(null);
     setIsModalOpen(true);
+    initialSnapshotRef.current = JSON.stringify({ formData: EMPTY_FORM, supplierId: '' });
   };
 
   const handleOpenEdit = (product: AdminProduct) => {
     setEditingId(product.id);
     setFormError(null);
-    setFormData({
+    const initialFormData = {
       name: product.name,
       sku: product.sku,
       description: product.description || '',
@@ -390,11 +395,13 @@ export const AdminProductsPage: React.FC = () => {
       },
       status: product.status,
       images: product.images || [],
-      variants: [],
-    });
+      variants: [] as VariantRow[],
+    };
+    setFormData(initialFormData);
     setOriginalVariants({});
     const currentSupplier = product.supplierId ?? null;
-    setSupplierId(currentSupplier?._id ?? '');
+    const initialSupplierId = currentSupplier?._id ?? '';
+    setSupplierId(initialSupplierId);
     setChosenSupplier(currentSupplier);
     setOriginalSupplier(currentSupplier);
     setSupplierError(null);
@@ -410,10 +417,15 @@ export const AdminProductsPage: React.FC = () => {
         setOriginalVariants(
           Object.fromEntries(rows.map(r => [r.id!, JSON.stringify(toVariantPayload(r, product.sku, pricing))]))
         );
+        initialSnapshotRef.current = JSON.stringify({
+          formData: { ...initialFormData, variants: rows },
+          supplierId: initialSupplierId,
+        });
       })
       .catch(err => {
         console.error('Failed to load variants:', err);
         showToast('Could not load this product\'s variants', 'error');
+        initialSnapshotRef.current = JSON.stringify({ formData: initialFormData, supplierId: initialSupplierId });
       })
       .finally(() => setIsLoadingVariants(false));
   };
@@ -432,6 +444,19 @@ export const AdminProductsPage: React.FC = () => {
     if (product && canEdit) handleOpenEdit(product);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, isLoading, products, canEdit]);
+
+  // Deep-link support: e.g. the dashboard's "Add New Product" button sends
+  // ?add=1 to open the add-product modal directly on arrival.
+  useEffect(() => {
+    if (!searchParams.get('add')) return;
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      next.delete('add');
+      return next;
+    }, { replace: true });
+    if (canCreate) handleOpenAdd();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, canCreate]);
 
   // Creates new rows, patches changed ones and deletes removed ones. Returns the error messages.
   // Saves variants ONE AT A TIME (the backend fails when several are created for a product in parallel).
@@ -561,6 +586,12 @@ export const AdminProductsPage: React.FC = () => {
       setSaveProgress('');
     }
   };
+
+  const isFormDirty =
+    isModalOpen &&
+    !isLoadingVariants &&
+    initialSnapshotRef.current !== '' &&
+    initialSnapshotRef.current !== JSON.stringify({ formData, supplierId });
 
   // ─────────────────────────────────────────────────────────────────────────
   // Render
@@ -979,10 +1010,18 @@ export const AdminProductsPage: React.FC = () => {
       </div>
 
       {/* Create / Edit Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex justify-center p-4 bg-stone-900/60 backdrop-blur-sm overflow-y-auto py-10">
-          <div className="bg-white border border-stone-200 rounded-2xl w-full max-w-2xl p-6 space-y-5 shadow-2xl h-max my-auto">
-            <h3 className="font-serif text-xl text-stone-900">
+      <Modal
+        open={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        isBusy={isSaving}
+        isDirty={isFormDirty}
+        discardConfirmMessage="You have unsaved changes to this product. Discard them?"
+        closeButtonClassName="absolute top-3 right-3 z-20 w-10 h-10 flex items-center justify-center rounded-lg text-stone-400 hover:text-stone-800 hover:bg-stone-100 transition-colors disabled:opacity-40"
+        backdropClassName="fixed inset-0 z-50 flex justify-center p-4 bg-stone-900/60 backdrop-blur-sm overflow-y-auto py-10"
+        panelClassName="relative bg-white border border-stone-200 rounded-2xl w-full max-w-2xl shadow-2xl h-max my-auto max-h-[90vh] flex flex-col focus:outline-none"
+      >
+        <div className="overflow-y-auto p-6 space-y-5">
+            <h3 className="font-serif text-xl text-stone-900 pr-8">
               {editingId ? 'Edit Product' : 'Add New Product'}
             </h3>
 
@@ -1163,9 +1202,8 @@ export const AdminProductsPage: React.FC = () => {
                 </button>
               </div>
             </form>
-          </div>
         </div>
-      )}
+      </Modal>
 
       {/* Confirmation modal for delete */}
       <ConfirmModal

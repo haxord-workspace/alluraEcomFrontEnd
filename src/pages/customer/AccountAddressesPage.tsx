@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Plus, MapPin, Edit3, Trash2 } from 'lucide-react';
+import { ArrowLeft, Plus, MapPin, Edit3, Trash2, Loader2 } from 'lucide-react';
 import { useShop } from '../../context/ShopContext';
 import { AddressCardSkeleton } from '../../components/ui/AddressCardSkeleton';
+import { Modal } from '../../components/common/Modal';
 import type { SavedAddress } from '../../types';
 import { normalizeMobile, normalizePincode, mobileError, pincodeError } from '../../utils/addressValidation';
 
@@ -15,8 +16,10 @@ export const AccountAddressesPage: React.FC = () => {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingAddressId, setEditingAddressId] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   // Show field errors after the field is left or the form is submitted
   const [touched, setTouched] = useState({ phone: false, postalCode: false });
+  const initialFormSnapshotRef = useRef('');
 
   const [formData, setFormData] = useState({
     label: 'Home',
@@ -35,7 +38,7 @@ export const AccountAddressesPage: React.FC = () => {
 
   const handleOpenAdd = () => {
     setEditingAddressId(null);
-    setFormData({
+    const initialFormData = {
       label: 'Home',
       fullName: customer?.name || '',
       phone: { countryCode: '+91', number: normalizeMobile(customer?.phone || '') },
@@ -48,14 +51,16 @@ export const AccountAddressesPage: React.FC = () => {
       country: 'India',
       isDefaultShipping: false,
       isDefaultBilling: false,
-    });
+    };
+    setFormData(initialFormData);
     setTouched({ phone: false, postalCode: false });
     setIsModalOpen(true);
+    initialFormSnapshotRef.current = JSON.stringify(initialFormData);
   };
 
   const handleOpenEdit = (addr: SavedAddress) => {
     setEditingAddressId(addr.id);
-    setFormData({
+    const initialFormData = {
       label: addr.label,
       fullName: addr.fullName,
       phone: { countryCode: addr.phone.countryCode || '+91', number: normalizeMobile(addr.phone.number) },
@@ -68,9 +73,11 @@ export const AccountAddressesPage: React.FC = () => {
       country: addr.country,
       isDefaultShipping: addr.isDefaultShipping,
       isDefaultBilling: addr.isDefaultBilling,
-    });
+    };
+    setFormData(initialFormData);
     setTouched({ phone: false, postalCode: false });
     setIsModalOpen(true);
+    initialFormSnapshotRef.current = JSON.stringify(initialFormData);
   };
 
   const phoneErr = mobileError(formData.phone.number);
@@ -84,6 +91,7 @@ export const AccountAddressesPage: React.FC = () => {
       return;
     }
 
+    setIsSubmitting(true);
     try {
       if (editingAddressId) {
         await updateCustomerAddress(editingAddressId, formData);
@@ -98,6 +106,8 @@ export const AccountAddressesPage: React.FC = () => {
       setIsModalOpen(false);
     } catch (error) {
       // Handled by context
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -179,10 +189,16 @@ export const AccountAddressesPage: React.FC = () => {
       </div>
     )}
 
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-allura-darkBrown/60 backdrop-blur-sm">
-          <div className="bg-allura-card border border-allura-border rounded-2xl max-w-md w-full p-6 sm:p-8 space-y-4 shadow-luxury max-h-[90vh] overflow-y-auto">
-            <h3 className="font-serif text-xl text-allura-text font-normal">
+      <Modal
+        open={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        isBusy={isSubmitting}
+        isDirty={isModalOpen && JSON.stringify(formData) !== initialFormSnapshotRef.current}
+        discardConfirmMessage="You have unsaved changes to this address. Discard them?"
+        panelClassName="relative bg-allura-card border border-allura-border rounded-2xl max-w-md w-full shadow-luxury max-h-[90vh] flex flex-col focus:outline-none"
+      >
+          <div className="overflow-y-auto p-6 sm:p-8 space-y-4">
+            <h3 className="font-serif text-xl text-allura-text font-normal pr-8">
               {editingAddressId ? 'Edit Address' : 'Add Delivery Address'}
             </h3>
             <form onSubmit={handleSubmit} className="space-y-4 text-xs font-sans">
@@ -307,15 +323,16 @@ export const AccountAddressesPage: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2.5 bg-allura-darkBrown hover:bg-allura-softBrown text-white rounded-xl font-bold uppercase tracking-wider transition-colors shadow-sm"
+                  disabled={isSubmitting}
+                  className="px-6 py-2.5 bg-allura-darkBrown hover:bg-allura-softBrown text-white rounded-xl font-bold uppercase tracking-wider transition-colors shadow-sm disabled:opacity-50 flex items-center justify-center gap-2"
                 >
-                  Save Address
+                  {isSubmitting && <Loader2 size={14} className="animate-spin" />}
+                  <span>{isSubmitting ? 'Saving...' : 'Save Address'}</span>
                 </button>
               </div>
             </form>
           </div>
-        </div>
-      )}
+      </Modal>
     </div>
   );
 };

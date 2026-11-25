@@ -1,10 +1,11 @@
 import React, { useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { X, Plus, Minus, Trash2, ShoppingBag, ArrowRight, Sparkles, Truck, Loader2 } from 'lucide-react';
+import { Plus, Minus, Trash2, ShoppingBag, ArrowRight, Sparkles, Truck, Loader2 } from 'lucide-react';
 import { useShop } from '../../context/ShopContext';
 import { useCartLineActions } from '../../hooks/useCartLineActions';
 import { trackCartView } from '../../service/tracking';
 import { useCartShippingPreview } from '../../hooks/useCartShippingPreview';
+import { Modal } from '../common/Modal';
 
 export const CartDrawer: React.FC = () => {
   const {
@@ -39,33 +40,22 @@ export const CartDrawer: React.FC = () => {
     }
   }, [isCartOpen, cart, cartSubtotal]);
 
-  if (!isCartOpen) return null;
-
   return (
-    <div className="fixed inset-0 z-50 flex justify-end">
-      {/* Backdrop */}
-      <div
-        className="fixed inset-0 bg-allura-darkBrown/60 backdrop-blur-sm transition-opacity animate-fade-in"
-        onClick={() => setIsCartOpen(false)}
-      />
-
-      {/* Slide-in Panel */}
-      <div className="relative w-full max-w-md bg-allura-card h-full flex flex-col z-10 shadow-drawer overflow-hidden animate-slide-up sm:animate-fade-in">
+    <Modal
+      open={isCartOpen}
+      onClose={() => setIsCartOpen(false)}
+      backdropClassName="fixed inset-0 z-50 flex justify-end"
+      panelClassName="relative w-full max-w-md bg-allura-card h-full flex flex-col z-10 shadow-drawer overflow-hidden animate-slide-up sm:animate-fade-in focus:outline-none"
+      closeButtonClassName="absolute top-4 right-4 z-20 w-10 h-10 flex items-center justify-center rounded-full text-allura-muted hover:text-allura-text transition-colors hover:bg-allura-bgSecondary"
+    >
         {/* Header */}
-        <div className="p-5 border-b border-allura-border flex items-center justify-between bg-allura-card">
+        <div className="p-5 pr-14 border-b border-allura-border flex items-center justify-between bg-allura-card">
           <div className="flex items-center gap-2.5">
             <ShoppingBag size={18} className="text-allura-gold" />
             <h3 className="font-serif text-lg tracking-wide uppercase font-semibold text-allura-text">
               YOUR SHOPPING BAG ({cart.reduce((a, b) => a + b.quantity, 0)})
             </h3>
           </div>
-          <button
-            onClick={() => setIsCartOpen(false)}
-            className="p-1.5 text-allura-muted hover:text-allura-text transition-colors rounded-full hover:bg-allura-bgSecondary"
-            aria-label="Close cart drawer"
-          >
-            <X size={20} />
-          </button>
         </div>
 
         {/* Free Shipping Progress Meter */}
@@ -268,7 +258,6 @@ export const CartDrawer: React.FC = () => {
             </div>
           </div>
         )}
-      </div>
-    </div>
+    </Modal>
   );
 };

@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Search, Plus, Edit3, Trash2, RefreshCw, Power, Printer, Loader2 } from 'lucide-react';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { ConfirmModal } from '../../components/common/ConfirmModal';
+import { Modal } from '../../components/common/Modal';
 import { getAdminProducts } from '../../service/adminProducts';
 import {
   getAdminVariants,
@@ -16,6 +17,7 @@ import type { AdminProduct, AdminProductVariant } from '../../types';
 import { useShop } from '../../context/ShopContext';
 import { getBackendErrorMessage } from '../../utils/apiResponse';
 import { AdminErrorBanner } from '../../components/admin/AdminErrorBanner';
+import { validateBarcodeFormat } from '../../utils/barcodeValidation';
 
 const EMPTY_FORM = {
   productId: '',
@@ -46,6 +48,7 @@ export const AdminVariantsPage: React.FC = () => {
 
   const [deleteModal, setDeleteModal] = useState<{ id: string; sku: string } | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const initialFormSnapshotRef = useRef('');
 
   const productMap = React.useMemo(() => {
     const map: Record<string, AdminProduct> = {};
@@ -87,12 +90,13 @@ export const AdminVariantsPage: React.FC = () => {
     setFormError(null);
     setFormData(EMPTY_FORM);
     setIsModalOpen(true);
+    initialFormSnapshotRef.current = JSON.stringify(EMPTY_FORM);
   };
 
   const handleOpenEdit = (v: AdminProductVariant) => {
     setEditingId(v.id);
     setFormError(null);
-    setFormData({
+    const initialFormData = {
       productId: v.productId,
       sku: v.sku,
       barcodeValue: v.barcode?.value || '',
@@ -103,13 +107,22 @@ export const AdminVariantsPage: React.FC = () => {
       sellingPrice: v.pricing?.sellingPrice ?? 0,
       currency: v.pricing?.currency || 'USD',
       status: v.status || 'ACTIVE',
-    });
+    };
+    setFormData(initialFormData);
     setIsModalOpen(true);
+    initialFormSnapshotRef.current = JSON.stringify(initialFormData);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.productId || !formData.sku) return;
+
+    const barcodeCheck = validateBarcodeFormat(formData.barcodeValue, formData.barcodeType);
+    if (!barcodeCheck.valid) {
+      setFormError(barcodeCheck.message || 'Invalid barcode value for the selected type.');
+      return;
+    }
+
     setIsSaving(true);
     setFormError(null);
 
@@ -359,10 +372,18 @@ export const AdminVariantsPage: React.FC = () => {
       </div>
 
       {/* Create/Edit Variant Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-sm">
-          <div className="bg-white border border-stone-200 rounded-2xl w-full max-w-lg p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
-            <h3 className="font-serif text-xl text-stone-900">
+      <Modal
+        open={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        isBusy={isSaving}
+        isDirty={isModalOpen && JSON.stringify(formData) !== initialFormSnapshotRef.current}
+        discardConfirmMessage="You have unsaved changes to this variant. Discard them?"
+        closeButtonClassName="absolute top-3 right-3 z-20 w-10 h-10 flex items-center justify-center rounded-lg text-stone-400 hover:text-stone-800 hover:bg-stone-100 transition-colors disabled:opacity-40"
+        backdropClassName="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-sm"
+        panelClassName="relative bg-white border border-stone-200 rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] flex flex-col focus:outline-none"
+      >
+          <div className="overflow-y-auto p-6 space-y-4">
+            <h3 className="font-serif text-xl text-stone-900 pr-8">
               {editingId ? 'Edit Variant' : 'New Variant'}
             </h3>
 
@@ -428,6 +449,11 @@ export const AdminVariantsPage: React.FC = () => {
                     placeholder="8901234567890"
                     className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl font-mono focus:outline-none focus:border-stone-800"
                   />
+                  {!validateBarcodeFormat(formData.barcodeValue, formData.barcodeType).valid && (
+                    <p className="mt-1 text-[10px] text-rose-600 font-sans">
+                      {validateBarcodeFormat(formData.barcodeValue, formData.barcodeType).message}
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-[10px] uppercase font-bold text-stone-500 mb-1">Barcode Type</label>
@@ -437,6 +463,7 @@ export const AdminVariantsPage: React.FC = () => {
                     className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-stone-800"
                   >
                     <option value="EAN13">EAN13</option>
+                    <option value="UPC-A">UPC-A</option>
                     <option value="CODE128">CODE128</option>
                     <option value="QR">QR</option>
                   </select>
@@ -504,7 +531,7 @@ export const AdminVariantsPage: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  disabled={isSaving}
+                  disabled={isSaving || !validateBarcodeFormat(formData.barcodeValue, formData.barcodeType).valid}
                   className="px-5 py-2 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-xl font-bold uppercase tracking-wider disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm"
                 >
                   {isSaving && <Loader2 size={14} className="animate-spin" />}
@@ -513,8 +540,7 @@ export const AdminVariantsPage: React.FC = () => {
               </div>
             </form>
           </div>
-        </div>
-      )}
+      </Modal>
 
       <ConfirmModal
         isOpen={!!deleteModal}

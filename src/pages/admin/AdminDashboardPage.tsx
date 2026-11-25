@@ -87,6 +87,7 @@ export const AdminDashboardPage: React.FC = () => {
   const { currentAdmin } = useAdmin();
   const { can } = usePermissions();
   const [timeRange, setTimeRange] = useState<TimeRange>('30D');
+  const canCreate = can('products_catalog', 'create');
 
   // Date-ranged sections
   const overview = useDashboardSection<OverviewMetrics>(
@@ -143,20 +144,18 @@ export const AdminDashboardPage: React.FC = () => {
             {/* System status from GET /admin/dashboard/system-health only */}
             {healthStatus && (
               <>
-                <span className={`w-1.5 h-1.5 rounded-full ${
-                  healthStatus === 'HEALTHY'
-                    ? 'bg-emerald-500'
-                    : healthStatus === 'DEGRADED'
+                <span className={`w-1.5 h-1.5 rounded-full ${healthStatus === 'HEALTHY'
+                  ? 'bg-emerald-500'
+                  : healthStatus === 'DEGRADED'
                     ? 'bg-amber-500'
                     : 'bg-rose-500'
-                }`} />
-                <span className={`text-[11px] font-semibold font-sans ${
-                  healthStatus === 'HEALTHY'
-                    ? 'text-emerald-700'
-                    : healthStatus === 'DEGRADED'
+                  }`} />
+                <span className={`text-[11px] font-semibold font-sans ${healthStatus === 'HEALTHY'
+                  ? 'text-emerald-700'
+                  : healthStatus === 'DEGRADED'
                     ? 'text-amber-700'
                     : 'text-rose-700'
-                }`}>
+                  }`}>
                   System {healthStatus}
                 </span>
               </>
@@ -177,24 +176,23 @@ export const AdminDashboardPage: React.FC = () => {
               <button
                 key={range}
                 onClick={() => setTimeRange(range)}
-                className={`px-3 py-1.5 rounded-lg transition-colors ${
-                  timeRange === range
-                    ? 'bg-white text-stone-900 shadow-xs'
-                    : 'text-stone-500 hover:text-stone-900'
-                }`}
+                className={`px-3 py-1.5 rounded-lg transition-colors ${timeRange === range
+                  ? 'bg-white text-stone-900 shadow-xs'
+                  : 'text-stone-500 hover:text-stone-900'
+                  }`}
               >
                 {range}
               </button>
             ))}
           </div>
 
-          {can('products_catalog', 'create') && (
+          {canCreate && (
             <Link
-              to="/admin/products/new"
+              to="/admin/products?add=1"
               className="px-4 py-2 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-xl text-xs font-sans font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 shadow-sm"
             >
               <Plus size={14} />
-              <span className="hidden sm:inline">Add Product</span>
+              <span>Add New Product</span>
             </Link>
           )}
         </div>
@@ -300,8 +298,8 @@ export const AdminDashboardPage: React.FC = () => {
                 {sales.loading
                   ? <Skeleton className="h-3 w-48" />
                   : salesData
-                  ? `Gross ${formatINR(salesData.totals.grossSales)} · Net ${formatINR(salesData.totals.netSales)} · ${salesData.totals.paidOrderCount} paid orders`
-                  : 'Sales data unavailable'}
+                    ? `Gross ${formatINR(salesData.totals.grossSales)} · Net ${formatINR(salesData.totals.netSales)} · ${salesData.totals.paidOrderCount} paid orders`
+                    : 'Sales data unavailable'}
               </p>
             </div>
             <span className="text-xs font-sans font-bold text-allura-goldDark whitespace-nowrap">{timeRange} Window</span>

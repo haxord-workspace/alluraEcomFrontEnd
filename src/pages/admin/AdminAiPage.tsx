@@ -2,6 +2,7 @@ import React, { useState, } from 'react';
 import { Plus } from 'lucide-react';
 import { useAdmin } from '../../context/AdminContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
+import { Modal } from '../../components/common/Modal';
 // import { type AiAnalyticsResponse } from '../../service/adminDashboard';
 
 export const AdminAiPage: React.FC = () => {
@@ -19,6 +20,7 @@ export const AdminAiPage: React.FC = () => {
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState<'FAQ' | 'Shipping Policy' | 'Return Policy' | 'Product Sizing' | 'Care & Craft'>('Product Sizing');
   const [content, setContent] = useState('');
+  const isArticleFormDirty = title.trim() !== '' || content.trim() !== '';
 
   const mockLogs = [
     { id: 'sess-891', customer: 'Ananya Menon', query: 'Where is my order ALR-ORD-849201?', tool: 'Order Lookup', result: 'Success', time: '10 mins ago' },
@@ -201,10 +203,17 @@ export const AdminAiPage: React.FC = () => {
       )}
 
       {/* Add Article Modal */}
-      {isAddArticleOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-sm">
-          <div className="bg-white border border-stone-200 rounded-2xl w-full max-w-lg p-6 space-y-4 text-xs font-sans shadow-2xl">
-            <h3 className="font-serif text-xl text-stone-900">Add AI Knowledge Document</h3>
+      <Modal
+        open={isAddArticleOpen}
+        onClose={() => setIsAddArticleOpen(false)}
+        isDirty={isArticleFormDirty}
+        discardConfirmMessage="Discard this knowledge document?"
+        closeButtonClassName="absolute top-3 right-3 z-20 w-10 h-10 flex items-center justify-center rounded-lg text-stone-400 hover:text-stone-800 hover:bg-stone-100 transition-colors disabled:opacity-40"
+        backdropClassName="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-sm"
+        panelClassName="relative bg-white border border-stone-200 rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] flex flex-col focus:outline-none"
+      >
+        <div className="overflow-y-auto p-6 space-y-4 text-xs font-sans">
+            <h3 className="font-serif text-xl text-stone-900 pr-8">Add AI Knowledge Document</h3>
             <form onSubmit={handleAddArticle} className="space-y-3">
               <div>
                 <label className="block text-[10px] uppercase font-bold text-stone-500 mb-1">Doc Title</label>
@@ -257,9 +266,8 @@ export const AdminAiPage: React.FC = () => {
                 </button>
               </div>
             </form>
-          </div>
         </div>
-      )}
+      </Modal>
     </div>
   );
 };

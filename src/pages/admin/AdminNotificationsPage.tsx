@@ -9,7 +9,6 @@ import {
   Smartphone,
   MessageCircle,
   Bell,
-  X,
   Loader2,
   Radio,
   Copy,
@@ -29,6 +28,7 @@ import {
 } from '../../service/notifications';
 import { BroadcastModal } from '../../components/admin/BroadcastModal';
 import { StatusBadge } from '../../components/common/StatusBadge';
+import { Modal } from '../../components/common/Modal';
 import { AdminPagination } from '../../components/admin/AdminPagination';
 import type { Notification, NotificationStatus, BusinessEvent, NotificationChannel } from '../../types/notification';
 
@@ -630,22 +630,23 @@ export const AdminNotificationsPage: React.FC = () => {
       </div>
 
       {/* Detail drawer */}
-      {selectedId && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-stone-900/50 backdrop-blur-sm animate-fade-in" onClick={closeDetail}>
-          <div
-            className="bg-white h-full w-full max-w-md shadow-2xl overflow-y-auto"
-            onClick={e => e.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-          >
-            <div className="flex items-center justify-between p-5 border-b border-stone-100">
-              <h3 className="font-serif text-xl text-stone-900">Notification Detail</h3>
-              <button onClick={closeDetail} aria-label="Close" className="p-1.5 text-stone-400 hover:text-stone-700">
-                <X size={18} />
-              </button>
+      <Modal
+        open={!!selectedId}
+        onClose={closeDetail}
+        isBusy={isRetrying}
+        isDirty={false}
+        backdropClassName="fixed inset-0 z-50 flex justify-end bg-stone-900/50 backdrop-blur-sm animate-fade-in"
+        panelClassName="relative bg-white h-full w-full max-w-md shadow-2xl flex flex-col focus:outline-none"
+        closeButtonClassName="absolute top-4 right-4 z-20 w-10 h-10 flex items-center justify-center rounded-lg text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition-colors disabled:opacity-40"
+        labelledBy="notification-detail-title"
+      >
+        {selectedId && (
+          <>
+            <div className="flex items-center justify-between p-5 pr-14 border-b border-stone-100 flex-shrink-0">
+              <h3 id="notification-detail-title" className="font-serif text-xl text-stone-900">Notification Detail</h3>
             </div>
 
-            <div className="p-5 space-y-5 text-xs font-sans">
+            <div className="p-5 space-y-5 text-xs font-sans overflow-y-auto flex-1">
               {isDetailLoading ? (
                 <div className="flex flex-col items-center gap-2 py-10 text-stone-400">
                   <Loader2 size={22} className="animate-spin" />
@@ -847,9 +848,9 @@ export const AdminNotificationsPage: React.FC = () => {
                 </>
               ) : null}
             </div>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </Modal>
     </div>
   );
 };

@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { X, Heart, MessageCircle, Star, Check, ArrowRight } from 'lucide-react';
+import { Heart, MessageCircle, Star, Check, ArrowRight } from 'lucide-react';
 import { useShop } from '../../context/ShopContext';
 import { useAddToBag } from '../../hooks/useAddToBag';
 import { AddToBagLabel, addToBagButtonState } from '../ui/AddToBagLabel';
 import { trackProductView } from '../../service/tracking';
+import { isDarkColor } from '../../utils/colorConversion';
+import { Modal } from '../common/Modal';
 
 export const QuickViewModal: React.FC = () => {
   const {
@@ -113,24 +115,13 @@ export const QuickViewModal: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
-      {/* Backdrop */}
-      <div
-        className="fixed inset-0 bg-allura-darkBrown/60 backdrop-blur-sm animate-fade-in"
-        onClick={() => setQuickViewProduct(null)}
-      />
-
-      {/* Modal Dialog */}
-      <div className="relative w-full max-w-3xl bg-allura-card rounded-xl border border-allura-border shadow-luxury overflow-hidden z-10 max-h-[90vh] flex flex-col md:flex-row animate-slide-up">
-        {/* Close Button */}
-        <button
-          onClick={() => setQuickViewProduct(null)}
-          className="absolute top-3 right-3 z-20 p-2 rounded-full bg-allura-card/80 backdrop-blur-md text-allura-text hover:bg-allura-bgSecondary transition-colors"
-          aria-label="Close modal"
-        >
-          <X size={18} />
-        </button>
-
+    <Modal
+      open={true}
+      onClose={() => setQuickViewProduct(null)}
+      backdropClassName="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
+      panelClassName="relative w-full max-w-3xl bg-allura-card rounded-xl border border-allura-border shadow-luxury overflow-hidden max-h-[90vh] flex flex-col md:flex-row animate-slide-up focus:outline-none"
+      closeButtonClassName="absolute top-3 right-3 z-20 w-10 h-10 flex items-center justify-center rounded-full bg-allura-card/80 backdrop-blur-md text-allura-text hover:bg-allura-bgSecondary transition-colors"
+    >
         {/* Left: Product Images */}
         <div className="md:w-1/2 bg-allura-bgSecondary flex flex-col relative">
           <div className="aspect-[4/5] w-full overflow-hidden">
@@ -204,10 +195,12 @@ export const QuickViewModal: React.FC = () => {
                       selectedColorIdx === idx ? 'border-allura-gold scale-110' : 'border-allura-border'
                     }`}
                     style={{ backgroundColor: c.hex }}
-                    title={c.name}
+                    title={`${c.name} — ${c.hex}`}
+                    aria-label={`${c.name} (${c.hex})`}
+                    aria-pressed={selectedColorIdx === idx}
                   >
                     {selectedColorIdx === idx && (
-                      <Check size={10} className={c.hex === '#1C1B1A' || c.hex === '#151F30' ? 'text-white' : 'text-allura-darkBrown'} />
+                      <Check size={10} className={isDarkColor(c.hex) ? 'text-white' : 'text-allura-darkBrown'} />
                     )}
                   </button>
                 ))}
@@ -291,7 +284,6 @@ export const QuickViewModal: React.FC = () => {
             </div>
           </div>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 };
