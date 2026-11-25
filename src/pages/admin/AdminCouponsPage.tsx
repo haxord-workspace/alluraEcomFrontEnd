@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Plus, RefreshCw, Search, Loader2, Power, Edit3, Trash2 } from 'lucide-react';
 import { useAdmin } from '../../context/AdminContext';
 import { useShop } from '../../context/ShopContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { ConfirmModal } from '../../components/common/ConfirmModal';
+import { Modal } from '../../components/common/Modal';
 import { AdminErrorBanner } from '../../components/admin/AdminErrorBanner';
 import {
   getAdminCoupons,
@@ -70,6 +71,7 @@ export const AdminCouponsPage: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [form, setForm] = useState(EMPTY_FORM);
+  const initialFormSnapshotRef = useRef('');
   // Minimum Cart Value field: inline error after blur / submit, backend field error, saved value when editing
   const [minCartTouched, setMinCartTouched] = useState(false);
   const [minCartServerError, setMinCartServerError] = useState<string | null>(null);
@@ -94,7 +96,9 @@ export const AdminCouponsPage: React.FC = () => {
   const openCreate = () => {
     setEditingId(null);
     setFormError(null);
-    setForm({ ...EMPTY_FORM, startsAt: today(), expiresAt: inDays(30) });
+    const next = { ...EMPTY_FORM, startsAt: today(), expiresAt: inDays(30) };
+    setForm(next);
+    initialFormSnapshotRef.current = JSON.stringify(next);
     setMinCartTouched(false);
     setMinCartServerError(null);
     setEditingOriginalMin(0);
@@ -104,7 +108,7 @@ export const AdminCouponsPage: React.FC = () => {
   const openEdit = (coupon: Coupon) => {
     setEditingId(coupon.id);
     setFormError(null);
-    setForm({
+    const next: typeof EMPTY_FORM = {
       code: coupon.code,
       description: coupon.description || '',
       type: coupon.discountType === 'Fixed' ? 'FIXED' : 'PERCENTAGE',
@@ -115,7 +119,9 @@ export const AdminCouponsPage: React.FC = () => {
       startsAt: coupon.startDate || today(),
       expiresAt: coupon.endDate || inDays(30),
       status: coupon.status === 'Active' ? 'ACTIVE' : 'DRAFT',
-    });
+    };
+    setForm(next);
+    initialFormSnapshotRef.current = JSON.stringify(next);
     setMinCartTouched(false);
     setMinCartServerError(null);
     setEditingOriginalMin(coupon.minOrderValue > 0 ? coupon.minOrderValue : 0);
@@ -416,10 +422,18 @@ export const AdminCouponsPage: React.FC = () => {
       </div>
 
       {/* Create Coupon Modal with Live Preview */}
-      {isCreateOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white border border-stone-200 rounded-2xl w-full max-w-xl p-6 sm:p-8 space-y-6 shadow-2xl animate-slide-up text-xs font-sans max-h-[92vh] overflow-y-auto">
-            <h3 className="font-serif text-2xl text-stone-900 font-normal">{editingId ? 'Edit Coupon' : 'Create Coupon'}</h3>
+      <Modal
+        open={isCreateOpen}
+        onClose={() => { setIsCreateOpen(false); setEditingId(null); }}
+        isBusy={isSaving}
+        isDirty={isCreateOpen && initialFormSnapshotRef.current !== '' && initialFormSnapshotRef.current !== JSON.stringify(form)}
+        discardConfirmMessage="You have unsaved changes to this coupon. Discard them?"
+        closeButtonClassName="absolute top-3 right-3 z-20 w-10 h-10 flex items-center justify-center rounded-lg text-stone-400 hover:text-stone-800 hover:bg-stone-100 transition-colors disabled:opacity-40"
+        backdropClassName="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-sm animate-fade-in"
+        panelClassName="relative bg-white border border-stone-200 rounded-2xl w-full max-w-xl shadow-2xl animate-slide-up text-xs font-sans max-h-[92vh] flex flex-col overflow-hidden focus:outline-none"
+      >
+          <div className="overflow-y-auto p-6 sm:p-8 space-y-6">
+            <h3 className="font-serif text-2xl text-stone-900 font-normal pr-8">{editingId ? 'Edit Coupon' : 'Create Coupon'}</h3>
 
             {formError && (
               <AdminErrorBanner
@@ -615,8 +629,7 @@ export const AdminCouponsPage: React.FC = () => {
               </div>
             </form>
           </div>
-        </div>
-      )}
+      </Modal>
 
       {/* Delete confirmation */}
       <ConfirmModal

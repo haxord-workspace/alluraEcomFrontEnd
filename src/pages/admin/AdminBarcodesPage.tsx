@@ -14,6 +14,7 @@ import {
   X,
 } from 'lucide-react';
 import { BarcodeScannerModal } from '../../components/admin/BarcodeScannerModal';
+import { Modal } from '../../components/common/Modal';
 import { PrintTagDialog, type PrintTagTarget } from '../../components/admin/barcodes/PrintTagDialog';
 import { BulkPrintDialog, type BulkPrintProduct, type BulkPrintSource } from '../../components/admin/barcodes/BulkPrintDialog';
 import { ProductPickerDialog, type PickerProduct } from '../../components/admin/barcodes/ProductPickerDialog';
@@ -99,6 +100,9 @@ export const AdminBarcodesPage: React.FC = () => {
 
   const assigned = variants.filter(v => v.barcode?.value);
   const unassigned = variants.filter(v => !v.barcode?.value);
+  // Data-driven "Barcode Standard" summary: the one type in use, "Mixed" when several are, or "—" when none are assigned yet
+  const assignedTypes = Array.from(new Set(assigned.map(v => v.barcode?.type).filter(Boolean))) as string[];
+  const barcodeStandardLabel = assignedTypes.length === 0 ? '—' : assignedTypes.length === 1 ? assignedTypes[0] : 'Mixed';
 
   // By default the table lists assigned barcodes only (as before); "Show unassigned" adds the rest
   const tableVariants = showUnassigned ? variants : assigned;
@@ -336,7 +340,9 @@ export const AdminBarcodesPage: React.FC = () => {
         </div>
         <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-xs space-y-1">
           <span className="text-[10px] font-sans font-bold uppercase tracking-wider text-stone-400">Barcode Standard</span>
-          <p className="font-serif text-2xl font-bold text-allura-goldDark font-mono">EAN13</p>
+          <p className="font-serif text-2xl font-bold text-allura-goldDark font-mono" title={assignedTypes.join(', ') || undefined}>
+            {barcodeStandardLabel}
+          </p>
         </div>
       </div>
 
@@ -539,10 +545,16 @@ export const AdminBarcodesPage: React.FC = () => {
       </div>
 
       {/* Generate & Validate Barcode Modal */}
-      {isGeneratorOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-sm">
-          <div className="bg-white border border-stone-200 rounded-2xl w-full max-w-sm p-6 space-y-4 shadow-2xl">
-            <h3 className="font-serif text-xl text-stone-900">Generate Barcode</h3>
+      <Modal
+        open={isGeneratorOpen}
+        onClose={() => setIsGeneratorOpen(false)}
+        isBusy={isGenerating || isValidating}
+        closeButtonClassName="absolute top-3 right-3 z-20 w-10 h-10 flex items-center justify-center rounded-lg text-stone-400 hover:text-stone-800 hover:bg-stone-100 transition-colors disabled:opacity-40"
+        backdropClassName="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-sm"
+        panelClassName="relative bg-white border border-stone-200 rounded-2xl w-full max-w-sm shadow-2xl max-h-[90vh] flex flex-col focus:outline-none"
+      >
+          <div className="overflow-y-auto p-6 space-y-4">
+            <h3 className="font-serif text-xl text-stone-900 pr-8">Generate Barcode</h3>
             <p className="text-xs font-sans text-stone-500">
               Create a unique barcode value to assign to a new product variant.
             </p>
@@ -556,6 +568,7 @@ export const AdminBarcodesPage: React.FC = () => {
                   className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-stone-800"
                 >
                   <option value="EAN13">EAN13</option>
+                  <option value="UPC-A">UPC-A</option>
                   <option value="CODE128">CODE128</option>
                   <option value="QR">QR</option>
                 </select>
@@ -607,8 +620,7 @@ export const AdminBarcodesPage: React.FC = () => {
               </button>
             </div>
           </div>
-        </div>
-      )}
+      </Modal>
 
       {/* Label printing dialogs */}
       {canPrintLabels && printTagTarget && (

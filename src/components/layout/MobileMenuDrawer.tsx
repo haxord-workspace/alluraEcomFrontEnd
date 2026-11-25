@@ -1,38 +1,29 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { X, MessageCircle, Phone, MapPin, ChevronRight } from 'lucide-react';
+import { MessageCircle, Phone, MapPin, ChevronRight } from 'lucide-react';
 import { AlluraLogo } from '../common/AlluraLogo';
 import { useShop } from '../../context/ShopContext';
 import { useStoreAddress } from '../../hooks/useStoreAddress';
 import { useStoreCollections } from '../../hooks/useStoreCollections';
+import { Modal } from '../common/Modal';
 
 export const MobileMenuDrawer: React.FC = () => {
   const { isMobileMenuOpen, setIsMobileMenuOpen } = useShop();
   const { address } = useStoreAddress();
   const { collections } = useStoreCollections();
 
-  if (!isMobileMenuOpen) return null;
-
   return (
-    <div className="lg:hidden fixed inset-0 z-50 flex">
-      {/* Backdrop */}
-      <div
-        className="fixed inset-0 bg-allura-darkBrown/60 backdrop-blur-sm transition-opacity"
-        onClick={() => setIsMobileMenuOpen(false)}
-      />
-
-      {/* Drawer */}
-      <div className="relative w-4/5 max-w-sm bg-allura-bg h-full flex flex-col z-10 shadow-drawer overflow-y-auto animate-slide-up">
+    <Modal
+      open={isMobileMenuOpen}
+      onClose={() => setIsMobileMenuOpen(false)}
+      backdropClassName="lg:hidden fixed inset-0 z-50 flex"
+      panelClassName="relative w-4/5 max-w-sm bg-allura-bg h-full flex flex-col z-10 shadow-drawer focus:outline-none"
+      closeButtonClassName="absolute top-5 right-5 z-20 w-10 h-10 flex items-center justify-center rounded-full text-allura-muted hover:text-allura-text transition-colors"
+    >
+      <div className="flex-1 overflow-y-auto flex flex-col animate-slide-up">
         {/* Header */}
         <div className="p-6 border-b border-allura-border flex items-center justify-between bg-allura-card">
           <AlluraLogo size="sm" showTagline={true} />
-          <button
-            onClick={() => setIsMobileMenuOpen(false)}
-            className="p-2 text-allura-muted hover:text-allura-text transition-colors"
-            aria-label="Close menu"
-          >
-            <X size={20} />
-          </button>
         </div>
 
         {/* Navigation Sections */}
@@ -150,6 +141,6 @@ export const MobileMenuDrawer: React.FC = () => {
           </div>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 };

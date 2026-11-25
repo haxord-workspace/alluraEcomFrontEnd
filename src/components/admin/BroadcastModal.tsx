@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { X, Radio, Loader2, Mail, Smartphone, AlertTriangle } from 'lucide-react';
+import { Radio, Loader2, Mail, Smartphone, AlertTriangle } from 'lucide-react';
 import { useShop } from '../../context/ShopContext';
 import { broadcastNotification, notificationErrorMessage } from '../../service/notifications';
 import type { NotificationSendChannel } from '../../types/notification';
+import { Modal } from '../common/Modal';
 
 interface BroadcastModalProps {
   isOpen: boolean;
@@ -39,14 +40,9 @@ export const BroadcastModal: React.FC<BroadcastModalProps> = ({ isOpen, onClose,
     setIsSending(false);
     setError(null);
     titleRef.current?.focus();
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [isOpen, onClose]);
+  }, [isOpen]);
 
-  if (!isOpen) return null;
+  const isDirty = isOpen && (title.trim() !== '' || message.trim() !== '' || actionUrl.trim() !== '' || actionLabel.trim() !== '');
 
   const toggleChannel = (channel: NotificationSendChannel) => {
     setChannels(prev => (prev.includes(channel) ? prev.filter(c => c !== channel) : [...prev, channel]));
@@ -90,31 +86,23 @@ export const BroadcastModal: React.FC<BroadcastModalProps> = ({ isOpen, onClose,
   };
 
   return (
-    <div
-      className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-sm animate-fade-in"
-      onClick={() => !isSending && onClose()}
+    <Modal
+      open={isOpen}
+      onClose={onClose}
+      isBusy={isSending}
+      isDirty={isDirty}
+      discardConfirmMessage="You have an unsent broadcast draft. Discard it?"
+      backdropClassName="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-sm animate-fade-in"
+      panelClassName="relative bg-white border border-stone-200 rounded-2xl w-full max-w-lg max-h-[90vh] shadow-2xl text-xs font-sans flex flex-col focus:outline-none"
+      closeButtonClassName="absolute top-3 right-3 z-20 w-10 h-10 flex items-center justify-center rounded-lg text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition-colors disabled:opacity-40"
+      labelledBy="broadcast-modal-title"
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="broadcast-modal-title"
-        onClick={e => e.stopPropagation()}
-        className="bg-white border border-stone-200 rounded-2xl w-full max-w-lg p-6 space-y-5 shadow-2xl text-xs font-sans"
-      >
-        <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+      <div className="p-6 space-y-5 overflow-y-auto flex-1">
+        <div className="flex items-center justify-between border-b border-stone-100 pb-3 pr-8">
           <h3 id="broadcast-modal-title" className="font-serif text-xl text-stone-900 flex items-center gap-2">
             <Radio size={18} className="text-allura-goldDark" />
             New broadcast
           </h3>
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={isSending}
-            aria-label="Close"
-            className="text-stone-400 hover:text-stone-700 p-1 disabled:opacity-50"
-          >
-            <X size={18} />
-          </button>
         </div>
 
         {!confirmStep ? (
@@ -262,6 +250,6 @@ export const BroadcastModal: React.FC<BroadcastModalProps> = ({ isOpen, onClose,
           </>
         )}
       </div>
-    </div>
+    </Modal>
   );
 };

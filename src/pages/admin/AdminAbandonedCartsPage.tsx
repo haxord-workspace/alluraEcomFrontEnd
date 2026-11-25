@@ -6,7 +6,6 @@ import {
   RefreshCw,
   Eye,
   BellOff,
-  X,
   ChevronLeft,
   ChevronRight,
   ShoppingBag,
@@ -18,6 +17,7 @@ import { useAdmin } from '../../context/AdminContext';
 import { useShop } from '../../context/ShopContext';
 import { useConfirm } from '../../context/ConfirmContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
+import { Modal } from '../../components/common/Modal';
 import {
   getAdminAbandonedCarts,
   getAdminAbandonedCart,
@@ -485,32 +485,28 @@ export const AdminAbandonedCartsPage: React.FC = () => {
       </div>
 
       {/* Details modal */}
-      {detail && detailRow && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/50 backdrop-blur-sm animate-fade-in"
-          onClick={() => setDetail(null)}
-        >
-          <aside
-            className="w-full max-w-lg max-h-[90vh] bg-white rounded-2xl shadow-2xl overflow-y-auto text-xs font-sans"
-            onClick={e => e.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-            aria-label="Abandoned cart details"
-          >
-            <div className="sticky top-0 z-10 bg-white rounded-t-2xl border-b border-stone-200 p-5 flex items-start justify-between">
+      <Modal
+        open={!!(detail && detailRow)}
+        onClose={() => setDetail(null)}
+        isDirty={false}
+        backdropClassName="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/50 backdrop-blur-sm animate-fade-in"
+        panelClassName="relative w-full max-w-lg max-h-[90vh] bg-white rounded-2xl shadow-2xl flex flex-col text-xs font-sans focus:outline-none"
+        closeButtonClassName="absolute top-3 right-3 z-20 w-10 h-10 flex items-center justify-center rounded-lg text-stone-400 hover:text-stone-900 hover:bg-stone-100 transition-colors"
+        labelledBy="abandoned-cart-detail-title"
+      >
+        {detail && detailRow && (
+          <>
+            <div className="z-10 bg-white rounded-t-2xl border-b border-stone-200 p-5 pr-14 flex items-start justify-between flex-shrink-0">
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-wider text-stone-400">Abandoned bag</p>
-                <h3 className="font-serif text-xl text-stone-900">{detailRow.customer.name}</h3>
+                <h3 id="abandoned-cart-detail-title" className="font-serif text-xl text-stone-900">{detailRow.customer.name}</h3>
                 <div className="mt-1">
                   <StatusBadge status={prettyStatus(detailRow.status)} size="sm" />
                 </div>
               </div>
-              <button onClick={() => setDetail(null)} className="p-1 text-stone-400 hover:text-stone-900" aria-label="Close">
-                <X size={18} />
-              </button>
             </div>
 
-            <div className="p-5 space-y-6">
+            <div className="p-5 space-y-6 overflow-y-auto flex-1">
               {isDetailLoading && (
                 <p className="flex items-center gap-2 text-stone-400"><Loader2 size={14} className="animate-spin" /> Loading details…</p>
               )}
@@ -609,9 +605,9 @@ export const AdminAbandonedCartsPage: React.FC = () => {
                 </button>
               )}
             </div>
-          </aside>
-        </div>
-      )}
+          </>
+        )}
+      </Modal>
     </div>
   );
 };

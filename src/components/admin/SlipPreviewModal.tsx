@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Loader2, Printer, X } from 'lucide-react';
+import { Loader2, Printer } from 'lucide-react';
 import { useShop } from '../../context/ShopContext';
 import {
   getAdminOrderAddressLabelPreview,
@@ -8,6 +8,7 @@ import {
   PdfDocumentError,
 } from '../../service/addressLabels';
 import type { AddressLabelPreview, AddressLabelSize } from '../../types/addressLabel';
+import { Modal } from '../common/Modal';
 
 interface SlipPreviewModalProps {
   orderId: string;
@@ -48,14 +49,6 @@ export const SlipPreviewModal: React.FC<SlipPreviewModalProps> = ({ orderId, onC
     };
   }, [orderId]);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
   const print = async (size: AddressLabelSize) => {
     if (printing) return;
     setPrinting(size);
@@ -70,22 +63,19 @@ export const SlipPreviewModal: React.FC<SlipPreviewModalProps> = ({ orderId, onC
   };
 
   return (
-    <div
-      className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-allura-darkBrown/60 backdrop-blur-sm animate-fade-in"
-      onClick={onClose}
+    <Modal
+      open
+      onClose={onClose}
+      isBusy={!!printing}
+      isDirty={false}
+      labelledBy="slip-preview-title"
+      backdropClassName="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-allura-darkBrown/60 backdrop-blur-sm animate-fade-in"
+      panelClassName="relative bg-white border border-stone-200 rounded-2xl w-full max-w-lg max-h-[85vh] flex flex-col shadow-2xl animate-slide-up focus:outline-none"
+      closeButtonClassName="absolute top-3 right-3 z-20 w-10 h-10 flex items-center justify-center rounded-lg text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition-colors disabled:opacity-40"
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="slip-preview-title"
-        className="bg-white border border-stone-200 rounded-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto shadow-2xl animate-slide-up"
-        onClick={e => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-stone-100">
+      <div className="overflow-y-auto flex-1">
+        <div className="flex items-center justify-between px-5 py-4 pr-14 border-b border-stone-100">
           <h3 id="slip-preview-title" className="font-serif text-lg text-stone-900">Slip preview</h3>
-          <button onClick={onClose} aria-label="Close preview" className="p-1.5 rounded-lg text-stone-400 hover:text-stone-700 hover:bg-stone-100">
-            <X size={18} />
-          </button>
         </div>
 
         <div className="p-5 space-y-4 text-xs font-sans">
@@ -145,23 +135,23 @@ export const SlipPreviewModal: React.FC<SlipPreviewModalProps> = ({ orderId, onC
               type="button"
               onClick={() => print('4x6')}
               disabled={!!printing}
-              className="px-3.5 py-2 border border-stone-200 bg-white hover:bg-stone-50 text-stone-700 rounded-xl text-xs font-sans font-semibold flex items-center gap-1.5 disabled:opacity-60"
+              className="px-3.5 py-2 bg-allura-darkBrown text-white hover:bg-allura-softBrown rounded-xl text-xs font-sans font-semibold flex items-center gap-1.5 disabled:opacity-60"
             >
               {printing === '4x6' ? <Loader2 size={14} className="animate-spin" /> : <Printer size={14} />}
-              <span>4×6</span>
+              <span>Print 4×6</span>
             </button>
             <button
               type="button"
               onClick={() => print('A4')}
               disabled={!!printing}
-              className="px-3.5 py-2 bg-allura-darkBrown text-white hover:bg-allura-softBrown rounded-xl text-xs font-sans font-semibold flex items-center gap-1.5 disabled:opacity-60"
+              className="px-3.5 py-2 border border-stone-200 bg-white hover:bg-stone-50 text-stone-700 rounded-xl text-xs font-sans font-semibold flex items-center gap-1.5 disabled:opacity-60"
             >
               {printing === 'A4' ? <Loader2 size={14} className="animate-spin" /> : <Printer size={14} />}
-              <span>Print A4</span>
+              <span>A4</span>
             </button>
           </div>
         )}
       </div>
-    </div>
+    </Modal>
   );
 };

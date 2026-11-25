@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Plus, Edit3, Trash2, RefreshCw, AlertTriangle, Star, ChevronDown, ChevronUp, ImageOff, Loader2, Search, X, ArrowUpDown, Check, Package } from 'lucide-react';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { ImageUploadDropzone } from '../../components/admin/ImageUploadDropzone';
@@ -15,6 +15,7 @@ import type { CollectionPayload } from '../../service/collection';
 import { resizeImageSource, slugify } from '../../utils/image';
 import { getBackendErrorMessage, getBackendSuccessMessage } from '../../utils/apiResponse';
 import { AdminErrorBanner } from '../../components/admin/AdminErrorBanner';
+import { Modal } from '../../components/common/Modal';
 import type { AdminCollection, AdminProduct } from '../../types';
 import {
   COLLECTION_STATUSES,
@@ -90,6 +91,7 @@ export const AdminCollectionsPage: React.FC = () => {
   const [showSeo, setShowSeo] = useState(false);
   // Existing thumbnail, reused when the image hasn't changed
   const [originalImage, setOriginalImage] = useState<{ url?: string; thumbnailUrl?: string }>({});
+  const initialSnapshotRef = useRef('');
 
   // Delete confirmation modal state
   const [deleteTarget, setDeleteTarget] = useState<AdminCollection | null>(null);
@@ -118,11 +120,13 @@ export const AdminCollectionsPage: React.FC = () => {
     setEditingId(null);
     setFormError(null);
     setProductSearch('');
-    setFormData({ ...EMPTY_FORM, sortOrder: collections.length, productIds: [] });
+    const initialForm: CollectionForm = { ...EMPTY_FORM, sortOrder: collections.length, productIds: [] };
+    setFormData(initialForm);
     setSlugTouched(false);
     setShowSeo(false);
     setOriginalImage({});
     setIsModalOpen(true);
+    initialSnapshotRef.current = JSON.stringify(initialForm);
   };
 
   const handleOpenEdit = (col: AdminCollection) => {
@@ -133,7 +137,7 @@ export const AdminCollectionsPage: React.FC = () => {
     setEditingId(col.id);
     setFormError(null);
     setProductSearch('');
-    setFormData({
+    const initialForm: CollectionForm = {
       name: col.name || '',
       slug: col.slug || '',
       description: col.description || '',
@@ -147,11 +151,13 @@ export const AdminCollectionsPage: React.FC = () => {
       isFeatured: !!col.isFeatured,
       // Any legacy / unexpected value opens as INACTIVE so the admin can still save
       status: normalizeCollectionStatus(col.status),
-    });
+    };
+    setFormData(initialForm);
     setSlugTouched(true);
     setShowSeo(!!(col.seo?.title || col.seo?.description || col.seo?.keywords?.length));
     setOriginalImage({ url: image.url, thumbnailUrl: image.thumbnailUrl });
     setIsModalOpen(true);
+    initialSnapshotRef.current = JSON.stringify(initialForm);
   };
 
   const handleDeleteClick = (col: AdminCollection) => {
@@ -314,6 +320,8 @@ export const AdminCollectionsPage: React.FC = () => {
     const start = (currentPage - 1) * PAGE_SIZE;
     return filteredAndSorted.slice(start, start + PAGE_SIZE);
   }, [filteredAndSorted, currentPage]);
+
+  const isFormDirty = isModalOpen && initialSnapshotRef.current !== JSON.stringify(formData);
 
   return (
     <div className="space-y-6 pb-12">
@@ -529,10 +537,18 @@ export const AdminCollectionsPage: React.FC = () => {
       </div>
 
       {/* Create/Edit Collection Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-sm">
-          <div className="bg-white border border-stone-200 rounded-2xl w-full max-w-2xl p-6 space-y-4 shadow-2xl max-h-[92vh] overflow-y-auto">
-            <h3 className="font-serif text-xl text-stone-900">
+      <Modal
+        open={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        isBusy={isSaving}
+        isDirty={isFormDirty}
+        discardConfirmMessage="You have unsaved changes to this collection. Discard them?"
+        closeButtonClassName="absolute top-3 right-3 z-20 w-10 h-10 flex items-center justify-center rounded-lg text-stone-400 hover:text-stone-800 hover:bg-stone-100 transition-colors disabled:opacity-40"
+        backdropClassName="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-sm"
+        panelClassName="relative bg-white border border-stone-200 rounded-2xl w-full max-w-2xl shadow-2xl max-h-[92vh] flex flex-col focus:outline-none"
+      >
+        <div className="overflow-y-auto p-6 space-y-4">
+            <h3 className="font-serif text-xl text-stone-900 pr-8">
               {editingId ? 'Edit Collection' : 'New Collection'}
             </h3>
 
@@ -840,15 +856,20 @@ export const AdminCollectionsPage: React.FC = () => {
                 </button>
               </div>
             </form>
-          </div>
         </div>
-      )}
+      </Modal>
 
       {/* Delete Confirmation Modal */}
-      {deleteTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-sm">
-          <div className="bg-white border border-stone-200 rounded-2xl w-full max-w-sm p-6 space-y-4 shadow-2xl animate-in">
-            <div className="flex items-start gap-3">
+      <Modal
+        open={!!deleteTarget}
+        onClose={handleDeleteCancel}
+        isBusy={isDeleting}
+        closeButtonClassName="absolute top-3 right-3 z-20 w-10 h-10 flex items-center justify-center rounded-lg text-stone-400 hover:text-stone-800 hover:bg-stone-100 transition-colors disabled:opacity-40"
+        backdropClassName="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-sm"
+        panelClassName="relative bg-white border border-stone-200 rounded-2xl w-full max-w-sm shadow-2xl animate-in max-h-[90vh] flex flex-col focus:outline-none"
+      >
+        <div className="overflow-y-auto p-6 space-y-4">
+            <div className="flex items-start gap-3 pr-6">
               <div className="p-2 bg-red-50 rounded-xl">
                 <AlertTriangle size={20} className="text-red-500" />
               </div>
@@ -858,7 +879,7 @@ export const AdminCollectionsPage: React.FC = () => {
                 </h3>
                 <p className="text-xs font-sans text-stone-500 mt-1">
                   Are you sure you want to delete{' '}
-                  <span className="font-semibold text-stone-700">"{deleteTarget.name}"</span>?
+                  <span className="font-semibold text-stone-700">"{deleteTarget?.name}"</span>?
                   This action cannot be undone.
                 </p>
               </div>
@@ -882,9 +903,8 @@ export const AdminCollectionsPage: React.FC = () => {
                 <span>{isDeleting ? 'Deleting...' : 'Delete'}</span>
               </button>
             </div>
-          </div>
         </div>
-      )}
+      </Modal>
     </div>
   );
 };

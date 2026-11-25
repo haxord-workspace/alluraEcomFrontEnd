@@ -1,7 +1,7 @@
 import api from './api';
 import adminApi from './adminApi';
 import { mapStoreProduct, NO_COLOR } from './store';
-import { colorHex } from '../data/colorPalette';
+import { colorHex, decodeColor } from '../data/colorPalette';
 import { firstNumber } from '../utils/number';
 import type {
   Order,
@@ -308,7 +308,7 @@ const mapItem = (raw: any): OrderItem => {
     variantId,
     hasImage: !!(productRaw?.images?.length || imageUrl),
     selectedSize: size,
-    selectedColor: colorName ? { name: colorName, hex: colorHex(colorName) || '#D9C9B4' } : NO_COLOR,
+    selectedColor: colorName ? { name: decodeColor(colorName).name, hex: colorHex(colorName) || '#D9C9B4' } : NO_COLOR,
     quantity: num(raw?.quantity, raw?.qty) || 1,
     unitPrice,
     finalPrice: [raw?.finalPrice, raw?.pricing?.finalPrice].map(Number).find(v => Number.isFinite(v) && v > 0),
@@ -475,7 +475,7 @@ export const enrichOrder = (order: Order, lookup: OrderCatalogLookup): Order => 
       selectedColor: item.selectedColor?.name
         ? item.selectedColor
         : colorName
-        ? { name: colorName, hex: colorHex(colorName) || '#D9C9B4' }
+        ? { name: decodeColor(colorName).name, hex: colorHex(colorName) || '#D9C9B4' }
         : item.selectedColor,
     };
   }),

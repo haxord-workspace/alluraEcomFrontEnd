@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
-import { X, Loader2 } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Loader2 } from 'lucide-react';
+import { Modal } from '../common/Modal';
 import {
   getAdminFaq,
   createAdminFaq,
@@ -42,6 +43,9 @@ export const AdminFaqFormModal: React.FC<AdminFaqFormModalProps> = ({ isOpen, on
   const [loadError, setLoadError] = useState<string | null>(null);
   const [newCategory, setNewCategory] = useState('');
   const [isNewCategory, setIsNewCategory] = useState(false);
+  // Baseline captured once the modal's initial data (sync for create, async GET for edit) is in,
+  // so the dirty check doesn't fire while that load is still running.
+  const baselineRef = useRef('');
 
   useEffect(() => {
     if (!isOpen) return;
@@ -52,23 +56,30 @@ export const AdminFaqFormModal: React.FC<AdminFaqFormModalProps> = ({ isOpen, on
 
     if (!faq) {
       setForm(EMPTY_FORM);
+      baselineRef.current = JSON.stringify({ form: EMPTY_FORM, isNewCategory: false, newCategory: '' });
       return;
     }
     // Edit loads the full record via GET /{id} rather than trusting the list row
     setIsLoading(true);
     getAdminFaq(faq.id)
       .then(full => {
-        setForm({
+        const loaded = {
           question: full.question,
           answer: full.answer,
           category: full.category,
           sortOrder: String(full.sortOrder ?? 0),
           status: full.status,
-        });
+        };
+        setForm(loaded);
+        baselineRef.current = JSON.stringify({ form: loaded, isNewCategory: false, newCategory: '' });
       })
       .catch(err => setLoadError(faqErrorMessage(err, 'Could not load this FAQ')))
       .finally(() => setIsLoading(false));
   }, [isOpen, faq]);
+
+  const isDirty =
+    isOpen && !isLoading && baselineRef.current !== '' &&
+    baselineRef.current !== JSON.stringify({ form, isNewCategory, newCategory });
 
   if (!isOpen) return null;
 
@@ -117,24 +128,22 @@ export const AdminFaqFormModal: React.FC<AdminFaqFormModalProps> = ({ isOpen, on
   };
 
   return (
-    <div
-      className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-sm"
-      onClick={onClose}
+    <Modal
+      open={isOpen}
+      onClose={onClose}
+      isBusy={isSaving}
+      isDirty={isDirty}
+      discardConfirmMessage="Discard this FAQ's unsaved changes?"
+      labelledBy="faq-form-title"
+      closeButtonClassName="absolute top-3 right-3 z-20 w-10 h-10 flex items-center justify-center rounded-lg text-stone-400 hover:text-stone-800 hover:bg-stone-100 transition-colors disabled:opacity-40"
+      backdropClassName="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-sm"
+      panelClassName="relative bg-white border border-stone-200 rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] flex flex-col focus:outline-none text-xs font-sans"
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="faq-form-title"
-        onClick={e => e.stopPropagation()}
-        className="bg-white border border-stone-200 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6 space-y-5 shadow-2xl text-xs font-sans"
-      >
-        <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+      <div className="overflow-y-auto p-6 space-y-5">
+        <div className="flex items-center justify-between border-b border-stone-100 pb-3 pr-8">
           <h3 id="faq-form-title" className="font-serif text-xl text-stone-900">
             {faq ? 'Edit FAQ' : 'Create FAQ'}
           </h3>
-          <button type="button" onClick={onClose} aria-label="Close" className="text-stone-400 hover:text-stone-700 p-1">
-            <X size={18} />
-          </button>
         </div>
 
         {isLoading ? (
@@ -296,6 +305,6 @@ export const AdminFaqFormModal: React.FC<AdminFaqFormModalProps> = ({ isOpen, on
           </form>
         )}
       </div>
-    </div>
+    </Modal>
   );
 };

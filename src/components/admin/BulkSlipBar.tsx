@@ -48,7 +48,7 @@ export const BulkSlipBar: React.FC<BulkSlipBarProps> = ({ orderIds, onClear }) =
           onClick={() => print('4x6')}
           disabled={!!busySize || tooMany}
           title={tooMany ? `Select up to ${MAX_BULK_ADDRESS_LABELS} orders per print` : undefined}
-          className="px-3.5 py-2 border border-stone-200 bg-white hover:bg-stone-100 text-stone-700 rounded-xl font-semibold flex items-center gap-1.5 disabled:opacity-50"
+          className="px-3.5 py-2 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-xl font-semibold flex items-center gap-1.5 disabled:opacity-50"
         >
           {busySize === '4x6' ? <Loader2 size={14} className="animate-spin" /> : <Printer size={14} />}
           <span>Print slips (4×6)</span>
@@ -58,7 +58,7 @@ export const BulkSlipBar: React.FC<BulkSlipBarProps> = ({ orderIds, onClear }) =
           onClick={() => print('A4')}
           disabled={!!busySize || tooMany}
           title={tooMany ? `Select up to ${MAX_BULK_ADDRESS_LABELS} orders per print` : undefined}
-          className="px-3.5 py-2 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-xl font-semibold flex items-center gap-1.5 disabled:opacity-50"
+          className="px-3.5 py-2 border border-stone-200 bg-white hover:bg-stone-100 text-stone-700 rounded-xl font-semibold flex items-center gap-1.5 disabled:opacity-50"
         >
           {busySize === 'A4' ? <Loader2 size={14} className="animate-spin" /> : <Printer size={14} />}
           <span>Print slips (A4)</span>

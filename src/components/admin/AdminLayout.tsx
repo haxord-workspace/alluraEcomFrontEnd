@@ -3,6 +3,7 @@ import { Outlet, Navigate, useNavigate } from 'react-router-dom';
 import { AdminSidebar } from './AdminSidebar';
 import { AdminHeader } from './AdminHeader';
 import { AdminCommandSearch } from './AdminCommandSearch';
+import { AdminRouteErrorBoundary } from './AdminRouteErrorBoundary';
 import { useAdmin } from '../../context/AdminContext';
 import { useShop } from '../../context/ShopContext';
 import { useSelector, useDispatch } from 'react-redux';
@@ -101,7 +102,9 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
         <AdminHeader onMobileMenuToggle={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)} />
         
         <main className="flex-1 p-3.5 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
-          {children || <Outlet />}
+          <AdminRouteErrorBoundary>
+            {children || <Outlet />}
+          </AdminRouteErrorBoundary>
         </main>
       </div>
 

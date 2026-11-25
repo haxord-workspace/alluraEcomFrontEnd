@@ -5,6 +5,7 @@ import type { Product } from '../../types';
 import { useShop } from '../../context/ShopContext';
 import { useAddToBag } from '../../hooks/useAddToBag';
 import { addToBagButtonState } from './AddToBagLabel';
+import { getProductTitle } from '../../utils/productTitle';
 
 interface ProductCardProps {
   product: Product;
@@ -132,7 +133,7 @@ export const ProductCard = React.memo(function ProductCard({ product, showCatego
             to={`/product/${product.slug}`}
             className="font-serif text-sm sm:text-[15px] font-normal sm:font-medium text-stone-900 leading-snug line-clamp-1 hover:text-[#561C08] transition-colors block mb-1"
           >
-            {product.name}
+            {getProductTitle(product)}
           </Link>
         </div>
 

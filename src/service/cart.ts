@@ -1,5 +1,5 @@
 import api from './api';
-import { colorHex } from '../data/colorPalette';
+import { colorHex, decodeColor } from '../data/colorPalette';
 import { mapStoreProduct, NO_COLOR } from './store';
 import { firstNumber } from '../utils/number';
 import type { CartItem, Product, ProductColor } from '../types';
@@ -84,9 +84,10 @@ const mapCartItem = (raw: any, lookup?: ProductLookup): CartItem | null => {
   const attrs = variant?.attributes || raw.attributes || raw.variantAttributes || {};
   const size: string = raw.size || attrs.size || '';
   const colorName: string | undefined = raw.color?.name || raw.color || attrs.color;
+  const decodedColorName = colorName ? decodeColor(String(colorName)).name : undefined;
   const selectedColor: ProductColor =
-    (colorName && product.colors.find(c => c.name.toLowerCase() === String(colorName).toLowerCase())) ||
-    (colorName ? { name: String(colorName), hex: colorHex(String(colorName)) || DEFAULT_HEX } : NO_COLOR);
+    (decodedColorName && product.colors.find(c => c.name.toLowerCase() === decodedColorName.toLowerCase())) ||
+    (colorName ? { name: decodedColorName || String(colorName), hex: colorHex(String(colorName)) || DEFAULT_HEX } : NO_COLOR);
 
   return {
     id: raw.id || raw._id || raw.itemId,

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Plus, Edit3, Trash2, Folder, Loader2 } from 'lucide-react';
 import { useAdmin } from '../../context/AdminContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
@@ -10,6 +10,7 @@ import { useShop } from '../../context/ShopContext';
 import { getBackendErrorMessage } from '../../utils/apiResponse';
 
 import { AdminErrorBanner } from '../../components/admin/AdminErrorBanner';
+import { Modal } from '../../components/common/Modal';
 import {
   STATUS_OPTIONS,
   STATUS_LABELS,
@@ -44,6 +45,7 @@ export const AdminCategoriesPage: React.FC = () => {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   
   const [formData, setFormData] = useState<CategoryForm>(EMPTY_CATEGORY_FORM);
+  const initialSnapshotRef = useRef('');
 
   const fetchCategories = async () => {
     setIsLoading(true);
@@ -68,12 +70,13 @@ export const AdminCategoriesPage: React.FC = () => {
     setModalError(null);
     setFormData(EMPTY_CATEGORY_FORM);
     setIsModalOpen(true);
+    initialSnapshotRef.current = JSON.stringify(EMPTY_CATEGORY_FORM);
   };
 
   const handleOpenEdit = (cat: Category) => {
     setEditingCategoryId(cat.id);
     setModalError(null);
-    setFormData({
+    const initialForm: CategoryForm = {
       name: cat.name,
       slug: cat.slug,
       // Uppercased; anything still invalid (e.g. legacy "ARCHIVED") opens as INACTIVE so it can be saved
@@ -81,8 +84,10 @@ export const AdminCategoriesPage: React.FC = () => {
       image: typeof cat.image === 'string'
         ? { url: cat.image }
         : { url: cat.image?.url || '' },
-    });
+    };
+    setFormData(initialForm);
     setIsModalOpen(true);
+    initialSnapshotRef.current = JSON.stringify(initialForm);
   };
 
   const handleDelete = async (id: string) => {
@@ -147,6 +152,8 @@ export const AdminCategoriesPage: React.FC = () => {
   const getProductCount = (catName: string) => {
     return products.filter(p => p.category === catName).length;
   };
+
+  const isFormDirty = isModalOpen && initialSnapshotRef.current !== JSON.stringify(formData);
 
   return (
     <div className="space-y-6 pb-12">
@@ -268,10 +275,18 @@ export const AdminCategoriesPage: React.FC = () => {
       </div>
 
       {/* Create/Edit Category Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-sm">
-          <div className="bg-white border border-stone-200 rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl">
-            <h3 className="font-serif text-xl text-stone-900">
+      <Modal
+        open={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        isBusy={isSaving}
+        isDirty={isFormDirty}
+        discardConfirmMessage="You have unsaved changes to this category. Discard them?"
+        closeButtonClassName="absolute top-3 right-3 z-20 w-10 h-10 flex items-center justify-center rounded-lg text-stone-400 hover:text-stone-800 hover:bg-stone-100 transition-colors disabled:opacity-40"
+        backdropClassName="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-sm"
+        panelClassName="relative bg-white border border-stone-200 rounded-2xl w-full max-w-md shadow-2xl max-h-[90vh] flex flex-col focus:outline-none"
+      >
+        <div className="overflow-y-auto p-6 space-y-4">
+            <h3 className="font-serif text-xl text-stone-900 pr-8">
               {editingCategoryId ? 'Edit Category' : 'Add New Category'}
             </h3>
 
@@ -355,9 +370,8 @@ export const AdminCategoriesPage: React.FC = () => {
                 </button>
               </div>
             </form>
-          </div>
         </div>
-      )}
+      </Modal>
     </div>
   );
 };

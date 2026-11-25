@@ -18,6 +18,7 @@ import {
 import { useShop } from '../../context/ShopContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { InvoiceModal } from '../../components/common/InvoiceModal';
+import { Modal } from '../../components/common/Modal';
 import { AddressSlipButton } from '../../components/common/AddressSlipButton';
 import { canDownloadInvoice } from '../../utils/addressSlipEligibility';
 import { ItemVariantMeta } from '../../components/common/ItemVariantMeta';
@@ -497,10 +498,16 @@ export const OrderDetailPage: React.FC = () => {
       <InvoiceModal order={invoiceOrder} onClose={() => setInvoiceOrder(null)} />
 
       {/* Cancel order dialog */}
-      {isCancelOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-allura-darkBrown/60 backdrop-blur-sm">
-          <div className="bg-allura-card border border-allura-border rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl text-xs font-sans">
-            <h3 className="font-serif text-xl text-allura-text">Cancel order {order.orderNumber}?</h3>
+      <Modal
+        open={isCancelOpen}
+        onClose={() => setIsCancelOpen(false)}
+        isBusy={isCancelling}
+        isDirty={false}
+        backdropClassName="fixed inset-0 z-50 flex items-center justify-center p-4 bg-allura-darkBrown/60 backdrop-blur-sm"
+        panelClassName="relative bg-allura-card border border-allura-border rounded-2xl w-full max-w-md max-h-[90vh] flex flex-col shadow-2xl focus:outline-none"
+      >
+        <div className="overflow-y-auto p-6 space-y-4 text-xs font-sans">
+            <h3 className="font-serif text-xl text-allura-text pr-8">Cancel order {order.orderNumber}?</h3>
             <p className="text-allura-muted">Tell us why you're cancelling. Any payment made will be refunded to the original method.</p>
             <div className="space-y-2">
               {CANCEL_REASONS.map(r => (
@@ -530,9 +537,8 @@ export const OrderDetailPage: React.FC = () => {
                 {isCancelling ? 'Cancelling…' : 'Cancel Order'}
               </button>
             </div>
-          </div>
         </div>
-      )}
+      </Modal>
     </>
   );
 };

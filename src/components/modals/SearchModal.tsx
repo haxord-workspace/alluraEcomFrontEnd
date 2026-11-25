@@ -4,6 +4,8 @@ import { Search, X, ArrowRight, TrendingUp, Loader2, Layers, RotateCcw } from 'l
 import { useShop } from '../../context/ShopContext';
 import { searchProducts, isRequestCanceled, getStoreCollections, type StoreCollection } from '../../service/store';
 import type { Product } from '../../types';
+import { getProductTitle } from '../../utils/productTitle';
+import { Modal } from '../common/Modal';
 
 const SEARCH_DEBOUNCE_MS = 350;
 const SEARCH_LIMIT = 10;
@@ -42,7 +44,7 @@ const SearchResultCard = React.memo(function SearchResultCard({ product, priceLa
       </div>
       <div className="p-3">
         <h5 className="font-serif text-sm font-medium text-allura-text group-hover:text-allura-goldDark transition-colors line-clamp-1">
-          {product.name}
+          {getProductTitle(product)}
         </h5>
         <p className="font-serif text-xs font-semibold text-allura-text mt-1">{priceLabel}</p>
       </div>
@@ -190,8 +192,6 @@ export const SearchModal: React.FC = () => {
     [setIsSearchOpen, navigate]
   );
 
-  if (!isSearchOpen) return null;
-
   const handleSearchTag = (tag: string) => {
     setQuery(tag);
   };
@@ -211,7 +211,13 @@ export const SearchModal: React.FC = () => {
   const visibleResults = isLoading || isCurrentSuccess ? results : [];
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-allura-card/98 backdrop-blur-md animate-fade-in overflow-y-auto">
+    <Modal
+      open={isSearchOpen}
+      onClose={() => setIsSearchOpen(false)}
+      showCloseButton={false}
+      backdropClassName="fixed inset-0 z-50 flex flex-col"
+      panelClassName="relative w-full h-full flex flex-col bg-allura-card/98 backdrop-blur-md animate-fade-in overflow-y-auto focus:outline-none"
+    >
       {/* Top Search Bar */}
       <div className="border-b border-allura-border sticky top-0 bg-allura-card z-10 px-6 py-5 max-w-4xl w-full mx-auto flex items-center justify-between gap-4">
         <div className="flex-1 flex items-center gap-3 bg-allura-bgSecondary/50 border border-allura-border rounded-full px-5 py-3">
@@ -354,6 +360,6 @@ export const SearchModal: React.FC = () => {
           </div>
         )}
       </div>
-    </div>
+    </Modal>
   );
 };
