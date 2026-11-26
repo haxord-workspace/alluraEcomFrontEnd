@@ -48,16 +48,28 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   const activeRoleLabel = role || realRole || '—';
 
   // Collapsible section state
+  const isContentActive =
+    location.pathname.startsWith('/admin/content') ||
+    location.pathname.startsWith('/admin/homepage/experience') ||
+    location.pathname.startsWith('/admin/marketing/banners');
+
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
     catalog: true,
     suppliers: true,
     inventory: true,
     orders: true,
+    crm: true,
     marketing: true,
-    content: false,
+    content: isContentActive,
     intelligence: false,
     settings: false,
   });
+
+  React.useEffect(() => {
+    if (isContentActive) {
+      setOpenSections(prev => (prev.content ? prev : { ...prev, content: true }));
+    }
+  }, [isContentActive]);
 
   const toggleSection = (sec: string) => {
     setOpenSections(prev => ({ ...prev, [sec]: !prev[sec] }));
@@ -257,12 +269,27 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
           </div>
         )}
 
-        {/* CUSTOMERS */}
+        {/* CUSTOMER CRM */}
         {can('customer_crm', 'view') && (
-          <NavLink to="/admin/customers" className={navLinkClass}>
-            <Users size={16} />
-            {!isCollapsed && <span>Customers CRM</span>}
-          </NavLink>
+          <div className="space-y-1">
+            <button
+              onClick={() => toggleSection('crm')}
+              className="w-full flex items-center justify-between px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-allura-muted/80 hover:text-allura-text"
+            >
+              <span>Customer CRM</span>
+              {!isCollapsed && (
+                openSections.crm ? <ChevronDown size={13} /> : <ChevronRight size={13} />
+              )}
+            </button>
+            {(openSections.crm || isCollapsed) && (
+              <div className="space-y-0.5 pl-1">
+                <NavLink to="/admin/customers" className={navLinkClass}>
+                  <Users size={15} />
+                  {!isCollapsed && <span>Customers CRM</span>}
+                </NavLink>
+              </div>
+            )}
+          </div>
         )}
         <AdminReviewsNavSection navLinkClass={navLinkClass} isCollapsed={isCollapsed} />
 
@@ -321,6 +348,10 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
             </button>
             {(openSections.content || isCollapsed) && (
               <div className="space-y-0.5 pl-1">
+                <NavLink to="/admin/homepage/experience" className={navLinkClass}>
+                  <Sparkles size={15} />
+                  {!isCollapsed && <span>Homepage Experience</span>}
+                </NavLink>
                 <NavLink to="/admin/marketing/banners" className={navLinkClass}>
                   <ImageIcon size={15} />
                   {!isCollapsed && <span>Store Banners</span>}

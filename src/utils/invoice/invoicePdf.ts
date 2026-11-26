@@ -483,7 +483,7 @@ export const renderInvoicePdf = (data: InvoiceData, assets: InvoicePdfAssets): j
     footerLines.push({ value: wrap(value, CONTENT_W), weight, color, size });
   };
   pushFooter(data.company.name, 'semibold', C.ink, 8.5);
-  pushFooter(data.company.gstin && `GSTIN: ${data.company.gstin}`, 'normal', C.muted);
+  // pushFooter(data.company.gstin && `GSTIN: ${data.company.gstin}`, 'normal', C.muted);
   pushFooter(data.company.address, 'normal', C.muted);
   pushFooter(supportLine(data.company), 'normal', C.muted);
   const thankYouGap = 6;

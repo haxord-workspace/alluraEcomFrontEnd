@@ -148,6 +148,7 @@ export interface Product {
   images: {
     primary: string;
     secondary: string;
+    thumbnail?: string;
     gallery?: string[];
   };
   description: string;

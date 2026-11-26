@@ -7,6 +7,7 @@ export default {
   theme: {
     extend: {
       colors: {
+        'accent-gold': '#F7E6C8',
         brand: {
           brown: '#561C08',
           cream: '#F7E6C8',

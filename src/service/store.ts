@@ -49,8 +49,11 @@ const mapStoreVariant = (raw: any): ProductVariant => {
  */
 export const mapStoreProduct = (raw: any, categoryMap?: Record<string, string>): Product => {
   const images = Array.isArray(raw.images) ? raw.images : [];
-  const primary = images.find((img: any) => img?.isPrimary)?.url || images[0]?.url || FALLBACK_IMAGE;
-  const secondary = images.find((img: any) => img?.url && img.url !== primary)?.url || '';
+  const primaryItem = images.find((img: any) => img?.isPrimary) || images[0];
+  const primary = primaryItem?.url || FALLBACK_IMAGE;
+  const thumbnail = primaryItem?.thumbnailUrl || primary;
+  const secondaryItem = images.find((img: any) => img?.url && img.url !== primary);
+  const secondary = secondaryItem?.url || '';
 
   const categoryIdRaw = typeof raw.categoryId === 'object' && raw.categoryId ? raw.categoryId._id : raw.categoryId;
   const categoryName =
@@ -92,6 +95,7 @@ export const mapStoreProduct = (raw: any, categoryMap?: Record<string, string>):
     images: {
       primary,
       secondary,
+      thumbnail,
       gallery: images.map((img: any) => img?.url).filter(Boolean),
     },
     description: raw.description || '',

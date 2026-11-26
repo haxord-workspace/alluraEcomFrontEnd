@@ -1,6 +1,12 @@
 @import "tailwindcss";
 @config "../tailwind.config.js";
 
+@theme {
+  --color-accent-gold: #F7E6C8;
+  --color-brand-brown: #561C08;
+  --color-brand-cream: #F7E6C8;
+}
+
 @layer base {
   :root {
     --bg-primary: #F7E6C8;
@@ -154,4 +160,197 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .allura-fade-slide-up { animation: none; }
+}
+
+/* Promotion countdown — subtle pulse once a promotion enters its final hour */
+@keyframes promo-countdown-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+.promo-countdown-pulse {
+  animation: promo-countdown-pulse 1.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .promo-countdown-pulse { animation: none; }
+}
+
+/* ─── PROMOTION TICKET: #561C08 THEME ─── */
+.ticket-container-wrapper {
+  container-type: inline-size;
+  container-name: ticket;
+  /* Base token + every derived tone, computed once via color-mix() so nothing is hardcoded twice */
+  --promo-base: #561C08;
+  --promo-cream: #F7E6C8;
+  --promo-deep: color-mix(in srgb, var(--promo-base) 65%, black 35%);
+  --promo-light: color-mix(in srgb, var(--promo-base) 75%, var(--promo-cream) 25%);
+  --promo-gold: #C9A050;
+  --promo-cream-85: color-mix(in srgb, var(--promo-cream) 85%, transparent);
+  --promo-cream-80: color-mix(in srgb, var(--promo-cream) 80%, transparent);
+}
+
+.ticket-drop-shadow-wrapper {
+  filter: drop-shadow(0 2px 5px rgba(20, 6, 2, 0.28)) drop-shadow(0 14px 30px rgba(20, 6, 2, 0.32));
+  cursor: default;
+}
+
+.ticket-card-shape {
+  background-color: var(--promo-base);
+  position: relative;
+  user-select: none;
+}
+
+/* ─── MAIN (PAPER) PANEL — solid base, soft top-left light, quiet pattern band on the right ─── */
+.coupon-pattern-light {
+  position: relative;
+  background-color: var(--promo-base);
+  background-image:
+    radial-gradient(ellipse 70% 70% at 12% 10%, color-mix(in srgb, var(--promo-light) 50%, transparent) 0%, transparent 62%),
+    linear-gradient(135deg, transparent 55%, color-mix(in srgb, var(--promo-deep) 38%, transparent) 100%);
+  overflow: hidden;
+}
+
+/* Bauhaus-style tone-on-tone tile (quarter circle, half circle, rounded square, striped circle) */
+.coupon-pattern-light::after,
+.coupon-pattern-dark::after {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2296%22%20height%3D%2296%22%20viewBox%3D%220%200%2096%2096%22%3E%0A%20%20%3Cg%20fill%3D%22none%22%3E%0A%20%20%20%20%3Cpath%20d%3D%22M0%200%20L48%200%20A48%2048%200%200%201%200%2048%20Z%22%20fill%3D%22%237E4F38%22%20fill-opacity%3D%220.09%22%20%2F%3E%0A%20%20%20%20%3Cpath%20d%3D%22M48%2096%20A24%2024%200%200%201%2096%2096%20Z%22%20fill%3D%22%23381205%22%20fill-opacity%3D%220.08%22%20%2F%3E%0A%20%20%20%20%3Crect%20x%3D%2268%22%20y%3D%224%22%20width%3D%2220%22%20height%3D%2220%22%20rx%3D%225%22%20fill%3D%22%237E4F38%22%20fill-opacity%3D%220.07%22%20%2F%3E%0A%20%20%20%20%3Ccircle%20cx%3D%2230%22%20cy%3D%2266%22%20r%3D%2215%22%20stroke%3D%22%23381205%22%20stroke-opacity%3D%220.09%22%20stroke-width%3D%222.5%22%20%2F%3E%0A%20%20%20%20%3Ccircle%20cx%3D%2230%22%20cy%3D%2266%22%20r%3D%229%22%20stroke%3D%22%23381205%22%20stroke-opacity%3D%220.08%22%20stroke-width%3D%222.5%22%20%2F%3E%0A%20%20%20%20%3Ccircle%20cx%3D%2230%22%20cy%3D%2266%22%20r%3D%223%22%20fill%3D%22%23381205%22%20fill-opacity%3D%220.09%22%20%2F%3E%0A%20%20%3C%2Fg%3E%0A%3C%2Fsvg%3E");
+}
+
+/* Wide layout: pattern confined to the right ~40% of the main panel, fading out before the text */
+.coupon-pattern-light::after {
+  inset: 0;
+  left: 58%;
+  background-size: 96px 96px;
+  background-repeat: repeat;
+  -webkit-mask-image: linear-gradient(to left, black 25%, transparent 85%);
+  mask-image: linear-gradient(to left, black 25%, transparent 85%);
+}
+
+/* Stacked/mobile layout: pattern shrinks to a faint band in the top-right corner */
+[data-size='sm'] .coupon-pattern-light::after,
+[data-size='md'] .coupon-pattern-light::after {
+  inset: auto;
+  top: 0;
+  right: 0;
+  left: auto;
+  width: 48%;
+  height: 38%;
+  background-size: 64px 64px;
+  background-repeat: repeat;
+  opacity: 0.65;
+  -webkit-mask-image: radial-gradient(ellipse at top right, black 25%, transparent 80%);
+  mask-image: radial-gradient(ellipse at top right, black 25%, transparent 80%);
+}
+
+/* ─── STUB PANEL — deeper shade, thin striped band along the bottom edge ─── */
+.coupon-pattern-dark {
+  position: relative;
+  background-color: var(--promo-base);
+  overflow: hidden;
+}
+
+.coupon-pattern-dark::after {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 14px;
+  background-size: 48px 48px;
+  background-repeat: repeat-x;
+  opacity: 0.6;
+  -webkit-mask-image: linear-gradient(to top, black 45%, transparent 100%);
+  mask-image: linear-gradient(to top, black 45%, transparent 100%);
+}
+
+.coupon-vignette-light {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 88% 92%, color-mix(in srgb, var(--promo-deep) 30%, transparent) 0%, transparent 55%);
+  pointer-events: none;
+}
+
+.coupon-vignette-dark {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, 0.22) 100%);
+  pointer-events: none;
+}
+
+/* Gold foil text on card stock */
+.gold-foil-text {
+  background: linear-gradient(135deg, var(--promo-cream) 0%, var(--promo-gold) 50%, var(--promo-cream) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* Letterpress depth under the solid poster value */
+.promo-value-shadow {
+  text-shadow: 0 1px 0 color-mix(in srgb, var(--promo-deep) 60%, transparent);
+}
+
+/* Poster "OFF" — transparent fill with a cream stroke; solid cream fallback where text-stroke is unsupported */
+.promo-off-outline {
+  color: color-mix(in srgb, var(--promo-cream) 70%, transparent);
+  -webkit-text-stroke: 2px var(--promo-cream);
+  paint-order: stroke fill;
+}
+@supports (-webkit-text-stroke: 1px black) or (text-stroke: 1px black) {
+  .promo-off-outline {
+    color: transparent;
+  }
+}
+
+/* Punched perforation divider line */
+.ticket-punched-divider-vertical {
+  width: 0;
+  border-left-width: 1px;
+  border-left-style: dashed;
+  border-left-color: color-mix(in srgb, var(--promo-cream) 35%, transparent);
+  box-shadow: -1px 0 3px rgba(0, 0, 0, 0.2), 1px 0 3px rgba(0, 0, 0, 0.25);
+  position: relative;
+}
+.ticket-punched-divider-vertical::after {
+  content: '';
+  position: absolute;
+  top: 14px;
+  bottom: 14px;
+  left: -2px;
+  width: 3px;
+  background-image: radial-gradient(circle 1px at center, rgba(20, 6, 2, 0.7) 0, rgba(20, 6, 2, 0.7) 1px, transparent 1.5px);
+  background-size: 3px 10px;
+  background-repeat: repeat-y;
+  pointer-events: none;
+}
+
+.ticket-punched-divider-horizontal {
+  height: 0;
+  width: 100%;
+  border-top-width: 1px;
+  border-top-style: dashed;
+  border-top-color: color-mix(in srgb, var(--promo-cream) 35%, transparent);
+  box-shadow: 0 -1px 3px rgba(0, 0, 0, 0.2), 0 1px 3px rgba(0, 0, 0, 0.25);
+  position: relative;
+}
+.ticket-punched-divider-horizontal::after {
+  content: '';
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  top: -2px;
+  height: 3px;
+  background-image: radial-gradient(circle 1px at center, rgba(20, 6, 2, 0.7) 0, rgba(20, 6, 2, 0.7) 1px, transparent 1.5px);
+  background-size: 10px 3px;
+  background-repeat: repeat-x;
+  pointer-events: none;
+}
+
+/* Printed paper timer pill */
+.ticket-timer-pill {
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.18), 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+.ticket-stub-bg {
+  background: #421405;
 }

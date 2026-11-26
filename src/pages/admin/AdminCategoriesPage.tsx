@@ -3,6 +3,7 @@ import { Plus, Edit3, Trash2, Folder, Loader2 } from 'lucide-react';
 import { useAdmin } from '../../context/AdminContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { ImageUploadDropzone } from '../../components/admin/ImageUploadDropzone';
+import { deleteImage } from '../../service/uploadService';
 import { getCategories, createCategory, updateCategory, deleteCategory } from '../../service/category';
 import type { Category } from '../../types';
 import { useConfirm } from '../../context/ConfirmContext';
@@ -43,6 +44,7 @@ export const AdminCategoriesPage: React.FC = () => {
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [pendingCategoryDeletions, setPendingCategoryDeletions] = useState<string[]>([]);
   
   const [formData, setFormData] = useState<CategoryForm>(EMPTY_CATEGORY_FORM);
   const initialSnapshotRef = useRef('');
@@ -135,6 +137,10 @@ export const AdminCategoriesPage: React.FC = () => {
         const added = await createCategory(payload);
         setCategories([...categories, added]);
         showToast(added?._message || 'Category created successfully', 'success');
+      }
+      if (pendingCategoryDeletions.length > 0) {
+        pendingCategoryDeletions.forEach(id => void deleteImage(id));
+        setPendingCategoryDeletions([]);
       }
       setIsModalOpen(false);
     } catch (error: any) {
@@ -340,9 +346,19 @@ export const AdminCategoriesPage: React.FC = () => {
               <div className="pt-2">
                 <ImageUploadDropzone
                   label="Category Cover & Banner Image"
+                  folder="categories"
+                  allowSvg={false}
+                  maxMB={10}
+                  maxSide={800}
                   value={typeof formData.image === 'object' ? (formData.image as any)?.url || '' : (formData.image || '')}
-                  onChange={(url) => setFormData({ ...formData, image: { url } })}
-                  aspectRatioLabel="Recommended: 400×500px"
+                  onChange={(url, meta) => {
+                    const currentUrl = typeof formData.image === 'object' ? (formData.image as any)?.url : formData.image;
+                    if (currentUrl && currentUrl !== url && meta?.publicId) {
+                      setPendingCategoryDeletions(prev => [...prev, meta.publicId!]);
+                    }
+                    setFormData({ ...formData, image: { url } });
+                  }}
+                  aspectRatioLabel="Recommended: 800×800 px (1:1 WebP)"
                   presets={[
                     { label: 'Ethnic Anarkali', url: '/images/best-sellers/classic-cream-anarkali.jpeg' },
                     { label: 'Modest Embroidered', url: '/images/best-sellers/aura-cream-embroidered.jpeg' },

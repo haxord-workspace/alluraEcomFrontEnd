@@ -15,7 +15,6 @@ export interface BoutiqueSettingsForm {
 
 export type BoutiqueSettingsErrors = Partial<Record<keyof BoutiqueSettingsForm, string>>;
 
-const GSTIN_PATTERN = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_AMOUNT = 1_000_000;
 
@@ -45,13 +44,8 @@ export const emailError = (value: string): string => {
   return '';
 };
 
-/** Error message, or '' when valid. */
-export const gstinError = (value: string): string => {
-  const v = (value || '').trim().toUpperCase();
-  if (!v) return 'GSTIN is required.';
-  if (!GSTIN_PATTERN.test(v)) return 'Enter a valid 15-character GSTIN.';
-  return '';
-};
+/** Error message, or '' when valid (GSTIN is optional with no frontend validation). */
+export const gstinError = (_value?: string): string => '';
 
 /** Error message, or '' when valid. */
 export const addressError = (value: string): string => {

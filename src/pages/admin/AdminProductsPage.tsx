@@ -37,6 +37,7 @@ import {
 import type { VariantPayload } from '../../service/adminVariants';
 import { ProductVariantsEditor, buildVariantSku, normalizeVariantImages } from '../../components/admin/ProductVariantsEditor';
 import { ProductImagesEditor } from '../../components/admin/ProductImagesEditor';
+import { deleteImage } from '../../service/uploadService';
 import type { VariantRow } from '../../components/admin/ProductVariantsEditor';
 import { useShop } from '../../context/ShopContext';
 import { getDashboardProducts, type ProductAnalyticsResponse } from '../../service/adminDashboard';
@@ -206,6 +207,7 @@ export const AdminProductsPage: React.FC = () => {
   const [originalSupplier, setOriginalSupplier] = useState<ProductSupplierRef | null>(null);
   const [supplierError, setSupplierError] = useState<string | null>(null);
   const [supplierReloadToken, setSupplierReloadToken] = useState(0);
+  const [pendingDeletePublicIds, setPendingDeletePublicIds] = useState<string[]>([]);
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
   // Variant prices per product, to flag products whose variants are priced differently
@@ -375,6 +377,7 @@ export const AdminProductsPage: React.FC = () => {
     setChosenSupplier(null);
     setOriginalSupplier(null);
     setSupplierError(null);
+    setPendingDeletePublicIds([]);
     setIsModalOpen(true);
     initialSnapshotRef.current = JSON.stringify({ formData: EMPTY_FORM, supplierId: '' });
   };
@@ -405,6 +408,7 @@ export const AdminProductsPage: React.FC = () => {
     setChosenSupplier(currentSupplier);
     setOriginalSupplier(currentSupplier);
     setSupplierError(null);
+    setPendingDeletePublicIds([]);
     setIsModalOpen(true);
 
     // Load this product's existing colour / size variants
@@ -563,6 +567,12 @@ export const AdminProductsPage: React.FC = () => {
           'error'
         );
         return;
+      }
+
+      // Trigger deferred deletion of removed R2 images now that product saved successfully
+      if (pendingDeletePublicIds.length > 0) {
+        pendingDeletePublicIds.forEach(id => void deleteImage(id));
+        setPendingDeletePublicIds([]);
       }
 
       showToast(saved._message || (editingId ? 'Product updated successfully' : 'Product created successfully'), 'success');
@@ -1158,7 +1168,9 @@ export const AdminProductsPage: React.FC = () => {
               {/* Images: main + gallery */}
               <ProductImagesEditor
                 images={formData.images || []}
+                productName={formData.name}
                 onChange={images => setFormData(prev => ({ ...prev, images }))}
+                onRemoveExisting={publicId => setPendingDeletePublicIds(prev => [...prev, publicId])}
               />
 
               {/* Colours & sizes */}

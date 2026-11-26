@@ -472,11 +472,10 @@ export const AdminPromotionsPage: React.FC = () => {
                 setStatusFilter(st);
                 setPage(1);
               }}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-sans font-semibold transition-colors whitespace-nowrap ${
-                statusFilter === st
-                  ? 'bg-[#561C08] text-white shadow-xs'
-                  : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-              }`}
+              className={`px-3.5 py-1.5 rounded-full text-xs font-sans font-semibold transition-colors whitespace-nowrap ${statusFilter === st
+                ? 'bg-[#561C08] text-white shadow-xs'
+                : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                }`}
             >
               {st}
             </button>
@@ -623,9 +622,9 @@ export const AdminPromotionsPage: React.FC = () => {
         backdropClassName="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-sm animate-fade-in"
         panelClassName="relative bg-white border border-stone-200 rounded-2xl w-full max-w-xl shadow-2xl animate-slide-up text-xs font-sans max-h-[92vh] flex flex-col overflow-hidden focus:outline-none"
       >
-            <form onSubmit={handleSubmit} className="flex flex-col min-h-0 flex-1">
-            {/* Scrollable body; the Cancel / Save footer below stays visible */}
-            <div className="flex-1 min-h-0 overflow-y-auto p-6 sm:p-8 space-y-6">
+        <form onSubmit={handleSubmit} className="flex flex-col min-h-0 flex-1">
+          {/* Scrollable body; the Cancel / Save footer below stays visible */}
+          <div className="flex-1 min-h-0 overflow-y-auto p-6 sm:p-8 space-y-6">
             <h3 className="font-serif text-2xl text-stone-900 font-normal pr-8">
               {editingId ? 'Edit Promotion' : 'Create Promotion'}
             </h3>
@@ -658,7 +657,7 @@ export const AdminPromotionsPage: React.FC = () => {
                 {errorFor('name') && <p className="mt-1 text-[11px] text-rose-600">{errorFor('name')}</p>}
               </div>
 
-              <div>
+              {/* <div>
                 <label htmlFor="promo-type" className="block text-[10px] font-bold uppercase text-stone-500 mb-1">
                   Campaign Type
                 </label>
@@ -671,11 +670,11 @@ export const AdminPromotionsPage: React.FC = () => {
                 >
                   {PROMOTION_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
-              </div>
+              </div> */}
 
               <div>
                 <label htmlFor="promo-conditions" className="block text-[10px] font-bold uppercase text-stone-500 mb-1">
-                  Conditions
+                  DESCRIPTION
                 </label>
                 <input
                   id="promo-conditions"
@@ -934,9 +933,8 @@ export const AdminPromotionsPage: React.FC = () => {
                       type="button"
                       onClick={() => setForm({ ...form, status: st })}
                       disabled={isSaving}
-                      className={`px-2 py-2 rounded-xl border text-center font-bold transition-colors disabled:opacity-50 ${
-                        form.status === st ? 'border-stone-900 bg-stone-50 text-stone-900' : 'border-stone-200 text-stone-500 hover:border-stone-400'
-                      }`}
+                      className={`px-2 py-2 rounded-xl border text-center font-bold transition-colors disabled:opacity-50 ${form.status === st ? 'border-stone-900 bg-stone-50 text-stone-900' : 'border-stone-200 text-stone-500 hover:border-stone-400'
+                        }`}
                     >
                       {st}
                     </button>
@@ -955,11 +953,10 @@ export const AdminPromotionsPage: React.FC = () => {
                         type="button"
                         onClick={() => toggleCategory(cat.name)}
                         disabled={isSaving}
-                        className={`px-2.5 py-1 rounded-full border text-[11px] font-semibold transition-colors disabled:opacity-50 ${
-                          form.eligibleCategories.includes(cat.name)
-                            ? 'border-allura-goldDark bg-allura-bgSecondary text-allura-goldDark'
-                            : 'border-stone-200 text-stone-500 hover:border-stone-400'
-                        }`}
+                        className={`px-2.5 py-1 rounded-full border text-[11px] font-semibold transition-colors disabled:opacity-50 ${form.eligibleCategories.includes(cat.name)
+                          ? 'border-allura-goldDark bg-allura-bgSecondary text-allura-goldDark'
+                          : 'border-stone-200 text-stone-500 hover:border-stone-400'
+                          }`}
                       >
                         {cat.name}
                       </button>
@@ -968,28 +965,28 @@ export const AdminPromotionsPage: React.FC = () => {
                 </div>
               )}
             </div>
-            </div>
+          </div>
 
-              {/* Sticky footer */}
-              <div className="flex justify-end gap-2 px-6 sm:px-8 py-4 border-t border-stone-100 bg-white">
-                <button
-                  type="button"
-                  onClick={() => { setIsFormOpen(false); setEditingId(null); }}
-                  disabled={isSaving}
-                  className="px-4 py-2 border border-stone-200 rounded-xl text-stone-500"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSaving}
-                  className="px-6 py-2 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-xl font-bold uppercase tracking-wider shadow-sm disabled:opacity-50 flex items-center gap-2"
-                >
-                  {isSaving && <Loader2 size={13} className="animate-spin" />}
-                  {editingId ? 'Save Changes' : 'Create Promotion'}
-                </button>
-              </div>
-            </form>
+          {/* Sticky footer */}
+          <div className="flex justify-end gap-2 px-6 sm:px-8 py-4 border-t border-stone-100 bg-white">
+            <button
+              type="button"
+              onClick={() => { setIsFormOpen(false); setEditingId(null); }}
+              disabled={isSaving}
+              className="px-4 py-2 border border-stone-200 rounded-xl text-stone-500"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isSaving}
+              className="px-6 py-2 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-xl font-bold uppercase tracking-wider shadow-sm disabled:opacity-50 flex items-center gap-2"
+            >
+              {isSaving && <Loader2 size={13} className="animate-spin" />}
+              {editingId ? 'Save Changes' : 'Create Promotion'}
+            </button>
+          </div>
+        </form>
       </Modal>
 
       {/* Delete confirmation */}

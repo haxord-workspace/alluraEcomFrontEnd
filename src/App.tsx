@@ -97,6 +97,7 @@ import { AdminSupplierCreatePage } from './pages/admin/AdminSupplierCreatePage';
 import { AdminSupplierEditPage } from './pages/admin/AdminSupplierEditPage';
 import { AdminSupplierDetailPage } from './pages/admin/AdminSupplierDetailPage';
 import { AdminSupplierAnalyticsPage } from './pages/admin/AdminSupplierAnalyticsPage';
+import { HomepageExperiencePage } from './pages/admin/customerCRM/HomepageExperience/HomepageExperiencePage';
 
 const ScrollToTop: React.FC = () => {
   const { pathname } = useLocation();
@@ -157,6 +158,7 @@ export const AppContent: React.FC = () => {
             {/* <Route path="/admin/shipping" element={<AdminAccessGuard module="orders"><AdminShippingPage /></AdminAccessGuard>} /> */}
             <Route path="/admin/customers" element={<AdminAccessGuard module="customers"><AdminCustomersPage /></AdminAccessGuard>} />
             <Route path="/admin/customers/:id" element={<AdminAccessGuard module="customers"><AdminCustomerDetailPage /></AdminAccessGuard>} />
+            <Route path="/admin/homepage/experience" element={<AdminAccessGuard module="cms_store_content" action="view"><HomepageExperiencePage /></AdminAccessGuard>} />
             <Route path="/admin/marketing/coupons" element={<AdminAccessGuard module="coupons_banners"><AdminCouponsPage /></AdminAccessGuard>} />
             <Route path="/admin/marketing/promotions" element={<AdminAccessGuard module="coupons_banners"><AdminPromotionsPage /></AdminAccessGuard>} />
             <Route path="/admin/marketing/banners" element={<AdminAccessGuard module="coupons_banners"><AdminBannersPage /></AdminAccessGuard>} />

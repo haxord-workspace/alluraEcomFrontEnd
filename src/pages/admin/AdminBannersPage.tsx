@@ -33,7 +33,8 @@ import { useShop } from '../../context/ShopContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { ConfirmModal } from '../../components/common/ConfirmModal';
 import { Modal } from '../../components/common/Modal';
-import { ImageUploadDropzone } from '../../components/admin/ImageUploadDropzone';
+import { ImageUploadDropzone, type ImageUploadMeta } from '../../components/admin/ImageUploadDropzone';
+import { deleteImage } from '../../service/uploadService';
 import {
   getAdminBanners,
   createAdminBanner,
@@ -50,7 +51,6 @@ import {
 } from '../../service/adminBanners';
 import { getBackendErrorMessage, getBackendSuccessMessage } from '../../utils/apiResponse';
 import { AdminErrorBanner } from '../../components/admin/AdminErrorBanner';
-import { resizeImageSource } from '../../utils/image';
 import type { Banner } from '../../types';
 
 const PLACEMENT_OPTIONS: { value: BannerPlacement; label: string; shortLabel: string; desc: string }[] = [
@@ -207,6 +207,9 @@ export const AdminBannersPage: React.FC = () => {
   const [secondaryTargetUrl, setSecondaryTargetUrl] = useState('');
   const [desktopImage, setDesktopImage] = useState('');
   const [mobileImage, setMobileImage] = useState('');
+  const [desktopImageMeta, setDesktopImageMeta] = useState<ImageUploadMeta | null>(null);
+  const [mobileImageMeta, setMobileImageMeta] = useState<ImageUploadMeta | null>(null);
+  const [pendingBannerDeletions, setPendingBannerDeletions] = useState<string[]>([]);
   const [placement, setPlacement] = useState<BannerPlacement>('HOME_HERO');
   const [status, setStatus] = useState<'Active' | 'Scheduled' | 'Draft'>('Active');
   const [formStartAt, setFormStartAt] = useState('');
@@ -274,6 +277,9 @@ export const AdminBannersPage: React.FC = () => {
     setSecondaryTargetUrl('');
     setDesktopImage('');
     setMobileImage('');
+    setDesktopImageMeta(null);
+    setMobileImageMeta(null);
+    setPendingBannerDeletions([]);
     setPlacement('HOME_HERO');
     setStatus('Active');
     setFormStartAt('');
@@ -302,6 +308,17 @@ export const AdminBannersPage: React.FC = () => {
     setSecondaryTargetUrl(banner.secondaryTargetUrl || '');
     setDesktopImage(banner.desktopImage);
     setMobileImage(banner.mobileImage || banner.desktopImage);
+    setDesktopImageMeta(banner.images?.desktop ? {
+      url: banner.images.desktop.url,
+      width: banner.images.desktop.width,
+      height: banner.images.desktop.height,
+    } : null);
+    setMobileImageMeta(banner.images?.mobile ? {
+      url: banner.images.mobile.url,
+      width: banner.images.mobile.width,
+      height: banner.images.mobile.height,
+    } : null);
+    setPendingBannerDeletions([]);
     setPlacement((banner.placement as BannerPlacement) || (banner.position === 'Editorial' ? 'HOME_PROMOTION' : 'HOME_HERO'));
     setStatus(banner.status);
     setFormStartAt(banner.startsAt ? new Date(banner.startsAt).toISOString().slice(0, 16) : '');
@@ -410,33 +427,27 @@ export const AdminBannersPage: React.FC = () => {
     setIsSaving(true);
     const position = placement === 'HOME_HERO' ? 'Hero' : placement === 'HOME_PROMOTION' ? 'Editorial' : 'Secondary';
 
-    // Compress any oversized raw base64 data URLs before transmitting (under 150KB for fast instant API calls)
-    let optimizedDesktop = desktopImage;
-    let optimizedMobile = mobileImage || desktopImage;
-    if (optimizedDesktop.startsWith('data:') && optimizedDesktop.length > 50000) {
-      try {
-        optimizedDesktop = await resizeImageSource(optimizedDesktop, 1400, 0.78);
-      } catch (e) {
-        console.warn('Failed desktop compression:', e);
-      }
-    }
-    if (optimizedMobile.startsWith('data:') && optimizedMobile.length > 50000) {
-      try {
-        if (!mobileImage || mobileImage === desktopImage) {
-          optimizedMobile = optimizedDesktop;
-        } else {
-          optimizedMobile = await resizeImageSource(optimizedMobile, 900, 0.78);
-        }
-      } catch (e) {
-        console.warn('Failed mobile compression:', e);
-      }
-    }
-
     const cleanHeading = (headline || title).trim();
     const cleanSubtitle = subtitle.trim();
 
-    // Metadata only — status/startAt/endAt are lifecycle concerns handled separately
-    // via the dedicated publish/schedule/unpublish endpoints, not this metadata payload.
+    // Construct backend images payload with width/height from R2 upload response
+    const desktopPayload: { url: string; alt: string; width?: number; height?: number } = {
+      url: desktopImage,
+      alt: cleanHeading,
+    };
+    if (desktopImageMeta?.width) desktopPayload.width = desktopImageMeta.width;
+    if (desktopImageMeta?.height) desktopPayload.height = desktopImageMeta.height;
+
+    let mobilePayload: { url: string; alt: string; width?: number; height?: number } | undefined = undefined;
+    if (mobileImage && mobileImage !== desktopImage) {
+      mobilePayload = {
+        url: mobileImage,
+        alt: cleanHeading,
+      };
+      if (mobileImageMeta?.width) mobilePayload.width = mobileImageMeta.width;
+      if (mobileImageMeta?.height) mobilePayload.height = mobileImageMeta.height;
+    }
+
     const payload = {
       title: cleanHeading,
       headline: cleanHeading,
@@ -449,8 +460,12 @@ export const AdminBannersPage: React.FC = () => {
       targetUrl,
       secondaryCtaText,
       secondaryTargetUrl,
-      desktopImage: optimizedDesktop,
-      mobileImage: optimizedMobile,
+      desktopImage,
+      mobileImage: mobileImage || desktopImage,
+      images: {
+        desktop: desktopPayload,
+        ...(mobilePayload ? { mobile: mobilePayload } : {}),
+      },
       placement,
       position,
     };
@@ -493,6 +508,13 @@ export const AdminBannersPage: React.FC = () => {
         setBannersList(nextBanners);
         showToast(saved._message || (editingBanner ? 'Banner updated successfully!' : 'Banner created successfully!'), 'success');
       }
+
+      // Cleanup removed images from R2 now that banner save succeeded
+      if (pendingBannerDeletions.length > 0) {
+        pendingBannerDeletions.forEach(id => void deleteImage(id));
+        setPendingBannerDeletions([]);
+      }
+
       setIsModalOpen(false);
     } catch (err: any) {
       console.warn('[AdminBannersPage] Backend save banner error:', err);
@@ -1666,16 +1688,29 @@ export const AdminBannersPage: React.FC = () => {
                   <ImageUploadDropzone
                     label="Desktop Banner Photography"
                     required
+                    folder="banners"
+                    allowSvg={false}
+                    maxMB={10}
+                    maxSide={1920}
                     value={desktopImage}
-                    onChange={(val) => {
+                    onChange={(val, meta) => {
+                      if (desktopImageMeta?.publicId && desktopImageMeta.publicId !== meta?.publicId) {
+                        setPendingBannerDeletions(prev => [...prev, desktopImageMeta.publicId!]);
+                      }
                       setDesktopImage(val);
+                      if (meta) setDesktopImageMeta(meta);
                       if (!mobileImage || mobileImage === desktopImage) {
                         setMobileImage(val);
+                        if (meta) setMobileImageMeta(meta);
                       }
                     }}
-                    aspectRatioLabel="Recommended: 1920×800px (Auto-Optimized)"
+                    aspectRatioLabel={
+                      placement === 'HOME_HERO'
+                        ? 'Recommended: 1920×700 px (Auto-compressed to WebP)'
+                        : 'Recommended: 1600×500 px (Auto-compressed to WebP)'
+                    }
                     presets={IMAGE_PRESETS}
-                    helperText="Upload device file, paste URL, or choose preset. Automatically compressed for fast live loading."
+                    helperText="Upload device file, paste URL, or choose preset. Keep text and faces in the center. Edges are cropped on smaller screens."
                   />
 
                   {/* Optional Mobile Image Upload */}
@@ -1687,7 +1722,13 @@ export const AdminBannersPage: React.FC = () => {
                       {mobileImage !== desktopImage && (
                         <button
                           type="button"
-                          onClick={() => setMobileImage(desktopImage)}
+                          onClick={() => {
+                            if (mobileImageMeta?.publicId && mobileImageMeta.publicId !== desktopImageMeta?.publicId) {
+                              setPendingBannerDeletions(prev => [...prev, mobileImageMeta.publicId!]);
+                            }
+                            setMobileImage(desktopImage);
+                            setMobileImageMeta(desktopImageMeta);
+                          }}
                           className="text-[10px] text-[#561C08] font-bold hover:underline"
                         >
                           Reset to Desktop Image
@@ -1697,9 +1738,23 @@ export const AdminBannersPage: React.FC = () => {
                     
                     <ImageUploadDropzone
                       label="Mobile Banner Photography"
+                      folder="banners"
+                      allowSvg={false}
+                      maxMB={10}
+                      maxSide={1000}
                       value={mobileImage}
-                      onChange={(val) => setMobileImage(val)}
-                      aspectRatioLabel="Recommended: 800×1000px"
+                      onChange={(val, meta) => {
+                        if (mobileImageMeta?.publicId && mobileImageMeta.publicId !== meta?.publicId) {
+                          setPendingBannerDeletions(prev => [...prev, mobileImageMeta.publicId!]);
+                        }
+                        setMobileImage(val);
+                        if (meta) setMobileImageMeta(meta);
+                      }}
+                      aspectRatioLabel={
+                        placement === 'HOME_HERO'
+                          ? 'Recommended: 800×1000 px (Auto-compressed to WebP)'
+                          : 'Recommended: 800×600 px (Auto-compressed to WebP)'
+                      }
                       presets={IMAGE_PRESETS}
                       helperText="If omitted or identical, desktop banner image will be used automatically on mobile viewports."
                     />

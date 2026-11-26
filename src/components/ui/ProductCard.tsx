@@ -51,7 +51,7 @@ export const ProductCard = React.memo(function ProductCard({ product, showCatego
         <Link to={`/product/${product.slug}`} className="block w-full h-full">
           {/* Primary Image */}
           <img
-            src={product.images.primary}
+            src={product.images.thumbnail || product.images.primary}
             alt={product.name}
             className={`absolute inset-0 w-full h-full object-cover object-top transition-all duration-700 ${
               isHovered && product.images.secondary ? 'opacity-0 scale-105' : 'opacity-100 scale-100'
