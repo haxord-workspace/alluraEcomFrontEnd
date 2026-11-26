@@ -1,9 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { useShop } from '../../context/ShopContext';
 
 export const AnnouncementBar: React.FC = () => {
+  const { freeShippingThreshold, formatPrice } = useShop();
+  const freeShippingText =
+    freeShippingThreshold > 0
+      ? `FREE SHIPPING ON ORDERS ABOVE ${formatPrice(freeShippingThreshold)}`
+      : 'FREE SHIPPING ACROSS INDIA';
+
   const announcements = [
-    'FREE SHIPPING ON ORDERS ABOVE ₹2,999',
+    freeShippingText,
     'HANDCRAFTED DESIGNER & ETHNIC WEAR',
     'EXPRESS COURIER & WHATSAPP SUPPORT',
   ];
@@ -18,7 +25,7 @@ export const AnnouncementBar: React.FC = () => {
   }, [announcements.length]);
 
   return (
-    <div className="bg-[#561C08] text-[#FFFFFF] py-2.5 px-3 sm:px-4 text-[10px] sm:text-[11px] font-heading tracking-[0.22em] uppercase font-semibold flex items-center justify-between border-b border-[#3D1406] select-none">
+    <div className="print:hidden bg-[#561C08] text-[#FFFFFF] py-2.5 px-3 sm:px-4 text-[10px] sm:text-[11px] font-heading tracking-[0.22em] uppercase font-semibold flex items-center justify-between border-b border-[#3D1406] select-none">
       <button
         onClick={() =>
           setCurrentIndex(prev => (prev === 0 ? announcements.length - 1 : prev - 1))
@@ -31,7 +38,7 @@ export const AnnouncementBar: React.FC = () => {
 
       {/* Desktop Full Strip */}
       <div className="hidden md:flex flex-1 text-center items-center justify-center gap-4 whitespace-nowrap">
-        <span>FREE SHIPPING ON ORDERS ABOVE ₹2,999</span>
+        <span>{freeShippingText}</span>
         <span className="opacity-60">•</span>
         <span>EASY 7-DAY EXCHANGE</span>
         <span className="opacity-60">•</span>

@@ -1,57 +1,463 @@
-import React, { useState } from 'react';
-import { Check, X, Shield, RotateCcw } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Check,
+  X,
+  Shield,
+  RotateCcw,
+  Lock,
+  AlertCircle,
+  RefreshCw,
+  Info,
+  Save,
+  Loader2,
+} from 'lucide-react';
 import { useAdmin } from '../../context/AdminContext';
-import { mockDefaultPermissions } from '../../data/mockAdminSettings';
-import type { AdminRole, AdminPermissionMatrix } from '../../types';
+import { useShop } from '../../context/ShopContext';
+import { useConfirm } from '../../context/ConfirmContext';
+import { usePermissions } from '../../hooks/usePermissions';
+import {
+  buildRolePatchPayload,
+  getPermissionRegistry,
+  mapRoleMatrixErrorCode,
+  resetRolesMatrix,
+  settingsErrorMessage,
+  updateRolePermissions,
+} from '../../service/settings';
+import type { AdminRole } from '../../types';
+import {
+  DEFAULT_SUPER_ADMIN_ONLY_CELLS,
+} from '../../utils/rbac';
+import {
+  RBAC_ACTIONS,
+  RBAC_MODULE_KEYS,
+  RBAC_ROLES,
+  type PermissionRegistryResponse,
+  type PermissionValue,
+  type RbacAction,
+  type RbacModuleKey,
+  type RbacRole,
+  type RoleModuleChanges,
+  type RolePermissionsMap,
+  type RolesMatrixMap,
+} from '../../types/settings';
 
 interface PermissionMatrixProps {
   selectedRole?: AdminRole;
+  onDirtyChange?: (isDirty: boolean) => void;
 }
 
-export const PermissionMatrix: React.FC<PermissionMatrixProps> = ({ selectedRole }) => {
-  const { permissionsMatrix, updatePermissions, role: currentLoggedInRole } = useAdmin();
-  const [internalRoleTab, setInternalRoleTab] = useState<AdminRole>('SUPER_ADMIN');
-  
-  const activeRole = selectedRole || internalRoleTab;
-  const isSuperAdmin = currentLoggedInRole === 'SUPER_ADMIN';
+const ACTION_HEADERS: { key: RbacAction; label: string }[] = [
+  { key: 'view', label: 'View' },
+  { key: 'create', label: 'Create' },
+  { key: 'edit', label: 'Edit' },
+  { key: 'delete', label: 'Delete' },
+  { key: 'publish', label: 'Publish' },
+  { key: 'export', label: 'Export' },
+];
 
-  const rolesList: AdminRole[] = ['SUPER_ADMIN', 'ADMIN', 'CATALOG_MANAGER', 'ORDER_MANAGER'];
-  const targetPerms = permissionsMatrix[activeRole] || mockDefaultPermissions[activeRole] || mockDefaultPermissions.SUPER_ADMIN;
+const cloneRolePermissions = (rolePerms: RolePermissionsMap): RolePermissionsMap => {
+  const copy = {} as RolePermissionsMap;
+  RBAC_MODULE_KEYS.forEach((modKey) => {
+    copy[modKey] = { ...rolePerms[modKey] };
+  });
+  return copy;
+};
 
-  const modules: { key: keyof AdminPermissionMatrix; label: string; desc: string }[] = [
-    { key: 'dashboard', label: 'Executive Dashboard', desc: 'KPI statistics and sales charts' },
-    { key: 'products', label: 'Products & Catalog', desc: 'Product creation, editing, pricing, archive' },
-    { key: 'inventory', label: 'Inventory & Stock', desc: 'Stock adjustments, cycle count logs' },
-    { key: 'orders', label: 'Order Processing', desc: 'Status updates, Delhivery AWB dispatch' },
-    { key: 'customers', label: 'Customer CRM', desc: 'Customer histories, lifetime values' },
-    { key: 'marketing', label: 'Coupons & Banners', desc: 'Promotions, abandoned cart recovery' },
-    { key: 'cms', label: 'CMS & Store Content', desc: 'Pages, FAQs, and policies' },
-    { key: 'seo', label: 'SEO Management', desc: 'Meta tags, SERP snippets' },
-    { key: 'analytics', label: 'Analytics & Funnel', desc: 'Conversion analytics, search trends' },
-    { key: 'ai', label: 'AI Knowledge & Logs', desc: 'Stylist prompt logs and knowledge base' },
-    { key: 'notifications', label: 'Push & Email Alerts', desc: 'Omnichannel campaign broadcasts' },
-    { key: 'settings', label: 'System Settings', desc: 'Razorpay, Delhivery, WhatsApp configs' },
-    { key: 'auditLogs', label: 'Audit Trail Logs', desc: 'Security activity ledger' },
-    { key: 'adminManagement', label: 'Admin Management', desc: 'Role permissions and user access' },
-  ];
+const cloneMatrix = (src: RolesMatrixMap): RolesMatrixMap => ({
+  SUPER_ADMIN: cloneRolePermissions(src.SUPER_ADMIN),
+  ADMIN: cloneRolePermissions(src.ADMIN),
+  CATALOG_MANAGER: cloneRolePermissions(src.CATALOG_MANAGER),
+  ORDER_MANAGER: cloneRolePermissions(src.ORDER_MANAGER),
+});
 
-  const handleToggle = (moduleKey: keyof AdminPermissionMatrix, action: string) => {
-    if (!isSuperAdmin) return;
-    const currentModule = (targetPerms[moduleKey] || {}) as Record<string, boolean>;
-    const updatedModule = {
-      ...currentModule,
-      [action]: !currentModule[action],
+export const PermissionMatrix: React.FC<PermissionMatrixProps> = ({
+  selectedRole,
+  onDirtyChange,
+}) => {
+  const { setRolesMatrixState, logAdminAction } = useAdmin();
+  const {
+    realRole,
+    matrix,
+    modules,
+    roles,
+    lockedRoles,
+    isLoading,
+    isRefreshing,
+    error,
+    refreshPermissions,
+  } = usePermissions();
+  const { showToast } = useShop();
+  const confirm = useConfirm();
+
+  const [internalRoleTab, setInternalRoleTab] = useState<RbacRole>(() =>
+    realRole === 'SUPER_ADMIN' ? 'ADMIN' : 'SUPER_ADMIN'
+  );
+  const hasUserSelectedTabRef = useRef(false);
+  const [draftMatrix, setDraftMatrix] = useState<RolesMatrixMap | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+  const [failedRole, setFailedRole] = useState<RbacRole | null>(null);
+  const isDirtyRef = useRef(false);
+  const [registry, setRegistry] = useState<PermissionRegistryResponse | null>(null);
+
+  useEffect(() => {
+    getPermissionRegistry()
+      .then(setRegistry)
+      .catch((err) => console.warn('Could not load permission registry from server, using defaults:', err));
+  }, []);
+
+  const superAdminOnlySet = useMemo(() => {
+    return new Set(registry?.superAdminOnly || DEFAULT_SUPER_ADMIN_ONLY_CELLS);
+  }, [registry]);
+
+  const activeModules = useMemo(() => {
+    if (registry?.modules && registry.modules.length > 0) {
+      return registry.modules;
+    }
+    return modules;
+  }, [registry, modules]);
+
+  // Default to the first editable role (ADMIN) on first open for a logged-in SUPER_ADMIN
+  useEffect(() => {
+    if (realRole === 'SUPER_ADMIN' && !hasUserSelectedTabRef.current) {
+      setInternalRoleTab('ADMIN');
+    }
+  }, [realRole]);
+
+  // Fetch fresh matrix when the tab mounts without unmounting parent guards.
+  useEffect(() => {
+    void refreshPermissions({ background: true });
+  }, [refreshPermissions]);
+
+  // Initialize or refresh draft from server matrix unless the user has unsaved edits
+  useEffect(() => {
+    if (!matrix) return;
+    setDraftMatrix((prev) => (!prev || !isDirtyRef.current ? cloneMatrix(matrix) : prev));
+  }, [matrix]);
+
+  const rolesList: RbacRole[] = roles.length > 0 ? roles : [...RBAC_ROLES];
+  const activeRole: RbacRole = selectedRole || internalRoleTab;
+  // Edit permission strictly checks logged-in admin's real role (case-normalized in adminAuthSlice)
+  const isLoggedInSuperAdmin = realRole === 'SUPER_ADMIN';
+  const isRoleLocked = lockedRoles.includes(activeRole) || activeRole === 'SUPER_ADMIN';
+  const canEditActiveRole = isLoggedInSuperAdmin && !isRoleLocked;
+
+  // Compute diff between draftMatrix and last server copy across all editable roles
+  const { changedRoles, changesByRoleCount, totalUnsavedCount } = useMemo(() => {
+    const emptyCounts: Record<RbacRole, number> = {
+      SUPER_ADMIN: 0,
+      ADMIN: 0,
+      CATALOG_MANAGER: 0,
+      ORDER_MANAGER: 0,
     };
+    if (!matrix || !draftMatrix) {
+      return {
+        changedRoles: [] as { role: RbacRole; changes: RoleModuleChanges; count: number }[],
+        changesByRoleCount: emptyCounts,
+        totalUnsavedCount: 0,
+      };
+    }
 
-    updatePermissions(activeRole, {
-      [moduleKey]: updatedModule,
+    const list: { role: RbacRole; changes: RoleModuleChanges; count: number }[] = [];
+    let total = 0;
+
+    RBAC_ROLES.forEach((r) => {
+      if (lockedRoles.includes(r) || r === 'SUPER_ADMIN') return;
+      const roleChanges: RoleModuleChanges = {};
+      let roleCount = 0;
+
+      RBAC_MODULE_KEYS.forEach((modKey) => {
+        const serverMod = matrix[r]?.[modKey];
+        const draftMod = draftMatrix[r]?.[modKey];
+        if (!serverMod || !draftMod) return;
+
+        const actionDiff: Partial<Record<RbacAction, boolean>> = {};
+        let hasModDiff = false;
+
+        RBAC_ACTIONS.forEach((act) => {
+          const serverVal = serverMod[act];
+          const draftVal = draftMod[act];
+          if (serverVal !== null && draftVal !== null && serverVal !== draftVal) {
+            actionDiff[act] = draftVal;
+            hasModDiff = true;
+            roleCount += 1;
+          }
+        });
+
+        if (hasModDiff) {
+          roleChanges[modKey] = actionDiff;
+        }
+      });
+
+      emptyCounts[r] = roleCount;
+      if (roleCount > 0) {
+        list.push({ role: r, changes: roleChanges, count: roleCount });
+        total += roleCount;
+      }
+    });
+
+    return { changedRoles: list, changesByRoleCount: emptyCounts, totalUnsavedCount: total };
+  }, [matrix, draftMatrix, lockedRoles]);
+
+  const isDirty = isLoggedInSuperAdmin && totalUnsavedCount > 0;
+  isDirtyRef.current = isDirty;
+
+  useEffect(() => {
+    onDirtyChange?.(isDirty);
+  }, [isDirty, onDirtyChange]);
+
+  const displayMatrix = isLoggedInSuperAdmin && draftMatrix ? draftMatrix : matrix;
+  const targetPerms = displayMatrix ? displayMatrix[activeRole] : undefined;
+  const serverTargetPerms = matrix ? matrix[activeRole] : undefined;
+
+  const handleCellToggle = async (moduleKey: RbacModuleKey, action: RbacAction) => {
+    if (!canEditActiveRole || isSaving || isResetting || !draftMatrix) return;
+
+    // Locked cells reserved for Super Admin only cannot be toggled for other roles
+    if (superAdminOnlySet.has(`${moduleKey}:${action}`) && (activeRole as string) !== 'SUPER_ADMIN') {
+      return;
+    }
+
+    // Special modules with no configurable permissions
+    if (moduleKey === 'ai_knowledge_logs' || moduleKey === 'audit_trail_logs') {
+      return;
+    }
+
+    const currentMod = draftMatrix[activeRole]?.[moduleKey];
+    if (!currentMod) return;
+    const currentValue = currentMod[action];
+    if (currentValue === null) return; // Never toggle null (not applicable)
+
+    const nextValue = !currentValue;
+
+    // Safety rule: admin_management create/edit/delete for non-super roles requires confirmation
+    if (
+      moduleKey === 'admin_management' &&
+      (action === 'create' || action === 'edit' || action === 'delete') &&
+      nextValue === true
+    ) {
+      const ok = await confirm({
+        title: 'Grant admin management privilege?',
+        message: 'Granting this lets this role manage admin accounts. Continue?',
+        confirmLabel: 'Continue',
+        isDestructive: true,
+      });
+      if (!ok) return;
+    }
+
+    // Extra confirmation for risky grants (delete/export actions, or sensitive modules)
+    const RISKY_ACTIONS: RbacAction[] = ['delete', 'export'];
+    const RISKY_MODULES: RbacModuleKey[] = ['system_settings', 'audit_trail_logs', 'admin_management'];
+    const isRiskyAction = RISKY_ACTIONS.includes(action);
+    const isRiskyModule = RISKY_MODULES.includes(moduleKey);
+    if (nextValue === true && (isRiskyAction || isRiskyModule) && moduleKey !== 'admin_management') {
+      const modLabel = modules.find(m => m.key === moduleKey)?.label ?? moduleKey;
+      const ok = await confirm({
+        title: `Grant ${action} permission?`,
+        message: `Granting ${action.toUpperCase()} on "${modLabel}" is a sensitive operation. This role will be able to ${action === 'delete' ? 'permanently delete records' : action === 'export' ? 'export data' : 'modify system configuration'}. Continue?`,
+        confirmLabel: 'Grant',
+        isDestructive: true,
+      });
+      if (!ok) return;
+    }
+
+    // Safety rule: turning view OFF revokes other granted actions on this module (with confirmation)
+    let revokeOtherGranted = false;
+    if (action === 'view' && nextValue === false) {
+      const hasOtherGranted = RBAC_ACTIONS.some(
+        (act) => act !== 'view' && currentMod[act] === true
+      );
+      if (hasOtherGranted) {
+        const ok = await confirm({
+          title: 'Revoke module permissions?',
+          message:
+            'Turning off View will also revoke the other granted permissions on this module. Continue?',
+          confirmLabel: 'Revoke all',
+          isDestructive: true,
+        });
+        if (!ok) return;
+        revokeOtherGranted = true;
+      }
+    }
+
+    if (failedRole === activeRole) {
+      setFailedRole(null);
+    }
+
+    setDraftMatrix((prev) => {
+      if (!prev) return prev;
+      const prevMod = prev[activeRole][moduleKey];
+      const nextMod = { ...prevMod, [action]: nextValue };
+
+      if (revokeOtherGranted) {
+        RBAC_ACTIONS.forEach((act) => {
+          if (act !== 'view' && nextMod[act] === true) {
+            nextMod[act] = false;
+          }
+        });
+      }
+
+      // Safety rule: turning any non-view action ON auto-enables view if currently false
+      if (action !== 'view' && nextValue === true && nextMod.view === false) {
+        nextMod.view = true;
+      }
+
+      return {
+        ...prev,
+        [activeRole]: {
+          ...prev[activeRole],
+          [moduleKey]: nextMod,
+        },
+      };
     });
   };
 
-  const handleResetDefaults = () => {
-    if (!isSuperAdmin) return;
-    if (mockDefaultPermissions[activeRole]) {
-      updatePermissions(activeRole, mockDefaultPermissions[activeRole]);
+  const handleSaveChanges = async () => {
+    if (!isLoggedInSuperAdmin || isSaving || isResetting || changedRoles.length === 0) return;
+
+    setIsSaving(true);
+    setFailedRole(null);
+
+    // Build a human-readable diff list and show confirmation before saving
+    const moduleLabel = (key: string) => modules.find(m => m.key === key)?.label ?? key.replace(/_/g, ' ');
+    const diffLines = changedRoles.flatMap(({ role: r, changes }) =>
+      Object.entries(changes).flatMap(([mKey, actMap]) =>
+        Object.entries(actMap ?? {}).map(
+          ([act, val]) =>
+            `${r.replace(/_/g, ' ')}: ${moduleLabel(mKey)} › ${act.toUpperCase()}: ${val ? '✓ GRANTED' : '✗ REVOKED'}`
+        )
+      )
+    );
+    const ok = await confirm({
+      title: `Save ${totalUnsavedCount} permission change${totalUnsavedCount === 1 ? '' : 's'}?`,
+      message: diffLines.join('\n'),
+      confirmLabel: 'Save',
+      isDestructive: false,
+    });
+    if (!ok) {
+      setIsSaving(false);
+      return;
+    }
+
+    let lastServerMatrix = null;
+    const savedRoleNames: string[] = [];
+
+    for (const item of changedRoles) {
+      try {
+        const payload = buildRolePatchPayload(item.changes);
+        const updated = await updateRolePermissions(item.role, payload);
+        if (updated) {
+          lastServerMatrix = updated;
+        }
+        savedRoleNames.push(item.role);
+
+        // Advance server copy for this role immediately so a later failure won't re-send it
+        setRolesMatrixState((prev) => {
+          if (!prev) return updated ?? prev;
+          if (updated) return updated;
+          const nextRolePerms = cloneRolePermissions(prev.matrix[item.role]);
+          Object.entries(item.changes).forEach(([mKey, actMap]) => {
+            if (!actMap) return;
+            const mk = mKey as RbacModuleKey;
+            nextRolePerms[mk] = { ...nextRolePerms[mk], ...actMap };
+          });
+          return {
+            ...prev,
+            matrix: {
+              ...prev.matrix,
+              [item.role]: nextRolePerms,
+            },
+          };
+        });
+      } catch (err: any) {
+        setFailedRole(item.role);
+        const fallbackMsg = settingsErrorMessage(
+          err,
+          `Couldn't save permissions for ${item.role.replace(/_/g, ' ')}`
+        );
+        const message = mapRoleMatrixErrorCode(err, fallbackMsg);
+        showToast(message, 'error');
+        setIsSaving(false);
+        return;
+      }
+    }
+
+    // Sync live permissions across the app (usePermissions / AdminContext)
+    if (lastServerMatrix) {
+      setRolesMatrixState(lastServerMatrix);
+      setDraftMatrix(cloneMatrix(lastServerMatrix.matrix));
+    } else {
+      const refreshed = await refreshPermissions({ background: true });
+      if (refreshed) {
+        setDraftMatrix(cloneMatrix(refreshed.matrix));
+      }
+    }
+
+    logAdminAction(
+      'Changed Permission',
+      'Admin Management',
+      savedRoleNames.join(', '),
+      `Updated ${totalUnsavedCount} permission flag(s)`
+    );
+    showToast('Permissions updated', 'success');
+    setIsSaving(false);
+  };
+
+  const handleDiscardChanges = async () => {
+    if (!matrix || totalUnsavedCount === 0 || isSaving) return;
+    const ok = await confirm({
+      title: 'Discard unsaved changes?',
+      message: `Discard ${totalUnsavedCount} unsaved permission change${totalUnsavedCount === 1 ? '' : 's'}?`,
+      confirmLabel: 'Discard',
+      isDestructive: true,
+    });
+    if (!ok) return;
+
+    setDraftMatrix(cloneMatrix(matrix));
+    setFailedRole(null);
+  };
+
+  const handleResetDefaults = async () => {
+    if (!canEditActiveRole || isResetting || isSaving) return;
+
+    const ok = await confirm({
+      title: 'Reset role permissions?',
+      message: `Reset ${activeRole} permissions to the default matrix? This will discard your saved custom settings for this role.`,
+      confirmLabel: 'Reset to Defaults',
+      isDestructive: true,
+    });
+    if (!ok) return;
+
+    setIsResetting(true);
+    setFailedRole((prev) => (prev === activeRole ? null : prev));
+
+    try {
+      await resetRolesMatrix(activeRole);
+      const refreshed = await refreshPermissions({ background: true });
+      if (refreshed) {
+        setDraftMatrix((prev) => {
+          if (!prev) return cloneMatrix(refreshed.matrix);
+          return {
+            ...prev,
+            [activeRole]: cloneRolePermissions(refreshed.matrix[activeRole]),
+          };
+        });
+      }
+      logAdminAction(
+        'Changed Permission',
+        'Admin Management',
+        `Reset ${activeRole} permissions to defaults`
+      );
+      showToast(`Permissions reset to defaults for ${activeRole.replace(/_/g, ' ')}`, 'success');
+    } catch (err: any) {
+      const status = err?.response?.status;
+      const message =
+        status === 403
+          ? 'Only Super Admin can change permissions'
+          : settingsErrorMessage(err, `Couldn't reset permissions for ${activeRole.replace(/_/g, ' ')}`);
+      showToast(message, 'error');
+    } finally {
+      setIsResetting(false);
     }
   };
 
@@ -59,105 +465,373 @@ export const PermissionMatrix: React.FC<PermissionMatrixProps> = ({ selectedRole
     <div className="bg-allura-card border border-allura-border rounded-2xl overflow-hidden shadow-subtle text-xs font-sans">
       <div className="p-4 bg-allura-bgSecondary/80 border-b border-allura-border flex flex-col md:flex-row md:items-center justify-between gap-3">
         <div>
-          <h3 className="font-serif text-lg text-allura-text font-normal flex items-center gap-2">
-            <Shield size={16} className="text-allura-goldDark" />
-            <span>Role Permissions Matrix</span>
-          </h3>
-          <p className="text-[11px] text-allura-muted">
-            {isSuperAdmin
-              ? 'Click toggles to grant or restrict specific operational capabilities for each role.'
-              : 'View-only mode. Super Admin privileges required to modify role matrices.'}
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="font-serif text-lg text-allura-text font-normal flex items-center gap-2">
+              <Shield size={16} className="text-allura-goldDark" />
+              <span>Role Permissions Matrix</span>
+            </h3>
+            {isLoggedInSuperAdmin ? (
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-sans font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200">
+                Edit mode
+              </span>
+            ) : (
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-sans font-bold uppercase tracking-wider bg-stone-200 text-stone-700 border border-stone-300">
+                View only
+              </span>
+            )}
+          </div>
+          <p className="text-[11px] text-allura-muted mt-0.5">
+            {!isLoggedInSuperAdmin
+              ? 'View-only mode. Super Admin privileges required to modify role matrices.'
+              : isRoleLocked
+                ? 'Super Admin has full, fixed access and cannot be edited. Select ADMIN, CATALOG_MANAGER or ORDER_MANAGER to change permissions.'
+                : 'Click a cell to grant or revoke. Changes apply after you press Save.'}
           </p>
         </div>
 
         {!selectedRole && (
-          <div className="flex items-center gap-2">
-            <div className="flex bg-stone-200/80 p-1 rounded-xl gap-1">
-              {rolesList.map(r => (
-                <button
-                  key={r}
-                  onClick={() => setInternalRoleTab(r)}
-                  className={`px-2.5 py-1 rounded-lg text-[11px] font-mono transition-all ${
-                    activeRole === r
-                      ? 'bg-allura-darkBrown text-white font-bold shadow-xs'
-                      : 'text-stone-600 hover:text-stone-900'
-                  }`}
-                >
-                  {r}
-                </button>
-              ))}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap bg-stone-200/80 p-1 rounded-xl gap-1">
+              {rolesList.map((r) => {
+                const roleDirtyCount = isLoggedInSuperAdmin ? changesByRoleCount[r] || 0 : 0;
+                const isTabLocked = lockedRoles.includes(r) || r === 'SUPER_ADMIN';
+                return (
+                  <button
+                    key={r}
+                    type="button"
+                    title={isTabLocked ? 'Super Admin permissions are locked and cannot be edited' : undefined}
+                    onClick={() => {
+                      hasUserSelectedTabRef.current = true;
+                      setInternalRoleTab(r);
+                    }}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-mono transition-all inline-flex items-center gap-1.5 ${
+                      activeRole === r
+                        ? 'bg-allura-darkBrown text-white font-bold shadow-xs'
+                        : 'text-stone-600 hover:text-stone-900'
+                    }`}
+                  >
+                    {isTabLocked && <Lock size={10} className="opacity-75" />}
+                    <span>{r}</span>
+                    {roleDirtyCount > 0 && (
+                      <span
+                        className="w-1.5 h-1.5 rounded-full bg-amber-400"
+                        title={`${roleDirtyCount} unsaved change(s)`}
+                        aria-label={`${roleDirtyCount} unsaved changes`}
+                      />
+                    )}
+                  </button>
+                );
+              })}
             </div>
 
-            {isSuperAdmin && (
+            {isLoggedInSuperAdmin && (
               <button
                 type="button"
-                onClick={handleResetDefaults}
-                className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-stone-300 text-[11px] text-stone-600 hover:bg-stone-100 transition-colors"
-                title="Reset active role to system default permissions"
+                onClick={() => void handleResetDefaults()}
+                disabled={isRoleLocked || isResetting || isSaving || isLoading}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-stone-300 text-[11px] text-stone-600 hover:bg-stone-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                title={
+                  isRoleLocked
+                    ? 'Super Admin permissions are locked'
+                    : 'Reset active role to system default permissions'
+                }
               >
-                <RotateCcw size={12} />
-                <span>Reset</span>
+                <RotateCcw size={12} className={isResetting ? 'animate-spin' : ''} />
+                <span>{isResetting ? 'Resetting…' : 'Reset to defaults'}</span>
               </button>
             )}
           </div>
         )}
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="border-b border-allura-border text-[10px] uppercase font-bold text-allura-muted bg-allura-bg/60">
-              <th className="p-4">Module Name</th>
-              <th className="p-4 text-center">View</th>
-              <th className="p-4 text-center">Create</th>
-              <th className="p-4 text-center">Edit</th>
-              <th className="p-4 text-center">Delete</th>
-              <th className="p-4 text-center">Publish</th>
-              <th className="p-4 text-center">Export</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-allura-border/60">
-            {modules.map(mod => {
-              const modPerms = (targetPerms[mod.key] || {}) as Record<string, boolean>;
+      {/* Legend + Role helper notes */}
+      <div className="px-4 py-2.5 bg-allura-bg/40 border-b border-allura-border/70 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-4 text-[11px] text-allura-muted">
+          <span className="inline-flex items-center gap-1.5">
+            <span className="w-5 h-5 rounded-md bg-emerald-100 text-emerald-800 inline-flex items-center justify-center">
+              <Check size={12} />
+            </span>
+            <span>Granted</span>
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="w-5 h-5 rounded-md bg-rose-50 text-rose-600 border border-rose-200/80 inline-flex items-center justify-center">
+              <X size={12} />
+            </span>
+            <span>Not granted</span>
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="w-5 h-5 inline-flex items-center justify-center text-stone-400 font-mono text-xs">
+              —
+            </span>
+            <span>Not applicable</span>
+          </span>
+          {isLoggedInSuperAdmin && (
+            <span className="text-stone-500">
+              • Staff see changes the next time their session refreshes.
+            </span>
+          )}
+        </div>
 
-              return (
-                <tr key={mod.key} className="hover:bg-white/60 transition-colors">
-                  <td className="p-4">
-                    <p className="font-medium text-allura-text">{mod.label}</p>
-                    <p className="text-[10px] text-allura-muted">{mod.desc}</p>
-                  </td>
-
-                  {['view', 'create', 'edit', 'delete', 'publish', 'export'].map(action => {
-                    const hasAccess = modPerms[action] !== undefined ? modPerms[action] : false;
-                    const isApplicable = modPerms[action] !== undefined;
-
-                    return (
-                      <td key={action} className="p-4 text-center">
-                        {isApplicable ? (
-                          <button
-                            type="button"
-                            disabled={!isSuperAdmin}
-                            onClick={() => handleToggle(mod.key, action)}
-                            className={`w-7 h-7 rounded-lg inline-flex items-center justify-center transition-all ${
-                              hasAccess
-                                ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
-                                : 'bg-stone-100 text-stone-400 hover:bg-stone-200'
-                            } ${!isSuperAdmin ? 'cursor-default' : 'cursor-pointer'}`}
-                          >
-                            {hasAccess ? <Check size={14} /> : <X size={14} />}
-                          </button>
-                        ) : (
-                          <span className="text-stone-300 font-mono text-xs">—</span>
-                        )}
-                      </td>
-                    );
-                  })}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        {isRoleLocked && (
+          <span className="inline-flex items-center gap-1 text-[11px] text-amber-800 bg-amber-50 border border-amber-200/80 px-2.5 py-0.5 rounded-full font-medium shrink-0">
+            <Lock size={11} />
+            <span>Locked — select ADMIN, CATALOG_MANAGER or ORDER_MANAGER to edit</span>
+          </span>
+        )}
       </div>
+
+      {registry?.rules && registry.rules.length > 0 && !isLoading && (
+        <div className="px-4 py-3 bg-stone-50 border-b border-allura-border/60 space-y-1 text-[11px] text-stone-600">
+          <div className="flex items-center gap-1.5 font-semibold text-stone-800">
+            <Info size={13} className="text-allura-goldDark shrink-0" />
+            <span>RBAC Matrix Rules:</span>
+          </div>
+          <ul className="list-disc list-inside space-y-0.5 text-[11px] text-stone-600 pl-1">
+            {registry.rules.map((rule, idx) => (
+              <li key={idx}>{rule}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {activeRole === 'ADMIN' && !isLoading && !error && !registry?.rules && (
+        <div className="px-4 py-2.5 bg-stone-50 border-b border-allura-border/60 flex items-start gap-2 text-[11px] text-stone-600">
+          <Info size={14} className="text-allura-goldDark shrink-0 mt-0.5" />
+          <span>
+            <strong>Privilege Escalation Guard:</strong> Admin can view staff (<code className="font-mono">admin_management: view</code>)
+            but by default cannot create, edit, or delete staff accounts. Only Super Admin can manage staff.
+          </span>
+        </div>
+      )}
+
+      {error && matrix && (
+        <div className="px-4 py-2.5 bg-rose-50 border-b border-rose-200/80 flex items-center justify-between gap-3 text-xs text-rose-800">
+          <span>Couldn&apos;t refresh permissions: {error}</span>
+          <button
+            type="button"
+            onClick={() => void refreshPermissions({ background: true })}
+            disabled={isRefreshing}
+            className="inline-flex items-center gap-1 font-semibold underline disabled:opacity-50"
+          >
+            <RefreshCw size={11} className={isRefreshing ? 'animate-spin' : ''} />
+            <span>Retry</span>
+          </button>
+        </div>
+      )}
+
+      {/* Content states: Loading -> Error -> Empty -> Matrix Table */}
+      {isLoading && !matrix ? (
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="border-b border-allura-border text-[10px] uppercase font-bold text-allura-muted bg-allura-bg/60">
+                <th className="p-4">Module Name</th>
+                {ACTION_HEADERS.map((col) => (
+                  <th key={col.key} className="p-4 text-center">{col.label}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-allura-border/60">
+              {Array.from({ length: 8 }).map((_, rowIdx) => (
+                <tr key={rowIdx}>
+                  <td className="p-4 space-y-1.5">
+                    <div className="h-3.5 w-36 bg-stone-200/80 rounded animate-pulse" />
+                    <div className="h-2.5 w-52 bg-stone-100 rounded animate-pulse" />
+                  </td>
+                  {RBAC_ACTIONS.map((act) => (
+                    <td key={act} className="p-4 text-center">
+                      <div className="w-7 h-7 rounded-lg bg-stone-200/70 animate-pulse mx-auto" />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : error && !matrix ? (
+        <div className="p-10 text-center space-y-3">
+          <AlertCircle size={24} className="text-rose-600 mx-auto" />
+          <div className="space-y-1">
+            <p className="text-sm font-semibold text-stone-900">Couldn&apos;t load permissions</p>
+            <p className="text-xs text-rose-600">{error}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void refreshPermissions()}
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg border border-stone-300 text-xs font-semibold text-stone-700 hover:bg-stone-100 transition-colors"
+          >
+            <RefreshCw size={12} />
+            <span>Retry</span>
+          </button>
+        </div>
+      ) : !targetPerms || modules.length === 0 ? (
+        <div className="p-10 text-center text-xs text-allura-muted">
+          No permissions configured for {activeRole.replace(/_/g, ' ')}.
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="border-b border-allura-border text-[10px] uppercase font-bold text-allura-muted bg-allura-bg/60">
+                <th className="p-4">Module Name</th>
+                {ACTION_HEADERS.map((col) => (
+                  <th key={col.key} className="p-4 text-center">{col.label}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-allura-border/60">
+              {activeModules.map((mod) => {
+                const isSpecialUnconfigurable = mod.key === 'ai_knowledge_logs' || mod.key === 'audit_trail_logs';
+                const modPerms = targetPerms[mod.key];
+                const serverModPerms = serverTargetPerms?.[mod.key];
+
+                return (
+                  <tr key={mod.key} className="hover:bg-white/60 transition-colors">
+                    <td className="p-4">
+                      <p className="font-medium text-allura-text">{mod.label}</p>
+                      <p className="text-[10px] text-allura-muted">{mod.description}</p>
+                      {isSpecialUnconfigurable && (
+                        <p className="text-[10px] text-amber-700 italic mt-0.5">
+                          No configurable permissions yet
+                        </p>
+                      )}
+                    </td>
+
+                    {ACTION_HEADERS.map(({ key: action, label: colLabel }) => {
+                      const isSuperAdminOnlyCell =
+                        superAdminOnlySet.has(`${mod.key}:${action}`) && activeRole !== 'SUPER_ADMIN';
+
+                      if (isSpecialUnconfigurable) {
+                        return (
+                          <td key={action} className="p-4 text-center">
+                            <span
+                              className="text-stone-300 font-mono text-xs select-none cursor-help"
+                              title="No such feature in this module"
+                              aria-label={`${mod.label}, ${colLabel}, not applicable`}
+                            >
+                              —
+                            </span>
+                          </td>
+                        );
+                      }
+
+                      if (isSuperAdminOnlyCell) {
+                        return (
+                          <td key={action} className="p-4 text-center">
+                            <span
+                              className="w-7 h-7 rounded-lg inline-flex items-center justify-center bg-stone-100 text-stone-400 border border-stone-200 select-none cursor-not-allowed mx-auto"
+                              title="Only Super Admin can manage staff"
+                              aria-label={`${mod.label}, ${colLabel}, locked (Only Super Admin can manage staff)`}
+                            >
+                              <Lock size={12} className="text-stone-400" />
+                            </span>
+                          </td>
+                        );
+                      }
+
+                      const flag: PermissionValue = modPerms ? modPerms[action] : null;
+                      const serverFlag: PermissionValue = serverModPerms ? serverModPerms[action] : null;
+                      const isCellDirty =
+                        canEditActiveRole &&
+                        flag !== null &&
+                        serverFlag !== null &&
+                        flag !== serverFlag;
+
+                      return (
+                        <td key={action} className="p-4 text-center">
+                          {flag === null ? (
+                            <span
+                              className="text-stone-300 font-mono text-xs select-none cursor-help"
+                              title="No such feature in this module"
+                              aria-label={`${mod.label}, ${colLabel}, not applicable`}
+                            >
+                              —
+                            </span>
+                          ) : canEditActiveRole ? (
+                            <button
+                              type="button"
+                              disabled={isSaving || isResetting}
+                              onClick={() => void handleCellToggle(mod.key, action)}
+                              aria-pressed={flag}
+                              aria-label={`${mod.label}, ${colLabel}, ${flag ? 'granted' : 'not granted'}${isCellDirty ? ', unsaved change' : ''}`}
+                              title={flag ? 'Click to revoke permission' : 'Click to grant permission'}
+                              className={`relative w-7 h-7 rounded-lg inline-flex items-center justify-center transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-allura-darkBrown focus-visible:ring-offset-1 disabled:opacity-60 disabled:cursor-not-allowed ${
+                                flag
+                                  ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
+                                  : 'bg-rose-50 text-rose-600 border border-rose-200/80 hover:bg-rose-100'
+                              } ${isCellDirty ? 'ring-2 ring-amber-500/80 ring-offset-1' : ''}`}
+                            >
+                              {flag ? <Check size={14} /> : <X size={14} />}
+                              {isCellDirty && (
+                                <span
+                                  className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-500 border border-white"
+                                  aria-hidden="true"
+                                />
+                              )}
+                            </button>
+                          ) : (
+                            <span
+                              aria-label={`${mod.label}, ${colLabel}, ${flag ? 'granted' : 'not granted'}`}
+                              className={`w-7 h-7 rounded-lg inline-flex items-center justify-center ${
+                                flag
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : 'bg-rose-50 text-rose-600 border border-rose-200/80'
+                              }`}
+                            >
+                              {flag ? <Check size={14} /> : <X size={14} />}
+                            </span>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Sticky Save / Discard bar when there are unsaved changes */}
+      {isDirty && (
+        <div className="sticky bottom-0 z-20 px-4 py-3 bg-stone-900 text-white border-t border-stone-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-xs">
+            <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" aria-hidden="true" />
+            <span className="font-semibold">
+              {totalUnsavedCount} unsaved change{totalUnsavedCount === 1 ? '' : 's'}
+            </span>
+            {failedRole && (
+              <span className="text-rose-300 font-medium">
+                • Failed saving {failedRole.replace(/_/g, ' ')}
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 self-end sm:self-auto">
+            <button
+              type="button"
+              onClick={() => void handleDiscardChanges()}
+              disabled={isSaving}
+              className="px-3.5 py-1.5 rounded-lg border border-stone-600 text-xs font-semibold text-stone-200 hover:bg-stone-800 transition-colors disabled:opacity-50"
+            >
+              Discard
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleSaveChanges()}
+              disabled={isSaving}
+              className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-[#F7E6C8] text-[#561C08] hover:bg-white hover:text-[#561C08] text-xs font-bold transition-all shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {isSaving ? (
+                <Loader2 size={13} className="animate-spin" />
+              ) : (
+                <Save size={13} />
+              )}
+              <span>{isSaving ? 'Saving…' : 'Save changes'}</span>
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

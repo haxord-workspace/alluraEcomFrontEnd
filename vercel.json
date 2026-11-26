@@ -1,0 +1,16 @@
+{
+  "rewrites": [
+    {
+      "source": "/sitemap.xml",
+      "destination": "http://brrznrocasztfxgjracrzfru.200.141.6.198.sslip.io/api/v1/sitemap.xml"
+    },
+    {
+      "source": "/robots.txt",
+      "destination": "http://brrznrocasztfxgjracrzfru.200.141.6.198.sslip.io/api/v1/robots.txt"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}

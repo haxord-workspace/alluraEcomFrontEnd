@@ -1,57 +1,131 @@
-import React, { useState, useRef } from 'react';
-import { Upload, Link as LinkIcon, Sparkles, X, Check, RefreshCw } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Upload, Link as LinkIcon, Sparkles, X, Check, RefreshCw, Loader2 } from 'lucide-react';
+import { validateImageFile, compressImage } from '../../utils/imageUpload';
+import { uploadImage } from '../../service/uploadService';
 
 interface PresetOption {
   label: string;
   url: string;
 }
 
+export interface ImageUploadMeta {
+  url: string;
+  publicId?: string;
+  width?: number;
+  height?: number;
+  bytes?: number;
+}
+
 interface ImageUploadDropzoneProps {
   label: string;
   value: string;
-  onChange: (value: string) => void;
+  onChange: (value: string, meta?: ImageUploadMeta) => void;
   aspectRatioLabel?: string;
   presets?: PresetOption[];
   required?: boolean;
   helperText?: string;
+  showUrlTab?: boolean;
+  showPresetsTab?: boolean;
   className?: string;
+  folder?: string;
+  allowSvg?: boolean;
+  maxMB?: number;
+  maxSide?: number;
 }
 
 export const ImageUploadDropzone: React.FC<ImageUploadDropzoneProps> = ({
   label,
   value,
   onChange,
-  aspectRatioLabel = 'Recommended: High Resolution (1920×800px or 1080×1080px)',
+  aspectRatioLabel = 'Recommended: High Resolution',
   presets = [],
   required = false,
   helperText,
   className = '',
+  showUrlTab = true,
+  showPresetsTab = true,
+  folder = 'general',
+  allowSvg = false,
+  maxMB = 10,
+  maxSide = 1920,
 }) => {
   const [activeTab, setActiveTab] = useState<'upload' | 'url' | 'presets'>('upload');
   const [isDragging, setIsDragging] = useState(false);
   const [urlInput, setUrlInput] = useState(value && !value.startsWith('data:') ? value : '');
   const [fileName, setFileName] = useState<string>('');
   const [fileSize, setFileSize] = useState<string>('');
+  const [fileError, setFileError] = useState<string>('');
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadPercent, setUploadPercent] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFile = (file: File) => {
-    if (!file.type.startsWith('image/')) {
-      alert('Please select a valid image file (JPEG, PNG, WebP, SVG, AVIF).');
+  useEffect(() => {
+    if (!value) {
+      setUrlInput('');
+      setFileName('');
+      setFileSize('');
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    } else if (!value.startsWith('data:')) {
+      setUrlInput(value);
+    }
+  }, [value]);
+
+  const handleFile = async (file: File) => {
+    setFileError('');
+
+    // 1. Validate
+    const validation = validateImageFile(file, { maxMB, allowSvg });
+    if (!validation.valid) {
+      setFileError(validation.error || 'Invalid image file.');
       return;
     }
 
     setFileName(file.name);
-    const sizeInKb = Math.round(file.size / 1024);
-    setFileSize(sizeInKb > 1024 ? `${(sizeInKb / 1024).toFixed(1)} MB` : `${sizeInKb} KB`);
+    setIsUploading(true);
+    setUploadPercent(10);
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const result = e.target?.result as string;
-      if (result) {
-        onChange(result);
+    try {
+      // 2. Compress before upload
+      const compressed = await compressImage(file, {
+        maxSide,
+        quality: 0.8,
+        outputType: 'image/webp',
+      });
+
+      setUploadPercent(40);
+
+      // 3. Upload to R2 via POST /api/v1/admin/uploads/image
+      const res = await uploadImage(compressed, folder, (percent) => {
+        setUploadPercent(40 + Math.round(percent * 0.55));
+      });
+
+      setUploadPercent(100);
+
+      const finalUrl = res.secureUrl || res.url;
+      const originalKb = Math.round(file.size / 1024);
+      const compressedKb = Math.round(compressed.size / 1024);
+
+      if (originalKb > compressedKb) {
+        setFileSize(`${compressedKb} KB (optimized from ${originalKb > 1024 ? (originalKb / 1024).toFixed(1) + ' MB' : originalKb + ' KB'})`);
+      } else {
+        setFileSize(`${compressedKb} KB`);
       }
-    };
-    reader.readAsDataURL(file);
+
+      onChange(finalUrl, {
+        url: finalUrl,
+        publicId: res.publicId,
+        width: res.width,
+        height: res.height,
+        bytes: res.bytes,
+      });
+    } catch (err: any) {
+      setFileError(err.message || 'Failed to process and upload image.');
+    } finally {
+      setIsUploading(false);
+      setUploadPercent(null);
+    }
   };
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
@@ -72,12 +146,29 @@ export const ImageUploadDropzone: React.FC<ImageUploadDropzoneProps> = ({
     setIsDragging(false);
   };
 
-  const handleUrlSubmit = () => {
-    if (urlInput.trim()) {
-      onChange(urlInput.trim());
-      setFileName('');
-      setFileSize('');
+  const handleUrlSubmit = async () => {
+    const raw = urlInput.trim();
+    if (!raw) return;
+
+    // If user pastes base64 data:image/, upload as file instead of saving raw data
+    if (raw.startsWith('data:image/')) {
+      try {
+        setIsUploading(true);
+        const res = await fetch(raw);
+        const blob = await res.blob();
+        const file = new File([blob], 'pasted-image.webp', { type: blob.type || 'image/webp' });
+        await handleFile(file);
+      } catch {
+        setFileError('Could not process pasted base64 image data.');
+        setIsUploading(false);
+      }
+      return;
     }
+
+    // Normal external URL
+    onChange(raw, { url: raw });
+    setFileName('');
+    setFileSize('');
   };
 
   const handleClear = () => {
@@ -119,20 +210,22 @@ export const ImageUploadDropzone: React.FC<ImageUploadDropzoneProps> = ({
           <span>Upload File</span>
         </button>
 
-        <button
-          type="button"
-          onClick={() => setActiveTab('url')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition-all ${
-            activeTab === 'url'
-              ? 'bg-white text-[#561C08] shadow-xs font-bold'
-              : 'text-stone-600 hover:text-stone-900'
-          }`}
-        >
-          <LinkIcon size={12} />
-          <span>Image URL</span>
-        </button>
+        {showUrlTab && (
+          <button
+            type="button"
+            onClick={() => setActiveTab('url')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition-all ${
+              activeTab === 'url'
+                ? 'bg-white text-[#561C08] shadow-xs font-bold'
+                : 'text-stone-600 hover:text-stone-900'
+            }`}
+          >
+            <LinkIcon size={12} />
+            <span>Image URL</span>
+          </button>
+        )}
 
-        {presets.length > 0 && (
+        {showPresetsTab && presets.length > 0 && (
           <button
             type="button"
             onClick={() => setActiveTab('presets')}
@@ -154,77 +247,72 @@ export const ImageUploadDropzone: React.FC<ImageUploadDropzoneProps> = ({
           onDrop={handleDrop}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
-          onClick={() => fileInputRef.current?.click()}
+          onClick={() => !isUploading && fileInputRef.current?.click()}
           className={`relative border-2 border-dashed rounded-2xl p-5 text-center cursor-pointer transition-all duration-200 ${
             isDragging
-              ? 'border-[#561C08] bg-[#F7E6C8]/40 scale-[1.01]'
-              : 'border-stone-300 hover:border-[#561C08] bg-stone-50/70 hover:bg-[#F7E6C8]/20'
-          }`}
+              ? 'border-[#561C08] bg-[#561C08]/5 scale-[0.99]'
+              : 'border-stone-300 hover:border-stone-400 bg-stone-50/50'
+          } ${isUploading ? 'opacity-70 pointer-events-none' : ''}`}
         >
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/png, image/jpeg, image/webp, image/svg+xml, image/avif"
+            accept={allowSvg ? 'image/jpeg,image/png,image/webp,image/gif,image/avif,image/svg+xml' : 'image/jpeg,image/png,image/webp,image/gif,image/avif'}
+            className="hidden"
             onChange={(e) => {
-              if (e.target.files && e.target.files.length > 0) {
+              if (e.target.files && e.target.files[0]) {
                 handleFile(e.target.files[0]);
               }
+              e.target.value = '';
             }}
-            className="hidden"
           />
 
           <div className="flex flex-col items-center justify-center gap-2">
             <div className="w-10 h-10 rounded-full bg-[#561C08]/10 text-[#561C08] flex items-center justify-center">
-              <Upload size={18} />
+              {isUploading ? <Loader2 size={18} className="animate-spin" /> : <Upload size={18} />}
             </div>
             <div>
-              <p className="text-xs font-bold text-stone-800">
-                Click to browse or drag & drop banner image
+              <p className="text-xs font-semibold text-stone-800">
+                {isUploading ? `Uploading image (${uploadPercent || 0}%)…` : 'Click to choose image or drag & drop'}
               </p>
-              <p className="text-[10px] text-stone-500 mt-0.5">
-                Supports PNG, JPG, WEBP, SVG, AVIF (Max 15MB)
+              <p className="text-[10px] text-stone-400 mt-0.5">
+                {allowSvg ? 'JPEG, PNG, WebP, GIF, AVIF or SVG' : 'PNG, JPG, WEBP, AVIF or GIF'} • Max {maxMB} MB (Auto-compressed to WebP)
               </p>
             </div>
           </div>
         </div>
       )}
 
-      {/* 2. URL TAB */}
-      {activeTab === 'url' && (
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <div className="relative flex-1">
-              <input
-                type="text"
-                value={urlInput}
-                onChange={(e) => setUrlInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    handleUrlSubmit();
-                  }
-                }}
-                placeholder="Paste direct image link (e.g. /images/hero-banners/slide-1.jpeg or https://...)"
-                className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl text-xs font-mono text-stone-800 focus:outline-none focus:border-[#561C08]"
-              />
-            </div>
-            <button
-              type="button"
-              onClick={handleUrlSubmit}
-              className="px-4 py-2.5 bg-[#561C08] hover:bg-[#3D1406] text-white rounded-xl text-xs font-bold transition-colors"
-            >
-              Apply URL
-            </button>
-          </div>
-          <p className="text-[10px] text-stone-400">
-            You can paste local paths (e.g. <code className="text-stone-600">/images/hero-banners/slide-1.jpeg</code>) or external CDN links.
-          </p>
+      {/* 2. IMAGE URL TAB */}
+      {activeTab === 'url' && showUrlTab && (
+        <div className="flex gap-2">
+          <input
+            type="url"
+            placeholder="https://example.com/banner-image.webp"
+            value={urlInput}
+            onChange={(e) => setUrlInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                handleUrlSubmit();
+              }
+            }}
+            className="flex-1 px-3.5 py-2 text-xs border border-stone-200 rounded-xl focus:outline-none focus:border-stone-800"
+          />
+          <button
+            type="button"
+            onClick={handleUrlSubmit}
+            disabled={!urlInput.trim() || isUploading}
+            className="px-4 py-2 bg-stone-900 text-white text-xs font-semibold rounded-xl hover:bg-stone-800 disabled:opacity-50 transition-colors"
+          >
+            Apply
+          </button>
         </div>
       )}
 
       {/* 3. PRESETS TAB */}
-      {activeTab === 'presets' && presets.length > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+      {activeTab === 'presets' && showPresetsTab && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto p-1">
           {presets.map((preset) => {
             const isSelected = value === preset.url;
             return (
@@ -232,14 +320,14 @@ export const ImageUploadDropzone: React.FC<ImageUploadDropzoneProps> = ({
                 key={preset.url}
                 type="button"
                 onClick={() => {
-                  onChange(preset.url);
-                  setUrlInput(preset.url);
-                  setFileName('');
+                  onChange(preset.url, { url: preset.url });
+                  setFileName(preset.label);
+                  setFileSize('');
                 }}
-                className={`flex items-center gap-2 p-2 rounded-xl border text-left transition-all ${
+                className={`p-2 rounded-xl border text-left flex items-center gap-2 transition-all ${
                   isSelected
-                    ? 'border-[#561C08] bg-[#F7E6C8]/60 text-[#561C08] font-bold shadow-xs'
-                    : 'border-stone-200 bg-white hover:bg-stone-50 text-stone-700'
+                    ? 'border-[#561C08] bg-[#561C08]/5 font-bold text-[#561C08]'
+                    : 'border-stone-200 hover:border-stone-300 bg-white text-stone-700'
                 }`}
               >
                 <img
@@ -255,7 +343,7 @@ export const ImageUploadDropzone: React.FC<ImageUploadDropzoneProps> = ({
         </div>
       )}
 
-      {/* LIVE PREVIEW CARD (When an image is loaded or selected) */}
+      {/* LIVE PREVIEW CARD */}
       {value && (
         <div className="relative mt-2 p-2 bg-stone-50 border border-stone-200 rounded-2xl flex items-center gap-3 animate-fade-in">
           <div className="relative w-20 h-14 rounded-xl overflow-hidden bg-stone-200 border border-stone-200 flex-shrink-0">
@@ -281,7 +369,7 @@ export const ImageUploadDropzone: React.FC<ImageUploadDropzoneProps> = ({
               )}
             </div>
             <p className="text-xs font-semibold text-stone-800 truncate mt-0.5">
-              {fileName || (value.startsWith('data:') ? 'Uploaded Device Image (Base64)' : value)}
+              {fileName || (value.startsWith('data:') ? 'Uploaded Device Image' : value)}
             </p>
           </div>
 
@@ -304,6 +392,10 @@ export const ImageUploadDropzone: React.FC<ImageUploadDropzoneProps> = ({
             </button>
           </div>
         </div>
+      )}
+
+      {fileError && (
+        <p role="alert" className="text-[11px] font-sans text-rose-700 mt-1.5">{fileError}</p>
       )}
 
       {helperText && (

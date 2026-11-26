@@ -1,13 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { X, Heart, ShoppingBag, MessageCircle, Star, Check, ArrowRight } from 'lucide-react';
+import { Heart, MessageCircle, Star, Check, ArrowRight } from 'lucide-react';
 import { useShop } from '../../context/ShopContext';
+import { useAddToBag } from '../../hooks/useAddToBag';
+import { AddToBagLabel, addToBagButtonState } from '../ui/AddToBagLabel';
+import { trackProductView } from '../../service/tracking';
+import { isDarkColor } from '../../utils/colorConversion';
+import { Modal } from '../common/Modal';
 
 export const QuickViewModal: React.FC = () => {
   const {
     quickViewProduct,
     setQuickViewProduct,
-    addToCart,
     toggleWishlist,
     isInWishlist,
     formatPrice,
@@ -16,13 +20,80 @@ export const QuickViewModal: React.FC = () => {
   const [selectedSize, setSelectedSize] = useState<string>('');
   const [selectedColorIdx, setSelectedColorIdx] = useState(0);
   const [activeImageIdx, setActiveImageIdx] = useState(0);
+  const bag = useAddToBag();
+
+  const currentColor = quickViewProduct?.colors?.[selectedColorIdx] || quickViewProduct?.colors?.[0];
+
+  const isColorMatching = (variantColor?: { name?: string }, targetColorName?: string) => {
+    if (!targetColorName) return true;
+    const vName = variantColor?.name?.trim();
+    if (!vName) {
+      return (quickViewProduct?.colors?.length || 0) <= 1;
+    }
+    return vName.toLowerCase() === targetColorName.toLowerCase().trim();
+  };
+
+  // Called unconditionally (before the quickViewProduct null check below) so hook
+  // order stays stable across renders; it guards for a null product internally.
+  const availableSizes = React.useMemo(() => {
+    if (!quickViewProduct) return [];
+    if (!quickViewProduct.variants || quickViewProduct.variants.length === 0) {
+      return quickViewProduct.sizes || [];
+    }
+    const matchingVariants = quickViewProduct.variants.filter(v =>
+      isColorMatching(v.color, currentColor?.name) && Boolean(v.size?.trim())
+    );
+    if (matchingVariants.length === 0) {
+      return quickViewProduct.sizes || [];
+    }
+    const colorSizeSet = new Set(matchingVariants.map(v => v.size.trim().toLowerCase()));
+    const ordered = (quickViewProduct.sizes || []).filter(s => colorSizeSet.has(s.trim().toLowerCase()));
+    if (ordered.length > 0) return ordered;
+    const uniqueSizes: string[] = [];
+    matchingVariants.forEach(v => {
+      const s = v.size.trim();
+      if (!uniqueSizes.some(existing => existing.toLowerCase() === s.toLowerCase())) {
+        uniqueSizes.push(s);
+      }
+    });
+    return uniqueSizes;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quickViewProduct, currentColor?.name]);
+
+  const lastTrackedQuickViewIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!quickViewProduct?.id) {
+      lastTrackedQuickViewIdRef.current = null;
+      return;
+    }
+    if (lastTrackedQuickViewIdRef.current === quickViewProduct.id) return;
+    lastTrackedQuickViewIdRef.current = quickViewProduct.id;
+    trackProductView(quickViewProduct, 'quick_view');
+  }, [quickViewProduct]);
 
   if (!quickViewProduct) return null;
 
   const product = quickViewProduct;
   const inWishlist = isInWishlist(product.id);
-  const currentSize = selectedSize || product.sizes[0];
-  const currentColor = product.colors[selectedColorIdx] || product.colors[0];
+
+  const currentSize = (availableSizes.some(s => s.toLowerCase() === selectedSize.toLowerCase()) ? selectedSize : availableSizes[0]) || product.sizes[0] || '';
+
+  const handleColorSelect = (idx: number) => {
+    setSelectedColorIdx(idx);
+    setActiveImageIdx(0);
+    const newColor = product.colors?.[idx];
+    if (!product.variants || product.variants.length === 0) return;
+    const matchingVariants = product.variants.filter(v =>
+      isColorMatching(v.color, newColor?.name) && Boolean(v.size?.trim())
+    );
+    if (matchingVariants.length > 0) {
+      const colorSizes = matchingVariants.map(v => v.size.trim());
+      if (!colorSizes.some(s => s.toLowerCase() === selectedSize.toLowerCase().trim())) {
+        setSelectedSize(colorSizes[0]);
+      }
+    }
+  };
 
   const allImages = [
     product.images.primary,
@@ -30,8 +101,9 @@ export const QuickViewModal: React.FC = () => {
     ...(product.images.gallery || []),
   ].filter((v, i, a) => a.indexOf(v) === i);
 
-  const handleAddToCart = () => {
-    addToCart(product, currentSize, currentColor);
+  const handleAddToCart = async () => {
+    const ok = await bag.add(product, currentSize, currentColor);
+    if (!ok) return;
     setQuickViewProduct(null);
   };
 
@@ -43,24 +115,13 @@ export const QuickViewModal: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
-      {/* Backdrop */}
-      <div
-        className="fixed inset-0 bg-allura-darkBrown/60 backdrop-blur-sm animate-fade-in"
-        onClick={() => setQuickViewProduct(null)}
-      />
-
-      {/* Modal Dialog */}
-      <div className="relative w-full max-w-3xl bg-allura-card rounded-xl border border-allura-border shadow-luxury overflow-hidden z-10 max-h-[90vh] flex flex-col md:flex-row animate-slide-up">
-        {/* Close Button */}
-        <button
-          onClick={() => setQuickViewProduct(null)}
-          className="absolute top-3 right-3 z-20 p-2 rounded-full bg-allura-card/80 backdrop-blur-md text-allura-text hover:bg-allura-bgSecondary transition-colors"
-          aria-label="Close modal"
-        >
-          <X size={18} />
-        </button>
-
+    <Modal
+      open={true}
+      onClose={() => setQuickViewProduct(null)}
+      backdropClassName="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
+      panelClassName="relative w-full max-w-3xl bg-allura-card rounded-xl border border-allura-border shadow-luxury overflow-hidden max-h-[90vh] flex flex-col md:flex-row animate-slide-up focus:outline-none"
+      closeButtonClassName="absolute top-3 right-3 z-20 w-10 h-10 flex items-center justify-center rounded-full bg-allura-card/80 backdrop-blur-md text-allura-text hover:bg-allura-bgSecondary transition-colors"
+    >
         {/* Left: Product Images */}
         <div className="md:w-1/2 bg-allura-bgSecondary flex flex-col relative">
           <div className="aspect-[4/5] w-full overflow-hidden">
@@ -120,30 +181,35 @@ export const QuickViewModal: React.FC = () => {
             </p>
 
             {/* Colors */}
+            {product.colors.length > 0 && (
             <div className="mt-4">
               <span className="text-xs font-semibold text-allura-text">
-                Color: <span className="font-normal text-allura-muted">{currentColor.name}</span>
+                Color: <span className="font-normal text-allura-muted">{currentColor?.name}</span>
               </span>
               <div className="flex items-center gap-2 mt-2">
                 {product.colors.map((c, idx) => (
                   <button
                     key={c.name}
-                    onClick={() => setSelectedColorIdx(idx)}
+                    onClick={() => handleColorSelect(idx)}
                     className={`w-6 h-6 rounded-full border-2 transition-all flex items-center justify-center ${
                       selectedColorIdx === idx ? 'border-allura-gold scale-110' : 'border-allura-border'
                     }`}
                     style={{ backgroundColor: c.hex }}
-                    title={c.name}
+                    title={`${c.name} — ${c.hex}`}
+                    aria-label={`${c.name} (${c.hex})`}
+                    aria-pressed={selectedColorIdx === idx}
                   >
                     {selectedColorIdx === idx && (
-                      <Check size={10} className={c.hex === '#1C1B1A' || c.hex === '#151F30' ? 'text-white' : 'text-allura-darkBrown'} />
+                      <Check size={10} className={isDarkColor(c.hex) ? 'text-white' : 'text-allura-darkBrown'} />
                     )}
                   </button>
                 ))}
               </div>
             </div>
+            )}
 
             {/* Sizes */}
+            {availableSizes.length > 0 && (
             <div className="mt-4">
               <div className="flex items-center justify-between text-xs">
                 <span className="font-semibold text-allura-text">Select Size</span>
@@ -156,12 +222,12 @@ export const QuickViewModal: React.FC = () => {
                 </Link>
               </div>
               <div className="flex flex-wrap gap-2 mt-2">
-                {product.sizes.map(size => (
+                {availableSizes.map(size => (
                   <button
                     key={size}
                     onClick={() => setSelectedSize(size)}
                     className={`px-3 py-1.5 rounded text-xs font-sans font-medium transition-all ${
-                      currentSize === size
+                      currentSize.toLowerCase().trim() === size.toLowerCase().trim()
                         ? 'bg-allura-darkBrown text-allura-card border border-allura-darkBrown'
                         : 'border border-allura-border bg-allura-bg hover:border-allura-gold text-allura-text'
                     }`}
@@ -171,6 +237,7 @@ export const QuickViewModal: React.FC = () => {
                 ))}
               </div>
             </div>
+            )}
           </div>
 
           {/* Action Buttons */}
@@ -178,10 +245,10 @@ export const QuickViewModal: React.FC = () => {
             <div className="flex gap-2">
               <button
                 onClick={handleAddToCart}
-                className="flex-1 bg-allura-goldDark hover:bg-allura-darkBrown text-allura-card text-xs font-sans font-bold tracking-[0.2em] uppercase py-3 px-4 rounded-sm transition-colors flex items-center justify-center gap-2"
+                disabled={bag.isAdding}
+                className={`flex-1 bg-allura-goldDark hover:bg-allura-darkBrown text-allura-card text-xs font-sans font-bold tracking-[0.2em] uppercase py-3 px-4 rounded-sm flex items-center justify-center gap-2 ${addToBagButtonState(bag.state)}`}
               >
-                <ShoppingBag size={15} />
-                <span>ADD TO BAG</span>
+                <AddToBagLabel state={bag.state} label="ADD TO BAG" />
               </button>
 
               <button
@@ -217,7 +284,6 @@ export const QuickViewModal: React.FC = () => {
             </div>
           </div>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 };

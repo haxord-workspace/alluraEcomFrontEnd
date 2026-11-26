@@ -1,16 +1,26 @@
-import React, { useState } from 'react';
+import React, { useState, } from 'react';
 import { Plus } from 'lucide-react';
 import { useAdmin } from '../../context/AdminContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
+import { Modal } from '../../components/common/Modal';
+// import { type AiAnalyticsResponse } from '../../service/adminDashboard';
 
 export const AdminAiPage: React.FC = () => {
   const { aiArticles, addAIArticle } = useAdmin();
   const [activeTab, setActiveTab] = useState<'kb' | 'logs' | 'actions'>('kb');
   const [isAddArticleOpen, setIsAddArticleOpen] = useState(false);
+  // const [aiDashboard] = useState<AiAnalyticsResponse | null>(null);
+
+  // useEffect(() => {
+  //   getDashboardAi()
+  //     .then(setAiDashboard)
+  //     .catch(err => console.warn('Could not load AI dashboard:', err));
+  // }, []);
 
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState<'FAQ' | 'Shipping Policy' | 'Return Policy' | 'Product Sizing' | 'Care & Craft'>('Product Sizing');
   const [content, setContent] = useState('');
+  const isArticleFormDirty = title.trim() !== '' || content.trim() !== '';
 
   const mockLogs = [
     { id: 'sess-891', customer: 'Ananya Menon', query: 'Where is my order ALR-ORD-849201?', tool: 'Order Lookup', result: 'Success', time: '10 mins ago' },
@@ -58,11 +68,10 @@ export const AdminAiPage: React.FC = () => {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
-                className={`px-3.5 py-1.5 rounded-lg transition-colors ${
-                  activeTab === tab.id
-                    ? 'bg-white text-stone-900 shadow-xs'
-                    : 'text-stone-500 hover:text-stone-900'
-                }`}
+                className={`px-3.5 py-1.5 rounded-lg transition-colors ${activeTab === tab.id
+                  ? 'bg-white text-stone-900 shadow-xs'
+                  : 'text-stone-500 hover:text-stone-900'
+                  }`}
               >
                 {tab.label}
               </button>
@@ -71,13 +80,64 @@ export const AdminAiPage: React.FC = () => {
 
           <button
             onClick={() => setIsAddArticleOpen(true)}
-            className="px-4 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-xl text-xs font-sans font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 shadow-sm"
+            className="px-4 py-2 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-xl text-xs font-sans font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 shadow-sm"
           >
             <Plus size={14} />
             <span>Add Knowledge Doc</span>
           </button>
         </div>
       </div>
+
+      {/* DeepSeek AI Engine Status & Queue Analytics */}
+      {/* <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="bg-white border border-stone-200 rounded-2xl p-4 shadow-xs space-y-1">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-sans font-bold uppercase text-stone-400">ENGINE STATUS</span>
+            <Bot size={14} className="text-allura-goldDark" />
+          </div>
+          <p className="font-serif text-xl font-bold text-stone-900">
+            {aiDashboard?.provider || 'DeepSeek AI'}
+          </p>
+          <span className="text-[10px] text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded-full inline-block">
+            {aiDashboard?.status || 'ONLINE'}
+          </span>
+        </div>
+
+        <div className="bg-white border border-stone-200 rounded-2xl p-4 shadow-xs space-y-1">
+          <div className="flex items-center justify-between text-emerald-700">
+            <span className="text-[10px] font-sans font-bold uppercase">COMPLETED INFERENCES</span>
+            <CheckCircle2 size={14} />
+          </div>
+          <p className="font-serif text-xl font-bold text-emerald-800">
+            {aiDashboard?.queue.completed ?? 0}
+          </p>
+          <p className="text-[11px] text-stone-500 font-sans">Automated AI replies</p>
+        </div>
+
+        <div className="bg-white border border-stone-200 rounded-2xl p-4 shadow-xs space-y-1">
+          <div className="flex items-center justify-between text-stone-500">
+            <span className="text-[10px] font-sans font-bold uppercase">PROCESSING / WAITING</span>
+            <Clock size={14} />
+          </div>
+          <p className="font-serif text-xl font-bold text-[#561C08]">
+            {(aiDashboard?.queue.active ?? 0) + (aiDashboard?.queue.waiting ?? 0)}
+          </p>
+          <p className="text-[11px] text-stone-500 font-sans">
+            {aiDashboard?.queue.active ?? 0} active, {aiDashboard?.queue.waiting ?? 0} queued
+          </p>
+        </div>
+
+        <div className="bg-white border border-stone-200 rounded-2xl p-4 shadow-xs space-y-1">
+          <div className="flex items-center justify-between text-rose-700">
+            <span className="text-[10px] font-sans font-bold uppercase">FAILED INFERENCES</span>
+            <AlertTriangle size={14} />
+          </div>
+          <p className="font-serif text-xl font-bold text-rose-800">
+            {aiDashboard?.queue.failed ?? 0}
+          </p>
+          <p className="text-[11px] text-rose-700 font-sans">Zero timeout drops</p>
+        </div>
+      </div> */}
 
       {/* TAB 1: KNOWLEDGE BASE */}
       {activeTab === 'kb' && (
@@ -143,10 +203,17 @@ export const AdminAiPage: React.FC = () => {
       )}
 
       {/* Add Article Modal */}
-      {isAddArticleOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-sm">
-          <div className="bg-white border border-stone-200 rounded-2xl w-full max-w-lg p-6 space-y-4 text-xs font-sans shadow-2xl">
-            <h3 className="font-serif text-xl text-stone-900">Add AI Knowledge Document</h3>
+      <Modal
+        open={isAddArticleOpen}
+        onClose={() => setIsAddArticleOpen(false)}
+        isDirty={isArticleFormDirty}
+        discardConfirmMessage="Discard this knowledge document?"
+        closeButtonClassName="absolute top-3 right-3 z-20 w-10 h-10 flex items-center justify-center rounded-lg text-stone-400 hover:text-stone-800 hover:bg-stone-100 transition-colors disabled:opacity-40"
+        backdropClassName="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-sm"
+        panelClassName="relative bg-white border border-stone-200 rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] flex flex-col focus:outline-none"
+      >
+        <div className="overflow-y-auto p-6 space-y-4 text-xs font-sans">
+            <h3 className="font-serif text-xl text-stone-900 pr-8">Add AI Knowledge Document</h3>
             <form onSubmit={handleAddArticle} className="space-y-3">
               <div>
                 <label className="block text-[10px] uppercase font-bold text-stone-500 mb-1">Doc Title</label>
@@ -193,15 +260,14 @@ export const AdminAiPage: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-stone-900 text-white rounded-xl font-bold uppercase"
+                  className="px-5 py-2 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-xl font-bold uppercase"
                 >
                   Save Knowledge
                 </button>
               </div>
             </form>
-          </div>
         </div>
-      )}
+      </Modal>
     </div>
   );
 };

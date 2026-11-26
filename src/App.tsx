@@ -2,6 +2,9 @@ import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, useLocation, Navigate } from 'react-router-dom';
 import { ShopProvider } from './context/ShopContext';
 import { AdminProvider } from './context/AdminContext';
+import { ConfirmProvider } from './context/ConfirmContext';
+import { trackPageView } from './utils/metaPixel';
+import { trackStorefrontPageView } from './service/tracking';
 
 // Layout & Navigation Components
 import { AnnouncementBar } from './components/layout/AnnouncementBar';
@@ -15,14 +18,17 @@ import { CartDrawer } from './components/modals/CartDrawer';
 import { SearchModal } from './components/modals/SearchModal';
 import { QuickViewModal } from './components/modals/QuickViewModal';
 import { ToastContainer } from './components/common/ToastContainer';
-import { AlluraAIAssistant } from './components/customer/AlluraAIAssistant';
+import { ProtectedRoute } from './components/common/ProtectedRoute';
+// import { AlluraAIAssistant } from './components/customer/AlluraAIAssistant';
 
 // Storefront Core Pages
 import { HomePage } from './pages/HomePage';
 import { ShopPage } from './pages/ShopPage';
 import { CollectionPage } from './pages/CollectionPage';
+import { CollectionsPage } from './pages/CollectionsPage';
 import { ProductDetailPage } from './pages/ProductDetailPage';
-import { LookbookPage } from './pages/LookbookPage';
+// LOOKBOOK DISABLED — commented out, not removed
+// import { LookbookPage } from './pages/LookbookPage';
 import { AboutPage } from './pages/AboutPage';
 import { ContactPage } from './pages/ContactPage';
 import { CartPage } from './pages/CartPage';
@@ -30,10 +36,15 @@ import { CheckoutPage } from './pages/CheckoutPage';
 import { WishlistPage } from './pages/WishlistPage';
 import { AccountPage } from './pages/AccountPage';
 import { SizeGuidePage } from './pages/SizeGuidePage';
-import { ShippingReturnsPage } from './pages/ShippingReturnsPage';
+// TEMPORARILY DISABLED — hardcoded dummy policy page; /shipping-returns now redirects to the
+// dynamic content page /pages/shipping-policy. The file is kept unchanged for restore.
+// import { ShippingReturnsPage } from './pages/ShippingReturnsPage';
 
 // Customer Flow Pages
 import { AuthPage } from './pages/customer/AuthPage';
+import { ForgotPasswordPage } from './pages/customer/ForgotPasswordPage';
+import { ResetPasswordPage } from './pages/customer/ResetPasswordPage';
+import { AccountAddressesPage } from './pages/customer/AccountAddressesPage';
 import { AccountOrdersPage } from './pages/customer/AccountOrdersPage';
 import { OrderDetailPage } from './pages/customer/OrderDetailPage';
 import { OrderTrackingPage } from './pages/customer/OrderTrackingPage';
@@ -42,13 +53,16 @@ import { NotificationsPage } from './pages/customer/NotificationsPage';
 import { OffersPage } from './pages/customer/OffersPage';
 import { FaqPage } from './pages/customer/FaqPage';
 import { AIAssistantPage } from './pages/customer/AIAssistantPage';
+import { CMSPageViewer } from './pages/customer/CMSPageViewer';
+import { renderMyReviewsRoute } from './components/reviews/reviewRoutes';
+import { renderAdminReviewRoutes } from './components/admin/reviews/adminReviewRoutes';
 
 // Admin Operations Suite Components & Pages
 import { AdminLayout } from './components/admin/AdminLayout';
 import { AdminLoginPage } from './pages/admin/AdminLoginPage';
 import { AdminDashboardPage } from './pages/admin/AdminDashboardPage';
 import { AdminProductsPage } from './pages/admin/AdminProductsPage';
-import { AdminProductCreatePage } from './pages/admin/AdminProductCreatePage';
+// import { AdminProductCreatePage } from './pages/admin/AdminProductCreatePage';
 import { AdminProductEditPage } from './pages/admin/AdminProductEditPage';
 import { AdminCategoriesPage } from './pages/admin/AdminCategoriesPage';
 import { AdminCollectionsPage } from './pages/admin/AdminCollectionsPage';
@@ -58,11 +72,11 @@ import { AdminInventoryPage } from './pages/admin/AdminInventoryPage';
 import { AdminTransactionsPage } from './pages/admin/AdminTransactionsPage';
 import { AdminReservationsPage } from './pages/admin/AdminReservationsPage';
 import { AdminOrdersPage } from './pages/admin/AdminOrdersPage';
-import { AdminReturnsPage } from './pages/admin/AdminReturnsPage';
-import { AdminRefundsPage } from './pages/admin/AdminRefundsPage';
+// import { AdminReturnsPage } from './pages/admin/AdminReturnsPage';
+// import { AdminRefundsPage } from './pages/admin/AdminRefundsPage';
 import { AdminOrderDetailPage } from './pages/admin/AdminOrderDetailPage';
 import { AdminPaymentsPage } from './pages/admin/AdminPaymentsPage';
-import { AdminShippingPage } from './pages/admin/AdminShippingPage';
+// import { AdminShippingPage } from './pages/admin/AdminShippingPage';
 import { AdminCustomersPage } from './pages/admin/AdminCustomersPage';
 import { AdminCustomerDetailPage } from './pages/admin/AdminCustomerDetailPage';
 import { AdminCouponsPage } from './pages/admin/AdminCouponsPage';
@@ -71,12 +85,19 @@ import { AdminBannersPage } from './pages/admin/AdminBannersPage';
 import { AdminAbandonedCartsPage } from './pages/admin/AdminAbandonedCartsPage';
 import { AdminNotificationsPage } from './pages/admin/AdminNotificationsPage';
 import { AdminContentPage } from './pages/admin/AdminContentPage';
+import { AdminFaqsPage } from './pages/admin/AdminFaqsPage';
 import { AdminSeoPage } from './pages/admin/AdminSeoPage';
 import { AdminAnalyticsPage } from './pages/admin/AdminAnalyticsPage';
 import { AdminAiPage } from './pages/admin/AdminAiPage';
 import { AdminSettingsPage } from './pages/admin/AdminSettingsPage';
 import { AdminAuditLogsPage } from './pages/admin/AdminAuditLogsPage';
 import { AdminAccessGuard } from './components/admin/AdminAccessGuard';
+import { AdminSuppliersPage } from './pages/admin/AdminSuppliersPage';
+import { AdminSupplierCreatePage } from './pages/admin/AdminSupplierCreatePage';
+import { AdminSupplierEditPage } from './pages/admin/AdminSupplierEditPage';
+import { AdminSupplierDetailPage } from './pages/admin/AdminSupplierDetailPage';
+import { AdminSupplierAnalyticsPage } from './pages/admin/AdminSupplierAnalyticsPage';
+import { HomepageExperiencePage } from './pages/admin/customerCRM/HomepageExperience/HomepageExperiencePage';
 
 const ScrollToTop: React.FC = () => {
   const { pathname } = useLocation();
@@ -91,7 +112,16 @@ const ScrollToTop: React.FC = () => {
 export const AppContent: React.FC = () => {
   const location = useLocation();
   const isCheckout = location.pathname === '/checkout';
+  const isProductPage = location.pathname.startsWith('/product/');
   const isAdminRoute = location.pathname.startsWith('/admin');
+
+  // Meta Pixel & storefront analytics: the app never reloads between pages, so send PageView/PAGE_VIEW on every route change
+  useEffect(() => {
+    if (!isAdminRoute) {
+      trackPageView();
+      trackStorefrontPageView(location.pathname);
+    }
+  }, [location.pathname, isAdminRoute]);
 
   // Admin Portal Views
   if (isAdminRoute) {
@@ -99,15 +129,20 @@ export const AppContent: React.FC = () => {
       <div className="min-h-screen flex flex-col bg-stone-100 text-stone-900">
         <ScrollToTop />
         <ToastContainer />
-        
+
         <Routes>
           <Route path="/admin/login" element={<AdminLoginPage />} />
           <Route element={<AdminLayout />}>
             <Route path="/admin" element={<AdminAccessGuard module="dashboard"><AdminDashboardPage /></AdminAccessGuard>} />
             <Route path="/admin/dashboard" element={<AdminAccessGuard module="dashboard"><AdminDashboardPage /></AdminAccessGuard>} />
             <Route path="/admin/products" element={<AdminAccessGuard module="products"><AdminProductsPage /></AdminAccessGuard>} />
-            <Route path="/admin/products/new" element={<AdminAccessGuard module="products" action="create"><AdminProductCreatePage /></AdminAccessGuard>} />
+            {/* <Route path="/admin/products/new" element={<AdminAccessGuard module="products" action="create"><AdminProductCreatePage /></AdminAccessGuard>} /> */}
             <Route path="/admin/products/:id/edit" element={<AdminAccessGuard module="products" action="edit"><AdminProductEditPage /></AdminAccessGuard>} />
+            <Route path="/admin/suppliers" element={<AdminAccessGuard module="suppliers"><AdminSuppliersPage /></AdminAccessGuard>} />
+            <Route path="/admin/suppliers/new" element={<AdminAccessGuard module="suppliers" action="create"><AdminSupplierCreatePage /></AdminAccessGuard>} />
+            <Route path="/admin/suppliers/analytics" element={<AdminAccessGuard module="suppliers"><AdminSupplierAnalyticsPage /></AdminAccessGuard>} />
+            <Route path="/admin/suppliers/:id" element={<AdminAccessGuard module="suppliers"><AdminSupplierDetailPage /></AdminAccessGuard>} />
+            <Route path="/admin/suppliers/:id/edit" element={<AdminAccessGuard module="suppliers" action="edit"><AdminSupplierEditPage /></AdminAccessGuard>} />
             <Route path="/admin/categories" element={<AdminAccessGuard module="products"><AdminCategoriesPage /></AdminAccessGuard>} />
             <Route path="/admin/collections" element={<AdminAccessGuard module="products"><AdminCollectionsPage /></AdminAccessGuard>} />
             <Route path="/admin/variants" element={<AdminAccessGuard module="products"><AdminVariantsPage /></AdminAccessGuard>} />
@@ -116,27 +151,30 @@ export const AppContent: React.FC = () => {
             <Route path="/admin/inventory/transactions" element={<AdminAccessGuard module="inventory"><AdminTransactionsPage /></AdminAccessGuard>} />
             <Route path="/admin/inventory/reservations" element={<AdminAccessGuard module="inventory"><AdminReservationsPage /></AdminAccessGuard>} />
             <Route path="/admin/orders" element={<AdminAccessGuard module="orders"><AdminOrdersPage /></AdminAccessGuard>} />
-            <Route path="/admin/orders/returns" element={<AdminAccessGuard module="orders"><AdminReturnsPage /></AdminAccessGuard>} />
-            <Route path="/admin/orders/refunds" element={<AdminAccessGuard module="orders" action="refund"><AdminRefundsPage /></AdminAccessGuard>} />
+            {/* <Route path="/admin/orders/returns" element={<AdminAccessGuard module="orders"><AdminReturnsPage /></AdminAccessGuard>} /> */}
+            {/* <Route path="/admin/orders/refunds" element={<AdminAccessGuard module="orders" action="refund"><AdminRefundsPage /></AdminAccessGuard>} /> */}
             <Route path="/admin/orders/:id" element={<AdminAccessGuard module="orders"><AdminOrderDetailPage /></AdminAccessGuard>} />
             <Route path="/admin/payments" element={<AdminAccessGuard module="orders"><AdminPaymentsPage /></AdminAccessGuard>} />
-            <Route path="/admin/shipping" element={<AdminAccessGuard module="orders"><AdminShippingPage /></AdminAccessGuard>} />
+            {/* <Route path="/admin/shipping" element={<AdminAccessGuard module="orders"><AdminShippingPage /></AdminAccessGuard>} /> */}
             <Route path="/admin/customers" element={<AdminAccessGuard module="customers"><AdminCustomersPage /></AdminAccessGuard>} />
             <Route path="/admin/customers/:id" element={<AdminAccessGuard module="customers"><AdminCustomerDetailPage /></AdminAccessGuard>} />
-            <Route path="/admin/marketing/coupons" element={<AdminAccessGuard module="marketing"><AdminCouponsPage /></AdminAccessGuard>} />
-            <Route path="/admin/marketing/promotions" element={<AdminAccessGuard module="marketing"><AdminPromotionsPage /></AdminAccessGuard>} />
-            <Route path="/admin/marketing/banners" element={<AdminAccessGuard module="marketing"><AdminBannersPage /></AdminAccessGuard>} />
-            <Route path="/admin/marketing/abandoned-carts" element={<AdminAccessGuard module="marketing"><AdminAbandonedCartsPage /></AdminAccessGuard>} />
+            <Route path="/admin/homepage/experience" element={<AdminAccessGuard module="cms_store_content" action="view"><HomepageExperiencePage /></AdminAccessGuard>} />
+            <Route path="/admin/marketing/coupons" element={<AdminAccessGuard module="coupons_banners"><AdminCouponsPage /></AdminAccessGuard>} />
+            <Route path="/admin/marketing/promotions" element={<AdminAccessGuard module="coupons_banners"><AdminPromotionsPage /></AdminAccessGuard>} />
+            <Route path="/admin/marketing/banners" element={<AdminAccessGuard module="coupons_banners"><AdminBannersPage /></AdminAccessGuard>} />
+            <Route path="/admin/banners" element={<Navigate to="/admin/marketing/banners" replace />} />
+            <Route path="/admin/marketing/abandoned-carts" element={<AdminAccessGuard module="coupons_banners"><AdminAbandonedCartsPage /></AdminAccessGuard>} />
             <Route path="/admin/notifications" element={<AdminAccessGuard module="notifications"><AdminNotificationsPage /></AdminAccessGuard>} />
             <Route path="/admin/content" element={<AdminAccessGuard module="cms"><AdminContentPage /></AdminAccessGuard>} />
-            <Route path="/admin/content/faqs" element={<AdminAccessGuard module="cms"><AdminContentPage /></AdminAccessGuard>} />
+            <Route path="/admin/content/faqs" element={<AdminAccessGuard module="cms"><AdminFaqsPage /></AdminAccessGuard>} />
             <Route path="/admin/seo" element={<AdminAccessGuard module="seo"><AdminSeoPage /></AdminAccessGuard>} />
             <Route path="/admin/analytics" element={<AdminAccessGuard module="analytics"><AdminAnalyticsPage /></AdminAccessGuard>} />
-            <Route path="/admin/analytics/search" element={<AdminAccessGuard module="analytics"><AdminAnalyticsPage /></AdminAccessGuard>} />
+            <Route path="/admin/analytics/search" element={<Navigate to="/admin/analytics" replace />} />
             <Route path="/admin/ai" element={<AdminAccessGuard module="ai"><AdminAiPage /></AdminAccessGuard>} />
             <Route path="/admin/settings" element={<AdminAccessGuard module="settings"><AdminSettingsPage /></AdminAccessGuard>} />
             <Route path="/admin/settings/admins" element={<AdminAccessGuard module="adminManagement"><AdminSettingsPage /></AdminAccessGuard>} />
             <Route path="/admin/audit-logs" element={<AdminAccessGuard module="auditLogs"><AdminAuditLogsPage /></AdminAccessGuard>} />
+            {renderAdminReviewRoutes()}
             <Route path="/admin/*" element={<Navigate to="/admin" replace />} />
           </Route>
         </Routes>
@@ -164,35 +202,62 @@ export const AppContent: React.FC = () => {
       )}
 
       {/* Main Content Area */}
-      <main className="flex-1">
+      {/* Mobile (<768px): whenever the footer is shown, its own bottom padding already clears the
+          fixed bottom nav, so drop main's extra gap to avoid blank space above the footer */}
+      <main className={`flex-1 ${isProductPage ? 'pb-0' : 'pb-16'} ${!isCheckout ? 'max-md:pb-0' : ''} lg:pb-0`}>
         <Routes>
           {/* Core Pages */}
           <Route path="/" element={<HomePage />} />
           <Route path="/shop" element={<ShopPage />} />
+          <Route path="/collections" element={<CollectionsPage />} />
           <Route path="/collections/:slug" element={<CollectionPage />} />
           <Route path="/product/:slug" element={<ProductDetailPage />} />
+          {/* LOOKBOOK DISABLED
           <Route path="/lookbook" element={<LookbookPage />} />
+          */}
           <Route path="/about" element={<AboutPage />} />
           <Route path="/contact" element={<ContactPage />} />
-          <Route path="/cart" element={<CartPage />} />
-          <Route path="/checkout" element={<CheckoutPage />} />
-          <Route path="/wishlist" element={<WishlistPage />} />
-          <Route path="/account" element={<AccountPage />} />
+          <Route path="/cart" element={<ProtectedRoute><CartPage /></ProtectedRoute>} />
+          <Route path="/checkout" element={<ProtectedRoute><CheckoutPage /></ProtectedRoute>} />
+          <Route path="/wishlist" element={<ProtectedRoute><WishlistPage /></ProtectedRoute>} />
+          <Route path="/account" element={<ProtectedRoute><AccountPage /></ProtectedRoute>} />
           <Route path="/size-guide" element={<SizeGuidePage />} />
+          {/* TEMPORARILY DISABLED — dummy page replaced by a redirect to the dynamic content page.
           <Route path="/shipping-returns" element={<ShippingReturnsPage />} />
+          */}
+          <Route path="/shipping-returns" element={<Navigate to="/pages/shipping-policy" replace />} />
 
           {/* Customer Flows */}
           <Route path="/auth" element={<AuthPage />} />
           <Route path="/auth/login" element={<AuthPage />} />
           <Route path="/auth/complete-profile" element={<AuthPage />} />
-          <Route path="/account/orders" element={<AccountOrdersPage />} />
-          <Route path="/account/orders/:orderId" element={<OrderDetailPage />} />
-          <Route path="/account/orders/:orderId/tracking" element={<OrderTrackingPage />} />
-          <Route path="/account/orders/:orderId/return" element={<OrderReturnPage />} />
-          <Route path="/account/notifications" element={<NotificationsPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
+          <Route path="/account/addresses" element={<ProtectedRoute><AccountAddressesPage /></ProtectedRoute>} />
+          <Route path="/account/orders" element={<ProtectedRoute><AccountOrdersPage /></ProtectedRoute>} />
+          <Route path="/account/orders/:orderId" element={<ProtectedRoute><OrderDetailPage /></ProtectedRoute>} />
+          <Route path="/account/orders/:orderId/tracking" element={<ProtectedRoute><OrderTrackingPage /></ProtectedRoute>} />
+          <Route path="/account/orders/:orderId/return" element={<ProtectedRoute><OrderReturnPage /></ProtectedRoute>} />
+          <Route path="/account/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
+          {renderMyReviewsRoute()}
           <Route path="/offers" element={<OffersPage />} />
           <Route path="/faq" element={<FaqPage />} />
           <Route path="/ai-assistant" element={<AIAssistantPage />} />
+
+          {/* Dynamic Storefront CMS Pages */}
+          <Route path="/pages/:slug" element={<CMSPageViewer />} />
+          {/* TEMPORARILY DISABLED — legacy policy URLs rendered the viewer directly (with its
+              fallback content). They now redirect to the canonical /pages/<slug> routes.
+          <Route path="/privacy-policy" element={<CMSPageViewer slugOverride="privacy-policy" />} />
+          <Route path="/terms-and-conditions" element={<CMSPageViewer slugOverride="terms-and-conditions" />} />
+          <Route path="/terms-conditions" element={<CMSPageViewer slugOverride="terms-conditions" />} />
+          <Route path="/return-refund-policy" element={<CMSPageViewer slugOverride="return-refund-policy" />} />
+          */}
+          {/* Legacy policy URLs (may be bookmarked or indexed) → dynamic content pages */}
+          <Route path="/privacy-policy" element={<Navigate to="/pages/privacy-policy" replace />} />
+          <Route path="/terms-and-conditions" element={<Navigate to="/pages/terms-and-conditions" replace />} />
+          <Route path="/terms-conditions" element={<Navigate to="/pages/terms-and-conditions" replace />} />
+          <Route path="/return-refund-policy" element={<Navigate to="/pages/exchange-returns" replace />} />
 
           {/* Fallback */}
           <Route path="*" element={<HomePage />} />
@@ -202,9 +267,9 @@ export const AppContent: React.FC = () => {
       {/* Floating AI Stylist & WhatsApp Concierge */}
       {!isCheckout && (
         <>
-          <AlluraAIAssistant />
+          {/* <AlluraAIAssistant /> */}
           <WhatsAppButton />
-          <MobileBottomNav />
+          {!isProductPage && <MobileBottomNav />}
           <Footer />
         </>
       )}
@@ -215,11 +280,13 @@ export const AppContent: React.FC = () => {
 export function App() {
   return (
     <BrowserRouter>
-      <ShopProvider>
-        <AdminProvider>
-          <AppContent />
-        </AdminProvider>
-      </ShopProvider>
+      <ConfirmProvider>
+        <ShopProvider>
+          <AdminProvider>
+            <AppContent />
+          </AdminProvider>
+        </ShopProvider>
+      </ConfirmProvider>
     </BrowserRouter>
   );
 }

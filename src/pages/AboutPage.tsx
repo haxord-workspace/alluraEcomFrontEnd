@@ -2,10 +2,12 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { Sparkles, Scissors, Heart, Award, MessageCircle } from 'lucide-react';
 import { AlluraLogo } from '../components/common/AlluraLogo';
+import { useStoreAddress } from '../hooks/useStoreAddress';
 
 export const AboutPage: React.FC = () => {
+  const { address } = useStoreAddress();
   return (
-    <div className="space-y-16 sm:space-y-24 pb-20">
+    <div className="space-y-16 sm:space-y-24 pb-6 sm:pb-20">
       {/* Hero Header */}
       <section className="relative h-[45vh] sm:h-[52vh] min-h-[360px] bg-allura-bgSecondary flex items-center justify-center text-center px-6 overflow-hidden">
         <img
@@ -123,7 +125,7 @@ export const AboutPage: React.FC = () => {
               VISIT OUR PERINTHALMANNA BOUTIQUE
             </h3>
             <p className="text-xs text-allura-bgSecondary font-sans max-w-md">
-              Located on Ooty Road, Perinthalmanna, Kerala. Discover our full bridal studio, try on curated pieces, and enjoy private styling.
+              {address && `Located at ${address}. `}Discover our full bridal studio, try on curated pieces, and enjoy private styling.
             </p>
           </div>
 

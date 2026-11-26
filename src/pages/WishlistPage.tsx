@@ -1,31 +1,72 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Heart, ShoppingBag, ArrowRight } from 'lucide-react';
+import { Heart, ArrowRight, Trash2 } from 'lucide-react';
 import { useShop } from '../context/ShopContext';
-import { productsData } from '../data/products';
+import { useConfirm } from '../context/ConfirmContext';
+import { useAddToBag } from '../hooks/useAddToBag';
+import { AddToBagLabel, addToBagButtonState } from '../components/ui/AddToBagLabel';
+
+const MoveToBagButton: React.FC<{ product: Product }> = ({ product }) => {
+  const bag = useAddToBag();
+  return (
+    <button
+      onClick={() => bag.add(product, product.sizes[0], product.colors[0])}
+      disabled={bag.isAdding}
+      className={`w-full text-allura-card text-[10px] sm:text-xs font-sans font-bold tracking-wider uppercase py-2.5 px-3 rounded-sm flex items-center justify-center gap-1.5 ${addToBagButtonState(bag.state)} ${bag.justAdded ? 'bg-emerald-700' : 'bg-allura-darkBrown hover:bg-allura-goldDark'
+        }`}
+    >
+      <AddToBagLabel state={bag.state} label="MOVE TO BAG" iconSize={13} />
+    </button>
+  );
+};
 import { ProductCard } from '../components/ui/ProductCard';
+import { ProductCardSkeleton } from '../components/ui/ProductCardSkeleton';
 import type { Product } from '../types';
 
 export const WishlistPage: React.FC = () => {
-  const { wishlist, addToCart } = useShop();
+  const { wishlistProducts, isWishlistLoading, clearWishlist } = useShop();
 
-  const wishlistProducts = productsData.filter((p: Product) => wishlist.includes(p.id));
+  const confirm = useConfirm();
+
+  const handleClearAll = async () => {
+    const ok = await confirm({
+      title: 'Clear wishlist',
+      message: 'Remove all saved pieces from your Wishlist?',
+      confirmLabel: 'Clear all',
+      cancelLabel: 'Keep them',
+      isDestructive: true,
+    });
+    if (ok) clearWishlist();
+  };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-16 space-y-12">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-10 pb-6 sm:py-16 space-y-12">
       <div className="text-center max-w-2xl mx-auto space-y-2">
         <span className="text-[11px] font-sans font-bold tracking-[0.28em] uppercase text-allura-goldDark">
-          SAVED PIECES
+          YOUR WISHLIST
         </span>
         <h1 className="font-serif text-3xl sm:text-5xl text-allura-text font-normal uppercase tracking-tight">
-          YOUR ALLURA EDIT ({wishlistProducts.length})
+          Your Saved Styles  ({wishlistProducts.length})
         </h1>
         <p className="text-xs sm:text-sm text-allura-muted font-sans">
-          Saved bespoke silhouettes and outfits ready for your next celebration.
+          Review your favourite outfits and move them to your bag when you're ready.
         </p>
+        {wishlistProducts.length > 0 && (
+          <button
+            onClick={handleClearAll}
+            className="inline-flex items-center gap-1.5 pt-2 text-[10px] sm:text-xs font-sans font-bold tracking-wider uppercase text-allura-muted hover:text-allura-darkBrown transition-colors"
+          >
+            <Trash2 size={13} />
+            <span>CLEAR ALL</span>
+          </button>
+        )}
       </div>
 
-      {wishlistProducts.length === 0 ? (
+      {isWishlistLoading && wishlistProducts.length === 0 ? (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6">
+          <ProductCardSkeleton count={4} />
+        </div>
+      ) : wishlistProducts.length === 0 ? (
         <div className="py-20 text-center space-y-4 max-w-md mx-auto bg-allura-card rounded-2xl border border-allura-border p-8">
           <div className="w-16 h-16 rounded-full bg-allura-bgSecondary flex items-center justify-center text-allura-gold mx-auto">
             <Heart size={28} />
@@ -51,13 +92,7 @@ export const WishlistPage: React.FC = () => {
           {wishlistProducts.map((product: Product) => (
             <div key={product.id} className="space-y-2">
               <ProductCard product={product} />
-              <button
-                onClick={() => addToCart(product, product.sizes[0] || 'M', product.colors[0])}
-                className="w-full bg-allura-darkBrown hover:bg-allura-goldDark text-allura-card text-[10px] sm:text-xs font-sans font-bold tracking-wider uppercase py-2.5 px-3 rounded-sm transition-colors flex items-center justify-center gap-1.5"
-              >
-                <ShoppingBag size={13} />
-                <span>MOVE TO BAG</span>
-              </button>
+              <MoveToBagButton product={product} />
             </div>
           ))}
         </div>

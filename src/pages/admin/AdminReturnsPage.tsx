@@ -1,14 +1,16 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Truck } from 'lucide-react';
 import { useAdmin } from '../../context/AdminContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { ConfirmModal } from '../../components/common/ConfirmModal';
+import { Modal } from '../../components/common/Modal';
 
 export const AdminReturnsPage: React.FC = () => {
   const { returns, updateReturnStatus, scheduleReturnPickup } = useAdmin();
   const [selectedReturnForAction, setSelectedReturnForAction] = useState<any>(null);
   const [actionType, setActionType] = useState<'approve' | 'reject' | 'pickup' | 'complete' | null>(null);
   const [pickupDate, setPickupDate] = useState('2026-09-22');
+  const pickupDateBaselineRef = useRef(pickupDate);
 
   const handleExecuteAction = () => {
     if (!selectedReturnForAction || !actionType) return;
@@ -46,7 +48,7 @@ export const AdminReturnsPage: React.FC = () => {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-xs space-y-1">
           <span className="text-[10px] font-sans font-bold uppercase text-stone-400">Total Requests</span>
-          <p className="font-serif text-2xl font-bold text-stone-900">{returns.length}</p>
+          <p className="font-serif text-2xl font-bold text-[#561C08]">{returns.length}</p>
         </div>
         <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-xs space-y-1">
           <span className="text-[10px] font-sans font-bold uppercase text-amber-700">Pending Review</span>
@@ -62,7 +64,7 @@ export const AdminReturnsPage: React.FC = () => {
         </div>
         <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-xs space-y-1">
           <span className="text-[10px] font-sans font-bold uppercase text-stone-400">Return Window</span>
-          <p className="font-serif text-2xl font-bold text-stone-900">7 Days</p>
+          <p className="font-serif text-2xl font-bold text-[#561C08]">7 Days</p>
         </div>
       </div>
 
@@ -148,8 +150,9 @@ export const AdminReturnsPage: React.FC = () => {
                           onClick={() => {
                             setSelectedReturnForAction(ret);
                             setActionType('pickup');
+                            pickupDateBaselineRef.current = pickupDate;
                           }}
-                          className="px-3 py-1 bg-stone-900 hover:bg-stone-800 text-white rounded-lg text-[11px] font-bold uppercase flex items-center gap-1"
+                          className="px-3 py-1 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-lg text-[11px] font-bold uppercase flex items-center gap-1"
                         >
                           <Truck size={12} />
                           <span>Schedule Reverse Pickup</span>
@@ -191,44 +194,53 @@ export const AdminReturnsPage: React.FC = () => {
       />
 
       {/* Pickup scheduling modal */}
-      {actionType === 'pickup' && selectedReturnForAction && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-sm">
-          <div className="bg-white border border-stone-200 rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl text-xs font-sans">
-            <h3 className="font-serif text-xl text-stone-900">Schedule Delhivery Reverse Pickup</h3>
-            <p className="text-stone-500">
-              Assign courier associate for doorstep verification at {selectedReturnForAction.pickupAddress.city}.
-            </p>
-            <div>
-              <label className="block font-bold uppercase text-[10px] text-stone-500 mb-1">Pickup Date</label>
-              <input
-                type="date"
-                value={pickupDate}
-                onChange={e => setPickupDate(e.target.value)}
-                className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl font-medium"
-              />
-            </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedReturnForAction(null);
-                  setActionType(null);
-                }}
-                className="px-4 py-2 border border-stone-200 rounded-xl text-stone-500"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleExecuteAction}
-                className="px-5 py-2 bg-stone-900 text-white rounded-xl font-bold uppercase tracking-wider"
-              >
-                Confirm Delhivery Pickup
-              </button>
-            </div>
+      <Modal
+        open={actionType === 'pickup' && !!selectedReturnForAction}
+        onClose={() => {
+          setSelectedReturnForAction(null);
+          setActionType(null);
+        }}
+        isDirty={pickupDate !== pickupDateBaselineRef.current}
+        discardConfirmMessage="Discard the pickup date you changed?"
+        closeButtonClassName="absolute top-3 right-3 z-20 w-10 h-10 flex items-center justify-center rounded-lg text-stone-400 hover:text-stone-800 hover:bg-stone-100 transition-colors disabled:opacity-40"
+        backdropClassName="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-sm"
+        panelClassName="relative bg-white border border-stone-200 rounded-2xl w-full max-w-md shadow-2xl max-h-[90vh] flex flex-col focus:outline-none"
+      >
+        <div className="overflow-y-auto p-6 space-y-4 text-xs font-sans">
+          <h3 className="font-serif text-xl text-stone-900 pr-8">Schedule Delhivery Reverse Pickup</h3>
+          <p className="text-stone-500">
+            Assign courier associate for doorstep verification at {selectedReturnForAction?.pickupAddress.city}.
+          </p>
+          <div>
+            <label className="block font-bold uppercase text-[10px] text-stone-500 mb-1">Pickup Date</label>
+            <input
+              type="date"
+              value={pickupDate}
+              onChange={e => setPickupDate(e.target.value)}
+              className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl font-medium"
+            />
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedReturnForAction(null);
+                setActionType(null);
+              }}
+              className="px-4 py-2 border border-stone-200 rounded-xl text-stone-500"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleExecuteAction}
+              className="px-5 py-2 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-xl font-bold uppercase tracking-wider"
+            >
+              Confirm Delhivery Pickup
+            </button>
           </div>
         </div>
-      )}
+      </Modal>
     </div>
   );
 };

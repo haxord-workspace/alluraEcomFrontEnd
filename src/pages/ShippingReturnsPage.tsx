@@ -1,9 +1,11 @@
 import React from 'react';
 import { Truck, RefreshCw, HelpCircle } from 'lucide-react';
+import { useStoreAddress } from '../hooks/useStoreAddress';
 
 export const ShippingReturnsPage: React.FC = () => {
+  const { address } = useStoreAddress();
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-16 space-y-12">
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-10 pb-6 sm:py-16 space-y-12">
       <div className="text-center space-y-3">
         <span className="text-[11px] font-sans font-bold tracking-[0.28em] uppercase text-allura-goldDark">
           CLIENT CARE
@@ -40,7 +42,7 @@ export const ShippingReturnsPage: React.FC = () => {
               • <strong>National Delivery:</strong> Rest of India orders are dispatched via premium couriers (BlueDart / DTDC) and arrive in 4–6 business days.
             </p>
             <p>
-              • <strong>In-Store Pickup:</strong> Select "In-Store Pickup" at checkout to collect your order in person from our Perinthalmanna boutique on Ooty Road.
+              • <strong>In-Store Pickup:</strong> Select "In-Store Pickup" at checkout to collect your order in person from our boutique{address ? ` at ${address}` : ''}.
             </p>
           </div>
         </div>

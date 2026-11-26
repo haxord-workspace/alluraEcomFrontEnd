@@ -1,34 +1,29 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { X, MessageCircle, Phone, MapPin, ChevronRight } from 'lucide-react';
+import { MessageCircle, Phone, MapPin, ChevronRight } from 'lucide-react';
 import { AlluraLogo } from '../common/AlluraLogo';
 import { useShop } from '../../context/ShopContext';
+import { useStoreAddress } from '../../hooks/useStoreAddress';
+import { useStoreCollections } from '../../hooks/useStoreCollections';
+import { Modal } from '../common/Modal';
 
 export const MobileMenuDrawer: React.FC = () => {
   const { isMobileMenuOpen, setIsMobileMenuOpen } = useShop();
-
-  if (!isMobileMenuOpen) return null;
+  const { address } = useStoreAddress();
+  const { collections } = useStoreCollections();
 
   return (
-    <div className="lg:hidden fixed inset-0 z-50 flex">
-      {/* Backdrop */}
-      <div
-        className="fixed inset-0 bg-allura-darkBrown/60 backdrop-blur-sm transition-opacity"
-        onClick={() => setIsMobileMenuOpen(false)}
-      />
-
-      {/* Drawer */}
-      <div className="relative w-4/5 max-w-sm bg-allura-bg h-full flex flex-col z-10 shadow-drawer overflow-y-auto animate-slide-up">
+    <Modal
+      open={isMobileMenuOpen}
+      onClose={() => setIsMobileMenuOpen(false)}
+      backdropClassName="lg:hidden fixed inset-0 z-50 flex"
+      panelClassName="relative w-4/5 max-w-sm bg-allura-bg h-full flex flex-col z-10 shadow-drawer focus:outline-none"
+      closeButtonClassName="absolute top-5 right-5 z-20 w-10 h-10 flex items-center justify-center rounded-full text-allura-muted hover:text-allura-text transition-colors"
+    >
+      <div className="flex-1 overflow-y-auto flex flex-col animate-slide-up">
         {/* Header */}
         <div className="p-6 border-b border-allura-border flex items-center justify-between bg-allura-card">
           <AlluraLogo size="sm" showTagline={true} />
-          <button
-            onClick={() => setIsMobileMenuOpen(false)}
-            className="p-2 text-allura-muted hover:text-allura-text transition-colors"
-            aria-label="Close menu"
-          >
-            <X size={20} />
-          </button>
         </div>
 
         {/* Navigation Sections */}
@@ -43,9 +38,6 @@ export const MobileMenuDrawer: React.FC = () => {
                 { label: 'All Products', to: '/shop' },
                 { label: 'New Arrivals', to: '/shop?filter=new' },
                 { label: 'Best Sellers', to: '/shop?filter=bestseller' },
-                { label: 'Ethnic Wear', to: '/collections/ethnic' },
-                { label: 'Modest Wear', to: '/collections/modest-wear' },
-                { label: 'Party Wear', to: '/collections/party-wear' },
               ].map(item => (
                 <Link
                   key={item.label}
@@ -67,14 +59,13 @@ export const MobileMenuDrawer: React.FC = () => {
             </h3>
             <div className="space-y-1">
               {[
-                { label: 'Festive Edit', to: '/collections/festive-edit' },
-                { label: 'Bridal Edit', to: '/collections/bridal-edit' },
-                { label: 'The Occasion Edit', to: '/collections/party-wear' },
-                { label: 'Everyday Elegance', to: '/collections/ethnic' },
-                { label: 'The Allura Lookbook', to: '/lookbook', badge: 'New' },
+                // Live ACTIVE collections from the API
+                ...collections.slice(0, 8).map(c => ({ label: c.name, to: `/collections/${c.slug}`, badge: undefined as string | undefined })),
+                { label: 'All Collections', to: '/collections', badge: undefined as string | undefined },
+                // { label: 'The Allura Lookbook', to: '/lookbook', badge: 'New' }, // LOOKBOOK DISABLED
               ].map(item => (
                 <Link
-                  key={item.label}
+                  key={item.to}
                   to={item.to}
                   onClick={() => setIsMobileMenuOpen(false)}
                   className="flex items-center justify-between py-2.5 text-sm font-sans text-allura-text hover:text-allura-gold transition-colors border-b border-allura-border/40"
@@ -103,7 +94,8 @@ export const MobileMenuDrawer: React.FC = () => {
                 { label: 'Our Story', to: '/about' },
                 { label: 'Visit Boutique (Perinthalmanna)', to: '/contact' },
                 { label: 'Size Guide & Measurement', to: '/size-guide' },
-                { label: 'Shipping & Exchange Policy', to: '/shipping-returns' },
+                // Previously '/shipping-returns' (dummy page, now a redirect) — points at the dynamic content page
+                { label: 'Shipping & Exchange Policy', to: '/pages/shipping-policy' },
               ].map(item => (
                 <Link
                   key={item.label}
@@ -121,10 +113,12 @@ export const MobileMenuDrawer: React.FC = () => {
 
         {/* Quick Contact Bar in Menu */}
         <div className="p-6 bg-allura-card border-t border-allura-border space-y-3">
-          <div className="flex items-center gap-2 text-xs text-allura-muted">
-            <MapPin size={14} className="text-allura-gold flex-shrink-0" />
-            <span>Ooty Road, Perinthalmanna, Kerala</span>
-          </div>
+          {address && (
+            <div className="flex items-center gap-2 text-xs text-allura-muted">
+              <MapPin size={14} className="text-allura-gold flex-shrink-0" />
+              <span>{address}</span>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-2 pt-2">
             <a
@@ -147,6 +141,6 @@ export const MobileMenuDrawer: React.FC = () => {
           </div>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 };

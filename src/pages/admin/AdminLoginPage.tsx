@@ -1,33 +1,46 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Lock, Mail, ShieldCheck, ArrowRight } from 'lucide-react';
+import { Lock, Unlock, Mail, ShieldCheck, ArrowRight } from 'lucide-react';
 import { useAdmin } from '../../context/AdminContext';
+import { useSelector } from 'react-redux';
+import type { RootState } from '../../store';
 import { AlluraLogo } from '../../components/common/AlluraLogo';
+import { AdminErrorBanner } from '../../components/admin/AdminErrorBanner';
 
 export const AdminLoginPage: React.FC = () => {
   const { adminLogin, isAdminAuthenticated } = useAdmin();
   const navigate = useNavigate();
+  const authError = useSelector((state: RootState) => state.adminAuth.error);
 
-  const [email, setEmail] = useState('shamil@alluraboutique.in');
-  const [password, setPassword] = useState('••••••••••••');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
+  const [showPassword, setShowPassword] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
 
   // If already authenticated, go to dashboard
-  if (isAdminAuthenticated) {
-    navigate('/admin/dashboard');
-  }
+  useEffect(() => {
+    if (isAdminAuthenticated) {
+      navigate('/admin/dashboard');
+    }
+  }, [isAdminAuthenticated, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLocalError(null);
     setIsLoading(true);
-    await adminLogin(email, password);
+    const success = await adminLogin(email, password);
     setIsLoading(false);
-    navigate('/admin/dashboard');
+    if (success) {
+      navigate('/admin/dashboard');
+    }
   };
 
+  const activeError = localError || authError;
+
   return (
-    <div className="min-h-screen bg-stone-900 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-stone-100 flex items-center justify-center p-4">
       <div className="bg-white border border-stone-200 rounded-3xl w-full max-w-md p-8 sm:p-10 shadow-2xl space-y-6 animate-slide-up text-stone-900">
         
         {/* Brand Header */}
@@ -42,7 +55,15 @@ export const AdminLoginPage: React.FC = () => {
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4 text-xs font-sans pt-2">
+        {activeError && (
+          <AdminErrorBanner
+            title="Authentication Failed"
+            error={activeError}
+            onDismiss={() => setLocalError(null)}
+          />
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4 text-xs font-sans pt-1">
           <div>
             <label className="block text-[10px] font-bold uppercase tracking-wider text-stone-500 mb-1">
               Admin Email ID
@@ -69,10 +90,23 @@ export const AdminLoginPage: React.FC = () => {
               </span>
             </div>
             <div className="relative">
-              <Lock size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" />
+              {showPassword ? (
+                <Unlock 
+                  size={15} 
+                  className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400 cursor-pointer hover:text-stone-700 transition-colors" 
+                  onClick={() => setShowPassword(false)}
+                />
+              ) : (
+                <Lock 
+                  size={15} 
+                  className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400 cursor-pointer hover:text-stone-700 transition-colors" 
+                  onClick={() => setShowPassword(true)}
+                />
+              )}
               <input
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 required
+                placeholder='••••••••••••'
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 className="w-full pl-10 pr-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-stone-900 focus:outline-none focus:border-stone-800"
@@ -96,7 +130,7 @@ export const AdminLoginPage: React.FC = () => {
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full bg-stone-900 hover:bg-stone-800 text-white py-3 rounded-xl text-xs font-sans font-bold uppercase tracking-widest transition-colors flex items-center justify-center gap-2 shadow-lg disabled:opacity-50 mt-4"
+            className="w-full bg-[#561C08] hover:bg-[#561C08]/90 text-white py-3 rounded-xl text-xs font-sans font-bold uppercase tracking-widest transition-colors flex items-center justify-center gap-2 shadow-lg disabled:opacity-50 mt-4"
           >
             {isLoading ? (
               <span className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />

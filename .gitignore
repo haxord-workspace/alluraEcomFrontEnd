@@ -22,3 +22,20 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Environment Variables
+.env
+.env.*
+*.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.example
+!.env.template
+
+# Claude / AI tools
+.claude
+.claude/
+.claoude
+.claoude/

@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import type {
   Product,
   Order,
@@ -11,11 +12,9 @@ import type {
   AbandonedCart,
   AdminUser,
   AdminRole,
-  AdminPermissionMatrix,
   AuditLogItem,
   StockTransaction,
   StockReservation,
-  CMSPage,
   FAQItem,
   AIKnowledgeArticle,
   CustomerProfile,
@@ -24,30 +23,61 @@ import { productsData } from '../data/products';
 import { mockOrdersData, mockReturnRequestsData } from '../data/mockOrders';
 import { mockCouponsData, mockPromotionsData } from '../data/mockCoupons';
 import { mockCustomersData, mockAbandonedCartsData } from '../data/mockCustomers';
-import { mockBannersData } from '../data/mockBanners';
+import { getAdminBanners, getPublicBanners } from '../service/adminBanners';
 import {
-  mockAdminUsers,
-  mockDefaultPermissions,
   mockAuditLogsData,
   mockStockTransactionsData,
   mockStockReservationsData,
-  mockCMSPagesData,
 } from '../data/mockAdminSettings';
+import {
+  getRolesMatrix,
+  settingsErrorMessage,
+} from '../service/settings';
+import {
+  DEFAULT_RBAC_MODULES,
+  formatStaffLastActive,
+  normalizeAdminRole,
+  resolveRbacModuleKey,
+} from '../utils/rbac';
+import {
+  RBAC_ROLES,
+  type AnyModuleKey,
+  type NormalizedRolesMatrix,
+  type PermissionValue,
+  type RbacAction,
+  type RbacModuleMeta,
+  type RbacRole,
+  type RolesMatrixMap,
+} from '../types/settings';
 import { mockFaqsData } from '../data/mockFaqs';
 import { mockAIKnowledgeData } from '../data/mockAIKnowledge';
 import { useShop } from './ShopContext';
+import { useSelector, useDispatch } from 'react-redux';
+import type { RootState, AppDispatch } from '../store';
+import {
+  loginAdmin,
+  logoutAdmin,
+  fetchAdminProfile,
+} from '../store/slices/adminAuthSlice';
 
 interface AdminContextType {
   // Admin Session & Roles
   currentAdmin: AdminUser;
   setCurrentAdmin: (admin: AdminUser) => void;
-  adminUsers: AdminUser[];
-  role: AdminRole;
+  realRole: AdminRole | null;
+  role: AdminRole | null;
   setRole: (role: AdminRole) => void;
-  permissions: AdminPermissionMatrix;
-  permissionsMatrix: Record<string, AdminPermissionMatrix>;
-  updatePermissions: (role: AdminRole, perms: Partial<AdminPermissionMatrix>) => void;
-  hasPermission: (module: keyof AdminPermissionMatrix, action?: string) => boolean;
+  rolesMatrix: RolesMatrixMap | null;
+  rbacModules: RbacModuleMeta[];
+  availableRoles: RbacRole[];
+  lockedRoles: RbacRole[];
+  isLoadingPermissions: boolean;
+  isRefreshingPermissions: boolean;
+  permissionsError: string | null;
+  refreshPermissions: (options?: { background?: boolean }) => Promise<NormalizedRolesMatrix | null>;
+  setRolesMatrixState: React.Dispatch<React.SetStateAction<NormalizedRolesMatrix | null>>;
+  getPermissionState: (module: AnyModuleKey, action?: string) => PermissionValue;
+  hasPermission: (module: AnyModuleKey, action?: string) => boolean;
   isAdminAuthenticated: boolean;
   adminLogin: (email: string, pass: string) => Promise<boolean>;
   adminLogout: () => void;
@@ -94,6 +124,8 @@ interface AdminContextType {
   promotions: Promotion[];
   addPromotion: (promo: Omit<Promotion, 'id'>) => Promotion;
   banners: Banner[];
+  isLoadingBanners: boolean;
+  setBannersList: (banners: Banner[]) => void;
   addBanner: (banner: Omit<Banner, 'id'>) => Banner;
   updateBanner: (id: string, updates: Partial<Banner>) => void;
   deleteBanner: (id: string) => void;
@@ -102,8 +134,6 @@ interface AdminContextType {
   sendCartReminder: (id: string, channel: 'WhatsApp' | 'Email') => void;
 
   // Content & FAQs
-  cmsPages: CMSPage[];
-  updateCMSPage: (id: string, updates: Partial<CMSPage>) => void;
   faqs: FAQItem[];
   addFAQ: (faq: Omit<FAQItem, 'id' | 'updatedAt'>) => FAQItem;
   updateFAQ: (id: string, updates: Partial<FAQItem>) => void;
@@ -128,53 +158,65 @@ interface AdminContextType {
   setIsCommandOpen: (open: boolean) => void;
   isAdminNotificationsOpen: boolean;
   setIsAdminNotificationsOpen: (open: boolean) => void;
-  adminNotifications: {
-    id: string;
-    title: string;
-    description: string;
-    time: string;
-    type: 'order' | 'stock' | 'return' | 'payment';
-    isRead: boolean;
-  }[];
-  markAdminNotificationRead: (id: string) => void;
 }
 
 const AdminContext = createContext<AdminContextType | undefined>(undefined);
 
 export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { showToast } = useShop();
+  const dispatch = useDispatch<AppDispatch>();
 
-  // Admin Session
-  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
-    return localStorage.getItem('allura_admin_auth') === 'true';
-  });
+  // Admin auth state lives in Redux
+  const isAdminAuthenticated = useSelector((state: RootState) => state.adminAuth.isAuthenticated);
 
-  const [adminUsers] = useState<AdminUser[]>(() => {
-    try {
-      const saved = localStorage.getItem('allura_admin_users');
-      return saved ? JSON.parse(saved) : mockAdminUsers;
-    } catch {
-      return mockAdminUsers;
+  // On mount: always attempt to restore the admin session via /auth/me.
+  // Don't gate this on the access-token cookie's presence — it's short-lived
+  // and may have already expired while the httpOnly refresh cookie is still
+  // valid, in which case adminApi's response interceptor silently refreshes
+  // it on the 401. Skipping this call whenever the cookie was already gone
+  // is what caused admins to be bounced to /admin/login after being away.
+  // Only needed on admin pages; the storefront never uses the admin session.
+  const isAdminRoute = useLocation().pathname.startsWith('/admin');
+  useEffect(() => {
+    if (isAdminRoute && !isAdminAuthenticated) {
+      dispatch(fetchAdminProfile());
     }
-  });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdminRoute]);
 
-  const [currentAdmin, setCurrentAdmin] = useState<AdminUser>(() => {
+  // Clean up any legacy localStorage caches for staff/permissions/admin profile
+  useEffect(() => {
     try {
-      const saved = localStorage.getItem('allura_current_admin');
-      return saved ? JSON.parse(saved) : mockAdminUsers[0];
+      localStorage.removeItem('allura_admin_users');
+      localStorage.removeItem('allura_current_admin');
+      localStorage.removeItem('allura_admin_permissions');
     } catch {
-      return mockAdminUsers[0];
+      // Ignore storage cleanup errors
     }
-  });
+  }, []);
 
-  const [permissionsMatrix, setPermissionsMatrix] = useState<Record<string, AdminPermissionMatrix>>(() => {
-    try {
-      const saved = localStorage.getItem('allura_admin_permissions');
-      return saved ? { ...mockDefaultPermissions, ...JSON.parse(saved) } : mockDefaultPermissions;
-    } catch {
-      return mockDefaultPermissions;
-    }
+  const authAdmin = useSelector((state: RootState) => state.adminAuth.admin);
+  const authPermissions = useSelector((state: RootState) => state.adminAuth.permissions);
+  const adminAuthStatus = useSelector((state: RootState) => state.adminAuth.status);
+  const realRole = normalizeAdminRole(authPermissions?.role || authAdmin?.role);
+
+  const [currentAdmin, setCurrentAdmin] = useState<AdminUser>({
+    id: '',
+    name: 'Admin',
+    email: '',
+    role: 'ORDER_MANAGER',
+    status: 'Active',
+    lastLogin: 'Never',
+    createdDate: '',
   });
+  const [roleOverride, setRoleOverride] = useState<AdminRole | null>(null);
+
+  const [rolesMatrixState, setRolesMatrixState] = useState<NormalizedRolesMatrix | null>(null);
+  const rolesMatrixRef = useRef<NormalizedRolesMatrix | null>(null);
+  rolesMatrixRef.current = rolesMatrixState;
+  const [isLoadingPermissions, setIsLoadingPermissions] = useState<boolean>(false);
+  const [isRefreshingPermissions, setIsRefreshingPermissions] = useState<boolean>(false);
+  const [permissionsError, setPermissionsError] = useState<string | null>(null);
 
   // Products
   const [products, setProducts] = useState<Product[]>(() => {
@@ -231,46 +273,24 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [promotions, setPromotions] = useState<Promotion[]>(mockPromotionsData);
   const [banners, setBanners] = useState<Banner[]>(() => {
     try {
-      const saved = localStorage.getItem('allura_banners');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          // Normalize legacy cached banners
-          return parsed.map((b: Partial<Banner>, idx: number) => ({
-            id: b.id || `ban-${Date.now()}-${idx}`,
-            title: b.title || b.headline || `Luxury Couture Slide ${idx + 1}`,
-            headline: b.headline || b.title || 'HANDCRAFTED MODEST & ETHNIC COUTURE',
-            subtitle: b.subtitle || b.description || 'Heirloom Kasavu zari, pure silk weaves, and graceful modest silhouettes.',
-            description: b.description || b.subtitle || 'Heirloom Kasavu zari, pure silk weaves, and graceful modest silhouettes.',
-            badge: b.badge || 'PERINTHALMANNA ATELIER',
-            eyebrow: b.eyebrow || 'FESTIVE \'26 COLLECTION • HANDCRAFTED',
-            offerPill: b.offerPill || 'Use Code FESTIVE15 for 15% Off • Free Kerala Express Delivery > ₹2,999',
-            ctaText: b.ctaText || 'SHOP NOW',
-            targetUrl: b.targetUrl || '/shop',
-            secondaryCtaText: b.secondaryCtaText || 'AI LUXURY STYLIST',
-            secondaryTargetUrl: b.secondaryTargetUrl || '/ai-assistant',
-            desktopImage: b.desktopImage || `/images/hero-banners/slide-${(idx % 3) + 1}.jpeg`,
-            mobileImage: b.mobileImage || b.desktopImage || `/images/hero-banners/slide-${(idx % 3) + 1}.jpeg`,
-            startDate: b.startDate || '2026-08-01',
-            endDate: b.endDate || '2026-12-31',
-            status: b.status || 'Active',
-            position: b.position || (idx < 3 ? 'Hero' : 'Editorial'),
-            displayOrder: b.displayOrder || idx + 1,
-          }));
-        }
+      const fromSession = sessionStorage.getItem('allura_banners_session');
+      if (fromSession) {
+        const parsed = JSON.parse(fromSession);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
-      return mockBannersData;
+      const saved = localStorage.getItem('allura_banners');
+      return saved ? JSON.parse(saved) : [];
     } catch {
-      return mockBannersData;
+      return [];
     }
   });
+  const [isLoadingBanners, setIsLoadingBanners] = useState<boolean>(() => banners.length === 0);
   const [abandonedCarts, setAbandonedCarts] = useState<AbandonedCart[]>(mockAbandonedCartsData);
 
   // Customers
   const [customers] = useState<CustomerProfile[]>(mockCustomersData);
 
-  // CMS, FAQs, AI Knowledge
-  const [cmsPages, setCmsPages] = useState<CMSPage[]>(mockCMSPagesData);
+  // FAQs, AI Knowledge
   const [faqs, setFaqs] = useState<FAQItem[]>(mockFaqsData);
   const [aiArticles, setAiArticles] = useState<AIKnowledgeArticle[]>(mockAIKnowledgeData);
 
@@ -287,72 +307,190 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // UI States
   const [isCommandOpen, setIsCommandOpen] = useState(false);
   const [isAdminNotificationsOpen, setIsAdminNotificationsOpen] = useState(false);
-  const [adminNotifications, setAdminNotifications] = useState([
-    {
-      id: 'adm-notif-1',
-      title: 'New Prepaid Order Received',
-      description: 'Order ALR-ORD-882045 (₹5,849) by Dr. Shahina K.',
-      time: '10 mins ago',
-      type: 'order' as const,
-      isRead: false,
-    },
-    {
-      id: 'adm-notif-2',
-      title: 'Low Stock Alert',
-      description: 'Classic Cream Anarkali (Size M) has only 2 units left in atelier.',
-      time: '1 hour ago',
-      type: 'stock' as const,
-      isRead: false,
-    },
-    {
-      id: 'adm-notif-3',
-      title: 'Return Request Submitted',
-      description: 'Ananya Menon requested size exchange for Blush Pleated Set.',
-      time: '3 hours ago',
-      type: 'return' as const,
-      isRead: true,
-    },
-  ]);
 
-  // Sync to localStorage
+  // Sync currentAdmin directly from the authenticated admin profile (adminAuthSlice)
   useEffect(() => {
-    localStorage.setItem('allura_admin_auth', isAdminAuthenticated ? 'true' : 'false');
-  }, [isAdminAuthenticated]);
+    if (!authAdmin) {
+      setRoleOverride(null);
+      setRolesMatrixState(null);
+      setPermissionsError(null);
+      setIsLoadingPermissions(false);
+      setCurrentAdmin({
+        id: '',
+        name: 'Admin',
+        email: '',
+        role: 'ORDER_MANAGER',
+        status: 'Active',
+        lastLogin: 'Never',
+        createdDate: '',
+      });
+      return;
+    }
+
+    const p = authAdmin.profile || {};
+    const name =
+      p.displayName ||
+      [p.firstName, p.lastName].filter(Boolean).join(' ') ||
+      authAdmin.name ||
+      authAdmin.fullName ||
+      authAdmin.email ||
+      'Admin';
+    const resolvedRole = normalizeAdminRole(authAdmin.role) || 'ORDER_MANAGER';
+
+    setRoleOverride(null);
+    setCurrentAdmin({
+      id: String(authAdmin._id || authAdmin.id || ''),
+      name,
+      email: authAdmin.email || '',
+      role: resolvedRole,
+      status: authAdmin.status && authAdmin.status !== 'ACTIVE' ? 'Suspended' : 'Active',
+      lastLogin: formatStaffLastActive(authAdmin.lastLoginAt || authAdmin.lastActiveAt || authAdmin.lastLogin),
+      createdDate: authAdmin.createdAt || '',
+    });
+  }, [authAdmin]);
+
+  const refreshPermissions = useCallback(
+    async (options?: { background?: boolean }): Promise<NormalizedRolesMatrix | null> => {
+      if (!isAdminAuthenticated || !realRole) {
+        setRolesMatrixState(null);
+        setPermissionsError(null);
+        setIsLoadingPermissions(false);
+        setIsRefreshingPermissions(false);
+        return null;
+      }
+
+      // Non-super roles MUST NEVER call getRolesMatrix() (avoids 403)
+      if (realRole !== 'SUPER_ADMIN') {
+        await dispatch(fetchAdminProfile());
+        return null;
+      }
+
+      // Only SUPER_ADMIN calls getRolesMatrix()
+      const isBackground = Boolean(options?.background && rolesMatrixRef.current);
+      if (isBackground) {
+        setIsRefreshingPermissions(true);
+      } else {
+        setIsLoadingPermissions(true);
+      }
+      setPermissionsError(null);
+
+      try {
+        const normalized = await getRolesMatrix();
+        setRolesMatrixState(normalized);
+        return normalized;
+      } catch (err) {
+        const message = settingsErrorMessage(err, "Couldn't load permissions");
+        setPermissionsError(message);
+        if (!isBackground) {
+          setRolesMatrixState(null);
+        }
+        return null;
+      } finally {
+        if (isBackground) {
+          setIsRefreshingPermissions(false);
+        } else {
+          setIsLoadingPermissions(false);
+        }
+      }
+    },
+    [isAdminAuthenticated, realRole, dispatch]
+  );
 
   useEffect(() => {
-    localStorage.setItem('allura_current_admin', JSON.stringify(currentAdmin));
-  }, [currentAdmin]);
+    // Only call getRolesMatrix on mount if the real role is SUPER_ADMIN
+    if (isAdminAuthenticated && realRole === 'SUPER_ADMIN') {
+      void refreshPermissions();
+    }
+  }, [isAdminAuthenticated, realRole, refreshPermissions]);
+
+  const safeLocalStorageSet = (key: string, value: any) => {
+    try {
+      localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
+    } catch (err) {
+      console.warn(`[AdminContext] Failed to cache ${key} to localStorage:`, err);
+    }
+  };
+
+  const safeSaveBannersToStorage = (list: Banner[]) => {
+    try {
+      // Exclude oversized base64 strings from local storage cache to keep storage light (<20KB) and prevent main-thread freeze
+      const sanitized = list.map(b => ({
+        ...b,
+        desktopImage: (b.desktopImage?.startsWith('data:') && b.desktopImage.length > 30000) ? '' : b.desktopImage,
+        mobileImage: (b.mobileImage?.startsWith('data:') && b.mobileImage.length > 30000) ? '' : b.mobileImage,
+      }));
+      const serialized = JSON.stringify(sanitized);
+      sessionStorage.setItem('allura_banners_session', serialized);
+      localStorage.setItem('allura_banners', serialized);
+    } catch (err) {
+      console.warn('[AdminContext] Could not cache banners to storage:', err);
+    }
+  };
 
   useEffect(() => {
-    localStorage.setItem('allura_admin_products', JSON.stringify(products));
+    safeLocalStorageSet('allura_admin_products', products);
   }, [products]);
 
   useEffect(() => {
-    localStorage.setItem('allura_stock_tx', JSON.stringify(stockTransactions));
+    safeLocalStorageSet('allura_stock_tx', stockTransactions);
   }, [stockTransactions]);
 
   useEffect(() => {
-    localStorage.setItem('allura_orders', JSON.stringify(orders));
+    safeLocalStorageSet('allura_orders', orders);
   }, [orders]);
 
   useEffect(() => {
-    localStorage.setItem('allura_returns', JSON.stringify(returns));
+    safeLocalStorageSet('allura_returns', returns);
   }, [returns]);
 
   useEffect(() => {
-    localStorage.setItem('allura_coupons', JSON.stringify(coupons));
+    safeLocalStorageSet('allura_coupons', coupons);
   }, [coupons]);
 
   useEffect(() => {
-    localStorage.setItem('allura_audit_logs', JSON.stringify(auditLogs));
+    safeLocalStorageSet('allura_audit_logs', auditLogs);
   }, [auditLogs]);
 
   useEffect(() => {
-    localStorage.setItem('allura_admin_permissions', JSON.stringify(permissionsMatrix));
-  }, [permissionsMatrix]);
+    let isMounted = true;
+    const fetchBannersData = async () => {
+      // 1. If authenticated as an admin, query the admin banners endpoint
+      if (isAdminAuthenticated) {
+        try {
+          const res = await getAdminBanners({ sortBy: 'displayOrder', sortOrder: 'asc' });
+          if (Array.isArray(res) && res.length > 0) {
+            if (isMounted) setBanners(res);
+            return;
+          }
+        } catch (err) {
+          console.warn('[AdminContext] Admin banners fetch failed, falling back to public banners endpoint:', err);
+        }
+      }
+
+      // 2. For storefront visitors and unauthenticated users, directly call public banners:
+      // GET /api/v1/banners?sortBy=displayOrder&sortOrder=asc
+      try {
+        const publicBanners = await getPublicBanners({ sortBy: 'displayOrder', sortOrder: 'asc' });
+        if (isMounted && Array.isArray(publicBanners) && publicBanners.length > 0) {
+          setBanners(publicBanners);
+        }
+      } catch (err) {
+        console.warn('[AdminContext] Could not load public banners:', err);
+      } finally {
+        if (isMounted) setIsLoadingBanners(false);
+      }
+    };
+
+    fetchBannersData();
+    return () => {
+      isMounted = false;
+    };
+  }, [isAdminAuthenticated]);
 
   useEffect(() => {
-    localStorage.setItem('allura_banners', JSON.stringify(banners));
+    if (banners.length > 0) {
+      safeSaveBannersToStorage(banners);
+    }
   }, [banners]);
 
   // Logging
@@ -376,45 +514,117 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setAuditLogs(prev => [newLog, ...prev]);
   }, [currentAdmin]);
 
-  // Permissions
-  const role = currentAdmin.role;
+  // Permissions — backed by /auth/me for staff, and by rolesMatrix for Super Admin / preview
+  const role: AdminRole | null = realRole === 'SUPER_ADMIN' ? (roleOverride ?? realRole) : realRole;
+
   const setRole = (newRole: AdminRole) => {
-    setCurrentAdmin(prev => ({ ...prev, role: newRole }));
-    logAdminAction('Changed Permission', 'Admin Management', `Role changed to ${newRole}`);
-    showToast(`Switched active role to ${newRole}`, 'gold');
+    if (realRole !== 'SUPER_ADMIN') return;
+    const normalized = normalizeAdminRole(newRole);
+    if (!normalized) return;
+    setRoleOverride(normalized === realRole ? null : normalized);
+    setCurrentAdmin(prev => ({ ...prev, role: normalized }));
+    logAdminAction('Changed Permission', 'Admin Management', `Role changed to ${normalized}`);
+    showToast(`Switched active role to ${normalized}`, 'gold');
+    void refreshPermissions({ background: true });
   };
 
-  const permissions = permissionsMatrix[role] || mockDefaultPermissions.SUPER_ADMIN;
+  const effectiveIsLoadingPermissions =
+    adminAuthStatus === 'loading' ||
+    (realRole === 'SUPER_ADMIN' && isLoadingPermissions && !rolesMatrixState);
 
-  const updatePermissions = (targetRole: AdminRole, perms: Partial<AdminPermissionMatrix>) => {
-    setPermissionsMatrix(prev => ({
-      ...prev,
-      [targetRole]: {
-        ...prev[targetRole],
-        ...perms,
-      },
-    }));
-    logAdminAction('Changed Permission', 'Admin Management', `Updated permissions for ${targetRole}`);
-    showToast(`Permissions updated for ${targetRole}`, 'success');
+  const getPermissionState = useCallback(
+    (module: AnyModuleKey, action = 'view'): PermissionValue => {
+      if (!isAdminAuthenticated || !role || effectiveIsLoadingPermissions) {
+        return null;
+      }
+      const canonicalModule = resolveRbacModuleKey(module);
+      if (!canonicalModule) return null;
+
+      const normalizedAction = action.toLowerCase();
+      const act =
+        normalizedAction === 'cancel' || normalizedAction === 'refund'
+          ? 'edit'
+          : normalizedAction === 'send'
+            ? 'create'
+            : normalizedAction;
+
+      // 1. If role is overridden (preview mode active by Super Admin)
+      if (roleOverride && rolesMatrixState) {
+        const modPerms = rolesMatrixState.matrix[roleOverride]?.[canonicalModule];
+        return modPerms?.[act as RbacAction] ?? null;
+      }
+
+      // 2. If user is Super Admin
+      if (authPermissions?.superAdmin === true || realRole === 'SUPER_ADMIN') {
+        if (rolesMatrixState?.matrix.SUPER_ADMIN?.[canonicalModule]) {
+          return rolesMatrixState.matrix.SUPER_ADMIN[canonicalModule][act as RbacAction] ?? true;
+        }
+        return true;
+      }
+
+      // 3. Non-super user: check authPermissions from /auth/me
+      if (authPermissions?.matrix?.[canonicalModule]?.[act] !== undefined) {
+        return authPermissions.matrix[canonicalModule][act];
+      }
+
+      const permKey = `${canonicalModule}:${act}`;
+      return authPermissions?.granted?.includes(permKey) ? true : false;
+    },
+    [isAdminAuthenticated, role, effectiveIsLoadingPermissions, roleOverride, rolesMatrixState, authPermissions, realRole]
+  );
+
+  const hasPermission = useCallback(
+    (module: AnyModuleKey, action = 'view'): boolean => {
+      if (!isAdminAuthenticated || !role || effectiveIsLoadingPermissions) {
+        return false;
+      }
+
+      // 1. If role is overridden (preview mode by Super Admin)
+      if (roleOverride && rolesMatrixState) {
+        const canonicalModule = resolveRbacModuleKey(module);
+        if (!canonicalModule) return false;
+        const norm = action.toLowerCase();
+        const act = norm === 'cancel' || norm === 'refund' ? 'edit' : norm === 'send' ? 'create' : norm;
+        return rolesMatrixState.matrix[roleOverride]?.[canonicalModule]?.[act as RbacAction] === true;
+      }
+
+      // 2. Super Admin: full access
+      if (authPermissions?.superAdmin === true || realRole === 'SUPER_ADMIN') {
+        return true;
+      }
+
+      // 3. Staff member: evaluate `${module}:${action}` in granted list
+      const canonicalModule = resolveRbacModuleKey(module);
+      if (!canonicalModule) return false;
+      const norm = action.toLowerCase();
+      const act = norm === 'cancel' || norm === 'refund' ? 'edit' : norm === 'send' ? 'create' : norm;
+      const permKey = `${canonicalModule}:${act}`;
+      return Boolean(authPermissions?.granted?.includes(permKey));
+    },
+    [isAdminAuthenticated, role, effectiveIsLoadingPermissions, roleOverride, rolesMatrixState, authPermissions, realRole]
+  );
+
+  const rolesMatrix = rolesMatrixState?.matrix ?? null;
+  const rbacModules = rolesMatrixState?.modules ?? DEFAULT_RBAC_MODULES;
+  const availableRoles: RbacRole[] = rolesMatrixState?.roles ?? (realRole ? [realRole] : [...RBAC_ROLES]);
+  const lockedRoles: RbacRole[] = rolesMatrixState?.lockedRoles ?? ['SUPER_ADMIN'];
+
+  // Auth — dispatches to Redux thunks which handle cookies + API
+  const adminLogin = async (email: string, pass: string): Promise<boolean> => {
+    const result = await dispatch(loginAdmin({ email, password: pass }));
+    if (loginAdmin.fulfilled.match(result)) {
+      logAdminAction('Logged In', 'Security', 'Admin Portal Session Started');
+      showToast('Admin access granted', 'gold');
+      return true;
+    } else {
+      const msg = (result.payload as string) || 'Login failed. Please check your credentials.';
+      showToast(msg, 'error');
+      return false;
+    }
   };
 
-  const hasPermission = (module: keyof AdminPermissionMatrix, action = 'view'): boolean => {
-    const mod = permissions[module] as Record<string, boolean> | undefined;
-    if (!mod) return false;
-    return !!mod[action];
-  };
-
-  // Auth
-  const adminLogin = async (_email: string, _pass: string): Promise<boolean> => {
-    await new Promise(resolve => setTimeout(resolve, 600));
-    setIsAdminAuthenticated(true);
-    logAdminAction('Logged In', 'Security', 'Admin Portal Session Started');
-    showToast('Admin access granted', 'gold');
-    return true;
-  };
-
-  const adminLogout = () => {
-    setIsAdminAuthenticated(false);
+  const adminLogout = async () => {
+    await dispatch(logoutAdmin());
     showToast('Logged out of Admin Portal', 'info');
   };
 
@@ -683,10 +893,29 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     showToast('Banner deleted', 'info');
   };
 
+  const setBannersList = (list: Banner[]) => {
+    setBanners(list);
+    safeSaveBannersToStorage(list);
+  };
+
   const resetBannersToDefault = () => {
-    setBanners(mockBannersData);
-    localStorage.setItem('allura_banners', JSON.stringify(mockBannersData));
-    showToast('Marketing & Hero Banners reset to atelier defaults', 'gold');
+    const fetchPromise = isAdminAuthenticated
+      ? getAdminBanners({ sortBy: 'displayOrder', sortOrder: 'asc' })
+      : getPublicBanners({ sortBy: 'displayOrder', sortOrder: 'asc' });
+
+    fetchPromise
+      .then(apiList => {
+        setBanners(apiList);
+        safeSaveBannersToStorage(apiList);
+        showToast('Store banners synchronized with live backend API', 'gold');
+      })
+      .catch(() => {
+        setBanners([]);
+        try {
+          localStorage.removeItem('allura_banners');
+        } catch {}
+        showToast('No active backend banners found', 'info');
+      });
   };
 
   const sendCartReminder = (id: string, channel: 'WhatsApp' | 'Email') => {
@@ -707,16 +936,6 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     logAdminAction('Created', 'Marketing', id, `Sent abandoned cart reminder via ${channel}`);
   };
 
-  // CMS & FAQs
-  const updateCMSPage = (id: string, updates: Partial<CMSPage>) => {
-    setCmsPages(prev =>
-      prev.map(p =>
-        p.id === id ? { ...p, ...updates, updatedAt: new Date().toLocaleDateString('en-GB') } : p
-      )
-    );
-    logAdminAction('Updated', 'CMS', id, 'CMS content updated');
-    showToast('Page content saved', 'success');
-  };
 
   const addFAQ = (faq: Omit<FAQItem, 'id' | 'updatedAt'>): FAQItem => {
     const newFAQ: FAQItem = {
@@ -764,21 +983,24 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     showToast('AI Knowledge Article updated', 'success');
   };
 
-  const markAdminNotificationRead = (id: string) => {
-    setAdminNotifications(prev => prev.map(n => (n.id === id ? { ...n, isRead: true } : n)));
-  };
-
   return (
     <AdminContext.Provider
       value={{
         currentAdmin,
         setCurrentAdmin,
-        adminUsers,
+        realRole,
         role,
         setRole,
-        permissions,
-        permissionsMatrix,
-        updatePermissions,
+        rolesMatrix,
+        rbacModules,
+        availableRoles,
+        lockedRoles,
+        isLoadingPermissions: effectiveIsLoadingPermissions,
+        isRefreshingPermissions,
+        permissionsError,
+        refreshPermissions,
+        setRolesMatrixState,
+        getPermissionState,
         hasPermission,
         isAdminAuthenticated,
         adminLogin,
@@ -808,14 +1030,14 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         promotions,
         addPromotion,
         banners,
+        isLoadingBanners,
+        setBannersList,
         addBanner,
         updateBanner,
         deleteBanner,
         resetBannersToDefault,
         abandonedCarts,
         sendCartReminder,
-        cmsPages,
-        updateCMSPage,
         faqs,
         addFAQ,
         updateFAQ,
@@ -829,8 +1051,6 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setIsCommandOpen,
         isAdminNotificationsOpen,
         setIsAdminNotificationsOpen,
-        adminNotifications,
-        markAdminNotificationRead,
       }}
     >
       {children}

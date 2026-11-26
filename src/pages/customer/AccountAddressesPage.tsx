@@ -1,0 +1,338 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
+import { ArrowLeft, Plus, MapPin, Edit3, Trash2, Loader2 } from 'lucide-react';
+import { useShop } from '../../context/ShopContext';
+import { AddressCardSkeleton } from '../../components/ui/AddressCardSkeleton';
+import { Modal } from '../../components/common/Modal';
+import type { SavedAddress } from '../../types';
+import { normalizeMobile, normalizePincode, mobileError, pincodeError } from '../../utils/addressValidation';
+
+export const AccountAddressesPage: React.FC = () => {
+  const { customer, fetchCustomerAddresses, isLoadingAddresses, addCustomerAddress, updateCustomerAddress, deleteCustomerAddress } = useShop();
+
+  useEffect(() => {
+    fetchCustomerAddresses();
+  }, []);
+
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingAddressId, setEditingAddressId] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  // Show field errors after the field is left or the form is submitted
+  const [touched, setTouched] = useState({ phone: false, postalCode: false });
+  const initialFormSnapshotRef = useRef('');
+
+  const [formData, setFormData] = useState({
+    label: 'Home',
+    fullName: '',
+    phone: { countryCode: '+91', number: '' },
+    addressLine1: '',
+    addressLine2: '',
+    landmark: '',
+    city: '',
+    state: '',
+    postalCode: '',
+    country: 'India',
+    isDefaultShipping: false,
+    isDefaultBilling: false,
+  });
+
+  const handleOpenAdd = () => {
+    setEditingAddressId(null);
+    const initialFormData = {
+      label: 'Home',
+      fullName: customer?.name || '',
+      phone: { countryCode: '+91', number: normalizeMobile(customer?.phone || '') },
+      addressLine1: '',
+      addressLine2: '',
+      landmark: '',
+      city: 'Perinthalmanna',
+      state: 'Kerala',
+      postalCode: '679322',
+      country: 'India',
+      isDefaultShipping: false,
+      isDefaultBilling: false,
+    };
+    setFormData(initialFormData);
+    setTouched({ phone: false, postalCode: false });
+    setIsModalOpen(true);
+    initialFormSnapshotRef.current = JSON.stringify(initialFormData);
+  };
+
+  const handleOpenEdit = (addr: SavedAddress) => {
+    setEditingAddressId(addr.id);
+    const initialFormData = {
+      label: addr.label,
+      fullName: addr.fullName,
+      phone: { countryCode: addr.phone.countryCode || '+91', number: normalizeMobile(addr.phone.number) },
+      addressLine1: addr.addressLine1,
+      addressLine2: addr.addressLine2 || '',
+      landmark: addr.landmark || '',
+      city: addr.city,
+      state: addr.state,
+      postalCode: addr.postalCode,
+      country: addr.country,
+      isDefaultShipping: addr.isDefaultShipping,
+      isDefaultBilling: addr.isDefaultBilling,
+    };
+    setFormData(initialFormData);
+    setTouched({ phone: false, postalCode: false });
+    setIsModalOpen(true);
+    initialFormSnapshotRef.current = JSON.stringify(initialFormData);
+  };
+
+  const phoneErr = mobileError(formData.phone.number);
+  const pinErr = pincodeError(formData.postalCode);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customer) return;
+    if (phoneErr || pinErr) {
+      setTouched({ phone: true, postalCode: true });
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      if (editingAddressId) {
+        await updateCustomerAddress(editingAddressId, formData);
+      } else {
+        const isFirst = customer.addresses.length === 0;
+        await addCustomerAddress({
+          ...formData,
+          isDefaultShipping: isFirst || formData.isDefaultShipping,
+          isDefaultBilling: isFirst || formData.isDefaultBilling,
+        });
+      }
+      setIsModalOpen(false);
+    } catch (error) {
+      // Handled by context
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-16 space-y-8">
+      <div>
+        <Link to="/account" className="inline-flex items-center gap-1.5 text-xs font-sans text-allura-muted hover:text-allura-text transition-colors mb-2">
+          <ArrowLeft size={14} />
+          <span>Back to Account</span>
+        </Link>
+        <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+          <div>
+            <h1 className="font-serif text-2xl sm:text-3xl text-allura-text font-normal">Manage Addresses</h1>
+            <p className="text-xs font-sans text-allura-muted mt-1">Manage your delivery locations and preferences.</p>
+          </div>
+          <button
+            onClick={handleOpenAdd}
+            className="px-5 py-2.5 bg-allura-darkBrown hover:bg-allura-softBrown text-white rounded-xl text-xs font-sans font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-colors"
+          >
+            <Plus size={16} />
+            <span>Add New Address</span>
+          </button>
+        </div>
+      </div>
+
+      {isLoadingAddresses && (!customer?.addresses || customer.addresses.length === 0) ? (
+        <AddressCardSkeleton count={2} />
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {customer?.addresses.map((addr) => (
+          <div key={addr.id} className="bg-allura-card border border-allura-border rounded-2xl p-6 shadow-subtle space-y-4">
+            <div className="flex justify-between items-center">
+              <span className="text-[10px] font-sans font-bold uppercase tracking-wider bg-allura-bgSecondary px-2 py-0.5 rounded text-allura-darkBrown">
+                {addr.label}
+              </span>
+              {addr.isDefaultShipping && (
+                <span className="text-[10px] font-sans font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                  Default Shipping
+                </span>
+              )}
+            </div>
+
+            <div className="text-xs font-sans text-allura-muted leading-relaxed space-y-1">
+              <p className="font-bold text-allura-text text-sm">{addr.fullName}</p>
+              <p>{addr.addressLine1}</p>
+              {addr.addressLine2 && <p>{addr.addressLine2}</p>}
+              <p>{addr.city} - {addr.postalCode}</p>
+              <p>{addr.state}, {addr.country}</p>
+              <p className="pt-2 text-allura-text">
+                <span className="font-semibold text-allura-muted">Phone:</span> {addr.phone.countryCode} {addr.phone.number}
+              </p>
+            </div>
+            
+            <div className="pt-2 border-t border-allura-border flex gap-3">
+              <button 
+                onClick={() => handleOpenEdit(addr)}
+                className="text-xs font-sans font-bold text-allura-goldDark hover:text-allura-darkBrown flex items-center gap-1 transition-colors"
+              >
+                <Edit3 size={14} />
+                <span>Edit</span>
+              </button>
+              <button 
+                onClick={() => deleteCustomerAddress(addr.id)}
+                className="text-xs font-sans font-bold text-red-500 hover:text-red-700 flex items-center gap-1 transition-colors"
+              >
+                <Trash2 size={14} />
+                <span>Delete</span>
+              </button>
+            </div>
+          </div>
+        ))}
+        {customer?.addresses?.length === 0 && (
+          <div className="col-span-full py-10 text-center border-2 border-dashed border-allura-border rounded-2xl">
+            <MapPin size={32} className="mx-auto text-allura-muted mb-3" />
+            <p className="text-sm font-sans font-semibold text-allura-text">No Saved Addresses</p>
+            <p className="text-xs font-sans text-allura-muted mt-1">Add an address to speed up checkout.</p>
+          </div>
+        )}
+      </div>
+    )}
+
+      <Modal
+        open={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        isBusy={isSubmitting}
+        isDirty={isModalOpen && JSON.stringify(formData) !== initialFormSnapshotRef.current}
+        discardConfirmMessage="You have unsaved changes to this address. Discard them?"
+        panelClassName="relative bg-allura-card border border-allura-border rounded-2xl max-w-md w-full shadow-luxury max-h-[90vh] flex flex-col focus:outline-none"
+      >
+          <div className="overflow-y-auto p-6 sm:p-8 space-y-4">
+            <h3 className="font-serif text-xl text-allura-text font-normal pr-8">
+              {editingAddressId ? 'Edit Address' : 'Add Delivery Address'}
+            </h3>
+            <form onSubmit={handleSubmit} className="space-y-4 text-xs font-sans">
+              <div>
+                <label className="block font-bold text-allura-muted uppercase text-[10px] mb-1">Save As (Label)</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Home, Office, etc."
+                  value={formData.label}
+                  onChange={e => setFormData({ ...formData, label: e.target.value })}
+                  className="w-full p-2.5 bg-allura-bg border border-allura-border rounded-xl focus:border-allura-gold outline-none"
+                />
+              </div>
+              <div>
+                <label className="block font-bold text-allura-muted uppercase text-[10px] mb-1">Full Name</label>
+                <input
+                  type="text"
+                  required
+                  value={formData.fullName}
+                  onChange={e => setFormData({ ...formData, fullName: e.target.value })}
+                  className="w-full p-2.5 bg-allura-bg border border-allura-border rounded-xl focus:border-allura-gold outline-none"
+                />
+              </div>
+              <div>
+                <label className="block font-bold text-allura-muted uppercase text-[10px] mb-1">Mobile Number</label>
+                <div
+                  className={`flex items-center bg-allura-bg border rounded-xl focus-within:border-allura-gold ${
+                    touched.phone && phoneErr ? 'border-red-400' : 'border-allura-border'
+                  }`}
+                >
+                  <span className="pl-2.5 pr-1 text-allura-muted">+91</span>
+                  <input
+                    type="tel"
+                    inputMode="numeric"
+                    autoComplete="tel-national"
+                    required
+                    maxLength={10}
+                    placeholder="10-digit mobile number"
+                    value={formData.phone.number}
+                    onChange={e => setFormData({
+                      ...formData,
+                      phone: { ...formData.phone, number: normalizeMobile(e.target.value) },
+                    })}
+                    onBlur={() => setTouched(t => ({ ...t, phone: true }))}
+                    aria-invalid={touched.phone && !!phoneErr}
+                    className="flex-1 min-w-0 p-2.5 pl-1 bg-transparent outline-none"
+                  />
+                </div>
+                {touched.phone && phoneErr && <p className="mt-1 text-[11px] text-red-600">{phoneErr}</p>}
+              </div>
+              <div>
+                <label className="block font-bold text-allura-muted uppercase text-[10px] mb-1">Street Address</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="House/Flat, Street, Area"
+                  value={formData.addressLine1}
+                  onChange={e => setFormData({ ...formData, addressLine1: e.target.value })}
+                  className="w-full p-2.5 bg-allura-bg border border-allura-border rounded-xl focus:border-allura-gold outline-none"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-allura-muted uppercase text-[10px] mb-1">City</label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.city}
+                    onChange={e => setFormData({ ...formData, city: e.target.value })}
+                    className="w-full p-2.5 bg-allura-bg border border-allura-border rounded-xl focus:border-allura-gold outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-allura-muted uppercase text-[10px] mb-1">PIN Code</label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="postal-code"
+                    required
+                    maxLength={6}
+                    placeholder="6 digits"
+                    value={formData.postalCode}
+                    onChange={e => setFormData({ ...formData, postalCode: normalizePincode(e.target.value) })}
+                    onBlur={() => setTouched(t => ({ ...t, postalCode: true }))}
+                    aria-invalid={touched.postalCode && !!pinErr}
+                    className={`w-full p-2.5 bg-allura-bg border rounded-xl focus:border-allura-gold outline-none ${
+                      touched.postalCode && pinErr ? 'border-red-400' : 'border-allura-border'
+                    }`}
+                  />
+                  {touched.postalCode && pinErr && <p className="mt-1 text-[11px] text-red-600">{pinErr}</p>}
+                </div>
+              </div>
+              <div>
+                <label className="block font-bold text-allura-muted uppercase text-[10px] mb-1">State</label>
+                <input
+                  type="text"
+                  required
+                  value={formData.state}
+                  onChange={e => setFormData({ ...formData, state: e.target.value })}
+                  className="w-full p-2.5 bg-allura-bg border border-allura-border rounded-xl focus:border-allura-gold outline-none"
+                />
+              </div>
+
+              <label className="flex items-center gap-2 pt-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={formData.isDefaultShipping}
+                  onChange={e => setFormData({ ...formData, isDefaultShipping: e.target.checked })}
+                  className="accent-allura-goldDark w-4 h-4 rounded border-allura-border"
+                />
+                <span className="text-allura-text">Set as default shipping address</span>
+              </label>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-allura-border">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2.5 border border-allura-border rounded-xl text-allura-muted font-bold transition-colors hover:bg-allura-bgSecondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="px-6 py-2.5 bg-allura-darkBrown hover:bg-allura-softBrown text-white rounded-xl font-bold uppercase tracking-wider transition-colors shadow-sm disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isSubmitting && <Loader2 size={14} className="animate-spin" />}
+                  <span>{isSubmitting ? 'Saving...' : 'Save Address'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+      </Modal>
+    </div>
+  );
+};
