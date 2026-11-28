@@ -1,328 +1,334 @@
-import React, { useRef, useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { usePromotions } from '../../hooks/usePromotions';
 import { PromotionCard } from './PromotionCard';
+import { PromotionCardWithBackground } from './PromotionCardWithBackground';
+import { PromotionProductList } from './PromotionProductList';
+import { PromotionCategory } from './PromotionCategory';
+import { PromotionCollection } from './PromotionCollection';
 import type { StorePromotion } from '../../types/storePromotion';
 
-const SKELETON_CARD_CLASS = 'h-64 sm:h-72 rounded-2xl sm:rounded-3xl bg-[#561C08]/10 allura-shimmer flex-shrink-0';
+const AUTOPLAY_INTERVAL_MS = 5000; // 5 seconds
+const MANUAL_PAUSE_DURATION_MS = 300000; // 5 minutes (300,000 ms)
+const VIEW_ALL_PAUSE_DURATION_MS = 9000; // 9 seconds
 
 const PromotionsSkeleton: React.FC = () => (
-  <section className="max-w-7xl mx-auto px-6 lg:px-8" aria-hidden="true">
+  <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6" aria-hidden="true">
     <div className="flex items-center justify-between gap-3 mb-6 sm:mb-8 border-b border-[#561C08]/15 pb-4 max-md:mb-3 max-md:pb-2.5">
       <div className="h-6 sm:h-8 w-48 bg-[#561C08]/10 rounded animate-pulse" />
     </div>
-    <div className="flex items-stretch gap-4 sm:gap-6 overflow-hidden">
-      <div className={`w-[86%] sm:w-1/2 lg:w-1/3 ${SKELETON_CARD_CLASS}`} />
-      <div className={`hidden sm:block w-1/2 lg:w-1/3 ${SKELETON_CARD_CLASS}`} />
-      <div className={`hidden lg:block w-1/3 ${SKELETON_CARD_CLASS}`} />
+
+    {/* Promotion Card Skeleton */}
+    <div className="h-64 sm:h-72 rounded-2xl sm:rounded-3xl bg-[#561C08]/10 allura-shimmer w-full mb-6" />
+
+    {/* Product Cards Row Skeleton */}
+    <div className="flex items-stretch gap-4 overflow-hidden">
+      <div className="w-[195px] sm:w-[220px] lg:flex-1 h-64 rounded-2xl bg-[#561C08]/10 allura-shimmer flex-shrink-0" />
+      <div className="w-[195px] sm:w-[220px] lg:flex-1 h-64 rounded-2xl bg-[#561C08]/10 allura-shimmer flex-shrink-0" />
+      <div className="hidden sm:block w-[220px] lg:flex-1 h-64 rounded-2xl bg-[#561C08]/10 allura-shimmer flex-shrink-0" />
+      <div className="hidden lg:block lg:flex-1 h-64 rounded-2xl bg-[#561C08]/10 allura-shimmer flex-shrink-0" />
+      <div className="hidden lg:block lg:flex-1 h-64 rounded-2xl bg-[#561C08]/10 allura-shimmer flex-shrink-0" />
     </div>
   </section>
 );
 
-/** Layout classes per promo count:
- * - 1 promo: full width wide ticket
- * - 2-3 promos: 2-3 columns on desktop (>=1024px), horizontal scroll row on mobile/tablet (<1024px)
- * - >3 promos: 3 cards visible carousel on desktop (>=1024px), horizontal scroll row on mobile/tablet (<1024px)
- */
-function getLayoutClasses(count: number): { track: string; card: string; variant: 'featured' | 'grid' } {
-  if (count === 1) {
-    return { track: 'w-full py-2', card: 'w-full', variant: 'featured' };
-  }
-  if (count === 2) {
-    return {
-      track:
-        'flex items-stretch gap-4 sm:gap-6 overflow-x-auto snap-x snap-mandatory no-scrollbar pt-2 pb-5 lg:grid lg:grid-cols-2 lg:gap-6 lg:overflow-visible lg:py-2',
-      card: 'w-[86%] sm:w-[calc(50%_-_12px)] lg:w-full flex-shrink-0 h-full',
-      variant: 'grid',
-    };
-  }
-  if (count === 3) {
-    return {
-      track:
-        'flex items-stretch gap-4 sm:gap-6 overflow-x-auto snap-x snap-mandatory no-scrollbar pt-2 pb-5 lg:grid lg:grid-cols-3 lg:gap-6 lg:overflow-visible lg:py-2',
-      card: 'w-[86%] sm:w-[calc(50%_-_12px)] lg:w-full flex-shrink-0 h-full',
-      variant: 'grid',
-    };
-  }
-  // > 3 promos: 3 cards visible carousel on desktop, scroll-snap row on mobile
-  return {
-    track:
-      'flex items-stretch gap-4 sm:gap-6 overflow-x-auto snap-x snap-mandatory no-scrollbar pt-2 pb-5 lg:py-2',
-    card: 'w-[86%] sm:w-[calc(50%_-_12px)] lg:w-[calc((100%_-_48px)_/_3)] flex-shrink-0 h-full',
-    variant: 'grid',
-  };
+interface ActivePromotionBlockProps {
+  promotion: StorePromotion;
+  index: number;
+  total: number;
+  onExpire: (id: string) => void;
+  onExpandProducts?: () => void;
 }
 
-const PromotionsSectionInner: React.FC = () => {
+/**
+ * Renders the persistent shell for the active promotion.
+ * Does NOT unmount or remount when promotion changes.
+ * The underlying PromotionCard, Category, and Product components receive new props smoothly.
+ */
+const ActivePromotionBlock: React.FC<ActivePromotionBlockProps> = ({
+  promotion,
+  index,
+  total,
+  onExpire,
+  onExpandProducts,
+}) => {
+  const scopeType = promotion.applicableTo?.type || 'ALL';
+  // Backend-driven: an admin-uploaded banner image switches to the premium background
+  // design; everything else keeps the existing coupon/ticket card unchanged.
+  const hasBackgroundImage = Boolean(promotion.backgroundImage?.url?.trim());
+  const PromoCardComponent = hasBackgroundImage ? PromotionCardWithBackground : PromotionCard;
+
+  return (
+    <div className="flex flex-col w-full">
+      {/* 1. Main Promotion Card (Ticket design, or the image-background design when set) */}
+      <PromoCardComponent
+        promotion={promotion}
+        variant="featured"
+        className="w-full"
+        animationDelayMs={0}
+        onExpire={onExpire}
+        index={index}
+        total={total}
+      />
+
+      {/* 2. Conditional Promotion Scope Content */}
+
+      {/* CATEGORIES: Display category chips or banner underneath */}
+      {scopeType === 'CATEGORIES' && promotion.categories && promotion.categories.length > 0 && (
+        <PromotionCategory categories={promotion.categories} />
+      )}
+
+      {/* COLLECTIONS: Display collection information underneath */}
+      {scopeType === 'COLLECTIONS' && promotion.collections && promotion.collections.length > 0 && (
+        <PromotionCollection collections={promotion.collections} />
+      )}
+
+      {/* 3. Applicable Products: Display up to 4 desktop / 2 mobile products, expandable via View All */}
+      {/* Note: Storewide 'ALL' promotions do not render an empty product row */}
+      {scopeType !== 'ALL' && (
+        <PromotionProductList promotion={promotion} onExpand={onExpandProducts} />
+      )}
+    </div>
+  );
+};
+
+export const PromotionsSection: React.FC = () => {
   const { promotions, isLoading } = usePromotions();
   const [visible, setVisible] = useState<StorePromotion[]>([]);
-  const trackRef = useRef<HTMLDivElement>(null);
+  const [activeIndex, setActiveIndex] = useState(0);
 
-  const [activeSlide, setActiveSlide] = useState(0);
-  const [canScroll, setCanScroll] = useState(false);
-  const [canScrollPrev, setCanScrollPrev] = useState(false);
-  const [canScrollNext, setCanScrollNext] = useState(false);
+  // Manual pause state (5 minutes)
+  const manualPauseUntilRef = useRef<number>(0);
+  // View All pause state (9 seconds)
+  const viewAllPauseUntilRef = useRef<number>(0);
 
-  // Desktop mouse drag to scroll
-  const isDraggingRef = useRef(false);
-  const startXRef = useRef(0);
-  const scrollLeftRef = useRef(0);
-  const hasMovedRef = useRef(false);
+  const autoplayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     setVisible(promotions);
+    // Keep activeIndex valid when promotions list changes
+    setActiveIndex((current) => (promotions.length > 0 ? current % promotions.length : 0));
   }, [promotions]);
 
   const handleExpire = useCallback((id: string) => {
-    setVisible((current) => current.filter((promotion) => promotion.id !== id));
+    setVisible((current) => {
+      const nextList = current.filter((promo) => promo.id !== id);
+      return nextList;
+    });
   }, []);
 
-  const count = visible.length;
+  const total = visible.length;
 
-  const updateScrollState = useCallback(() => {
-    const el = trackRef.current;
-    if (!el || count <= 1) {
-      setCanScroll(false);
-      setCanScrollPrev(false);
-      setCanScrollNext(false);
-      return;
+  // Change slide without unmounting the outer shell
+  const goToSlide = useCallback((newIndex: number) => {
+    if (total <= 1) return;
+    setActiveIndex(newIndex);
+  }, [total]);
+
+  // Autoplay engine: dynamically schedules next slide after all pauses expire
+  const scheduleNextAutoplay = useCallback(() => {
+    if (autoplayTimerRef.current) {
+      clearTimeout(autoplayTimerRef.current);
+      autoplayTimerRef.current = null;
     }
 
-    const { scrollLeft, scrollWidth, clientWidth } = el;
-    const hasOverflow = scrollWidth > clientWidth + 4;
-    setCanScroll(hasOverflow);
-    setCanScrollPrev(scrollLeft > 6);
-    setCanScrollNext(scrollLeft < scrollWidth - clientWidth - 6);
+    if (total <= 1) return;
 
-    const firstChild = el.children[0] as HTMLElement | undefined;
-    if (firstChild) {
-      const cardWidth = firstChild.offsetWidth + 16;
-      const index = Math.round(scrollLeft / Math.max(1, cardWidth));
-      setActiveSlide(Math.min(Math.max(0, index), count - 1));
+    const now = Date.now();
+    const activePauseUntil = Math.max(manualPauseUntilRef.current, viewAllPauseUntilRef.current);
+    const delay = activePauseUntil > now
+      ? (activePauseUntil - now) + AUTOPLAY_INTERVAL_MS
+      : AUTOPLAY_INTERVAL_MS;
+
+    autoplayTimerRef.current = setTimeout(() => {
+      if (document.hidden) {
+        // Tab hidden, wait and reschedule when active
+        return;
+      }
+      const checkNow = Date.now();
+      const currentPauseUntil = Math.max(manualPauseUntilRef.current, viewAllPauseUntilRef.current);
+      if (checkNow < currentPauseUntil) {
+        // Still paused, re-schedule
+        scheduleNextAutoplay();
+        return;
+      }
+
+      // Advance to next promotion
+      setActiveIndex((prev) => (prev + 1) % total);
+    }, delay);
+  }, [total]);
+
+  // Next Slide Action (Manual navigation: 5-minute pause)
+  const nextSlide = useCallback((isManual = false) => {
+    if (total <= 1) return;
+    if (isManual) {
+      manualPauseUntilRef.current = Date.now() + MANUAL_PAUSE_DURATION_MS;
     }
-  }, [count]);
+    const nextIdx = (activeIndex + 1) % total;
+    goToSlide(nextIdx);
+    scheduleNextAutoplay();
+  }, [activeIndex, total, goToSlide, scheduleNextAutoplay]);
 
-  useEffect(() => {
-    updateScrollState();
-    const el = trackRef.current;
-    if (!el) return;
-
-    let ro: ResizeObserver | null = null;
-    if (typeof ResizeObserver !== 'undefined') {
-      ro = new ResizeObserver(updateScrollState);
-      ro.observe(el);
+  // Previous Slide Action (Manual navigation: 5-minute pause)
+  const prevSlide = useCallback((isManual = false) => {
+    if (total <= 1) return;
+    if (isManual) {
+      manualPauseUntilRef.current = Date.now() + MANUAL_PAUSE_DURATION_MS;
     }
-    window.addEventListener('resize', updateScrollState);
-    return () => {
-      if (ro) ro.disconnect();
-      window.removeEventListener('resize', updateScrollState);
-    };
-  }, [updateScrollState, count]);
+    const prevIdx = (activeIndex - 1 + total) % total;
+    goToSlide(prevIdx);
+    scheduleNextAutoplay();
+  }, [activeIndex, total, goToSlide, scheduleNextAutoplay]);
 
-  const handleScroll = useCallback(() => {
-    window.requestAnimationFrame(updateScrollState);
-  }, [updateScrollState]);
+  // Manual Indicator / Dot Click (5-minute pause)
+  const selectSlide = useCallback((index: number) => {
+    if (index === activeIndex || index < 0 || index >= total) return;
+    manualPauseUntilRef.current = Date.now() + MANUAL_PAUSE_DURATION_MS;
+    goToSlide(index);
+    scheduleNextAutoplay();
+  }, [activeIndex, total, goToSlide, scheduleNextAutoplay]);
 
-  const scrollByCard = (direction: 'left' | 'right') => {
-    const el = trackRef.current;
-    if (!el) return;
-    const firstCard = el.children[0] as HTMLElement | undefined;
-    const amount = (firstCard?.offsetWidth || 340) + 16;
-    const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    el.scrollBy({
-      left: direction === 'left' ? -amount : amount,
-      behavior: prefersReduced ? 'auto' : 'smooth',
-    });
-  };
+  // Handle View All Products click (9-second pause without overriding 5-minute pause)
+  const handleExpandProducts = useCallback(() => {
+    const targetTime = Date.now() + VIEW_ALL_PAUSE_DURATION_MS;
+    // Set 9-second pause timestamp (priority rule: Math.max ensures it never shortens an active 5-minute manual pause)
+    viewAllPauseUntilRef.current = targetTime;
+    // Reschedule so next rotation happens 9s (pause) + 5s (interval) = 14s later
+    scheduleNextAutoplay();
+  }, [scheduleNextAutoplay]);
 
-  const scrollToSlide = (index: number) => {
-    const el = trackRef.current;
-    if (!el) return;
-    const firstCard = el.children[0] as HTMLElement | undefined;
-    if (!firstCard) return;
-    const cardWidth = firstCard.offsetWidth + 16;
-    const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    el.scrollTo({ left: index * cardWidth, behavior: prefersReduced ? 'auto' : 'smooth' });
-    setActiveSlide(index);
-  };
-
-  // Keyboard navigation on scroll container
+  // Keyboard Navigation
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowLeft') {
       e.preventDefault();
-      scrollByCard('left');
+      prevSlide(true);
     } else if (e.key === 'ArrowRight') {
       e.preventDefault();
-      scrollByCard('right');
+      nextSlide(true);
     }
   };
 
-  // Mouse click-drag handlers
-  const handlePointerDown = (e: React.PointerEvent) => {
-    if (e.button !== 0) return;
-    const el = trackRef.current;
-    if (!el) return;
-    isDraggingRef.current = true;
-    startXRef.current = e.pageX - el.offsetLeft;
-    scrollLeftRef.current = el.scrollLeft;
-    hasMovedRef.current = false;
-  };
+  // Autoplay Lifecycle Effect
+  useEffect(() => {
+    scheduleNextAutoplay();
 
-  const handlePointerMove = (e: React.PointerEvent) => {
-    if (!isDraggingRef.current) return;
-    const el = trackRef.current;
-    if (!el) return;
-    const x = e.pageX - el.offsetLeft;
-    const walk = (x - startXRef.current) * 1.2;
-    if (Math.abs(walk) > 4) {
-      hasMovedRef.current = true;
-      el.scrollLeft = scrollLeftRef.current - walk;
-    }
-  };
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        scheduleNextAutoplay();
+      }
+    };
 
-  const handlePointerUp = () => {
-    isDraggingRef.current = false;
-  };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
-  if (isLoading) return <PromotionsSkeleton />;
-  if (count === 0) return null;
+    return () => {
+      if (autoplayTimerRef.current) {
+        clearTimeout(autoplayTimerRef.current);
+      }
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [activeIndex, total, scheduleNextAutoplay]);
 
-  const { track, card, variant } = getLayoutClasses(count);
-  const showNavControls = count > 1 && canScroll;
+  if (isLoading) {
+    return <PromotionsSkeleton />;
+  }
+
+  // If visible.length === 0, hide the entire promotion section
+  if (total === 0) {
+    return null;
+  }
+
+  const currentPromotion = visible[activeIndex] || visible[0];
+  // The image-background card breaks out to full viewport width on desktop; the ticket
+  // design never overflows its container, so only it needs `overflow-hidden` kept.
+  const currentHasBackgroundImage = Boolean(currentPromotion?.backgroundImage?.url?.trim());
 
   return (
-    <section className="max-w-7xl mx-auto px-6 lg:px-8">
-      {/* ─── HEADER ROW ─── */}
-      <div className="flex items-center justify-between gap-3 mb-6 sm:mb-8 border-b border-[#561C08]/15 pb-4 max-md:mb-3 max-md:pb-2.5">
+    <section
+      className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6"
+      aria-label="Current Promotions and Offers"
+      onKeyDown={handleKeyDown}
+      tabIndex={0}
+    >
+      {/* ─── SECTION HEADER ROW ─── */}
+      <div className="flex items-center justify-between gap-3 mb-5 sm:mb-8 border-b border-[#561C08]/15 pb-4 max-md:mb-3 max-md:pb-2.5">
         <h2 className="font-heading text-xl sm:text-3xl lg:text-4xl text-[#000000] font-bold uppercase tracking-tight max-md:text-[15px] max-md:font-semibold max-md:tracking-[0.06em] max-md:leading-[1.2] max-md:whitespace-nowrap">
           CURRENT OFFERS
         </h2>
 
-        {/* Right side controls: counter and navigation arrows */}
-        {showNavControls && (
-          <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
-            {/* Slide Counter */}
-            <span
-              className="text-xs sm:text-sm font-sans font-bold tabular-nums text-[#561C08]/80 mr-0.5 sm:mr-1 select-none"
-              aria-live="polite"
-            >
-              <span className="hidden lg:inline">
-                {Math.min(count, activeSlide + 3)} / {count}
-              </span>
-              <span className="lg:hidden">
-                {activeSlide + 1} / {count}
-              </span>
+        {total > 1 ? (
+          <div className="flex items-center gap-3 sm:gap-4">
+            {/* Offer Counter: 1 / 3 OFFERS */}
+            <span className="text-xs sm:text-sm font-sans font-bold tabular-nums text-[#561C08]/80 select-none uppercase tracking-wider">
+              {activeIndex + 1} / {total} OFFERS
             </span>
 
-            {/* Navigation Arrows (identical styling to category carousel) */}
-            <div className="flex items-center gap-1.5 sm:gap-2">
+            {/* Manual Navigation Controls */}
+            <div className="flex items-center gap-1.5" role="group" aria-label="Promotion Navigation">
               <button
                 type="button"
-                onClick={() => scrollByCard('left')}
-                disabled={!canScrollPrev}
-                aria-label="Previous offer"
-                aria-disabled={!canScrollPrev}
-                className="w-8 h-8 sm:w-9 sm:h-9 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-full flex items-center justify-center border transition-all duration-300 border-[#561C08]/30 text-[#561C08] hover:bg-[#561C08] hover:text-white shadow-xs cursor-pointer hover:scale-105 active:scale-95 disabled:opacity-25 disabled:pointer-events-none disabled:hover:scale-100"
+                onClick={() => prevSlide(true)}
+                aria-label="Previous Offer"
+                title="Previous Offer"
+                className="w-8 h-8 rounded-full border border-[#561C08]/20 flex items-center justify-center transition-all text-[#561C08] hover:bg-[#561C08]/10 active:scale-95 cursor-pointer bg-white shadow-xs focus:outline-none focus:ring-2 focus:ring-[#561C08]/30"
               >
                 <ChevronLeft size={16} />
               </button>
+
               <button
                 type="button"
-                onClick={() => scrollByCard('right')}
-                disabled={!canScrollNext}
-                aria-label="Next offer"
-                aria-disabled={!canScrollNext}
-                className="w-8 h-8 sm:w-9 sm:h-9 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-full flex items-center justify-center border transition-all duration-300 border-[#561C08]/30 text-[#561C08] hover:bg-[#561C08] hover:text-white shadow-xs cursor-pointer hover:scale-105 active:scale-95 disabled:opacity-25 disabled:pointer-events-none disabled:hover:scale-100"
+                onClick={() => nextSlide(true)}
+                aria-label="Next Offer"
+                title="Next Offer"
+                className="w-8 h-8 rounded-full border border-[#561C08]/20 flex items-center justify-center transition-all text-[#561C08] hover:bg-[#561C08]/10 active:scale-95 cursor-pointer bg-white shadow-xs focus:outline-none focus:ring-2 focus:ring-[#561C08]/30"
               >
                 <ChevronRight size={16} />
               </button>
             </div>
           </div>
+        ) : (
+          <span className="text-xs sm:text-sm font-sans font-bold tabular-nums text-[#561C08]/80 select-none uppercase tracking-wider">
+            1 Active Offer
+          </span>
         )}
       </div>
 
-      {/* ─── SCROLLABLE CAROUSEL CONTAINER ─── */}
-      <div className="relative">
-        <div
-          ref={trackRef}
-          role="region"
-          aria-label="Current offers"
-          tabIndex={0}
-          onKeyDown={handleKeyDown}
-          onScroll={handleScroll}
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
-          onPointerCancel={handlePointerUp}
-          onClickCapture={(e) => {
-            if (hasMovedRef.current) {
-              e.stopPropagation();
-              hasMovedRef.current = false;
-            }
-          }}
-          className={`${track || ''} touch-pan-x cursor-default focus:outline-none focus-visible:ring-2 focus-visible:ring-[#561C08]/40 rounded-xl`}
-          style={{
-            scrollSnapType: count > 1 ? 'x mandatory' : undefined,
-            WebkitOverflowScrolling: 'touch',
-            overscrollBehaviorX: 'contain',
-          }}
-        >
-          {visible.map((promotion, index) => (
-            <PromotionCard
-              key={promotion.id}
-              promotion={promotion}
-              variant={variant}
-              className={card}
-              animationDelayMs={index * 80}
-              onExpire={handleExpire}
-              index={index}
-              total={count}
-            />
-          ))}
+      {/* ─── SINGLE ACTIVE PROMOTION DISPLAY CONTAINER ─── */}
+      <div className={`w-full relative ${currentHasBackgroundImage ? 'overflow-visible' : 'overflow-hidden'}`}>
+        <div className="w-full flex flex-col">
+          <ActivePromotionBlock
+            promotion={currentPromotion}
+            index={activeIndex}
+            total={total}
+            onExpire={handleExpire}
+            onExpandProducts={handleExpandProducts}
+          />
         </div>
       </div>
 
-      {/* ─── PAGINATION INDICATORS (DOTS OR PROGRESS BAR) ─── */}
-      {showNavControls && (
-        <div className="mt-3.5">
-          {count <= 8 ? (
-            /* Dot indicators */
-            <div
-              className="flex justify-center items-center gap-1.5"
-              role="tablist"
-              aria-label="Offers carousel pagination"
-            >
-              {visible.map((_, i) => (
-                <button
-                  key={i}
-                  type="button"
-                  role="tab"
-                  aria-selected={activeSlide === i}
-                  aria-label={`Go to offer ${i + 1}`}
-                  onClick={() => scrollToSlide(i)}
-                  className={`h-1.5 rounded-full transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#561C08]/50 ${activeSlide === i
-                    ? 'w-6 bg-[#561C08]'
-                    : 'w-1.5 bg-[#561C08]/25 hover:bg-[#561C08]/50'
-                    }`}
-                />
-              ))}
-            </div>
-          ) : (
-            /* Progress bar for > 8 promos */
-            <div
-              className="max-w-xs mx-auto h-1 bg-[#561C08]/15 rounded-full overflow-hidden"
-              aria-hidden="true"
-            >
-              <div
-                className="h-full bg-[#561C08] rounded-full transition-all duration-300"
-                style={{ width: `${((activeSlide + 1) / count) * 100}%` }}
-              />
-            </div>
-          )}
+      {/* ─── CAROUSEL INDICATOR DOTS ─── */}
+      {total > 1 && (
+        <div
+          className="flex items-center justify-center gap-2 mt-5 sm:mt-6"
+          role="tablist"
+          aria-label="Promotion slides"
+        >
+          {visible.map((promo, idx) => (
+            <button
+              key={promo.id || `dot-${idx}`}
+              type="button"
+              role="tab"
+              aria-selected={idx === activeIndex}
+              aria-label={`Go to promotion ${idx + 1}`}
+              onClick={() => selectSlide(idx)}
+              className={`h-2 transition-all duration-300 rounded-full focus:outline-none focus:ring-2 focus:ring-[#561C08]/40 ${
+                idx === activeIndex
+                  ? 'w-6 bg-[#561C08]'
+                  : 'w-2 bg-[#561C08]/20 hover:bg-[#561C08]/40'
+              }`}
+            />
+          ))}
         </div>
       )}
     </section>
   );
 };
-
-export const PromotionsSection: React.FC = () => <PromotionsSectionInner />;

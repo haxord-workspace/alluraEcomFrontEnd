@@ -138,6 +138,8 @@ export interface Product {
   isBestSeller?: boolean;
   isNewArrival?: boolean;
   isFeatured?: boolean;
+  /** Indicates variants have differing prices, so price should display with "From " */
+  hasPriceRange?: boolean;
   colors: ProductColor[];
   sizes: string[];
   variants?: ProductVariant[];

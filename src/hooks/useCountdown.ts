@@ -53,37 +53,56 @@ function useNow(): number {
 
 export interface CountdownState {
   label: string;
+  days: number;
   hours: number;
   minutes: number;
   seconds: number;
+  totalHours: number;
   remainingMs: number;
   isExpired: boolean;
-  /** Within the final hour — used to trigger the subtle pulse */
+  /** Within the final hour — used to trigger subtle pulse */
   isLastHour: boolean;
   ariaLabel: string;
 }
 
 const pad = (n: number): string => String(n).padStart(2, '0');
 
-/** HH:MM:SS, zero-padded; hours may exceed 24 (never switches to a "days" display). */
+/**
+ * Calculates remaining time until `expiresAt`.
+ * Updates every second, never returns negative values, and stops when expired.
+ */
 export function useCountdown(expiresAt: string | null | undefined): CountdownState {
   const currentNow = useNow();
   const target = expiresAt ? new Date(expiresAt).getTime() : NaN;
   const remainingMs = Number.isFinite(target) ? Math.max(0, target - currentNow) : 0;
 
   const totalSeconds = Math.floor(remainingMs / 1000);
-  const hours = Math.floor(totalSeconds / 3600);
+  const days = Math.floor(totalSeconds / 86400);
+  const totalHours = Math.floor(totalSeconds / 3600);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
 
+  const label =
+    days > 0
+      ? `${days}d ${pad(hours)}:${pad(minutes)}:${pad(seconds)}`
+      : `${pad(totalHours)}:${pad(minutes)}:${pad(seconds)}`;
+
+  const ariaLabel =
+    days > 0
+      ? `Ends in ${days} days ${hours} hours ${minutes} minutes`
+      : `Ends in ${totalHours} hours ${minutes} minutes`;
+
   return {
-    label: `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`,
+    label,
+    days,
     hours,
     minutes,
     seconds,
+    totalHours,
     remainingMs,
     isExpired: remainingMs <= 0,
     isLastHour: remainingMs > 0 && remainingMs <= 3600_000,
-    ariaLabel: `Ends in ${hours} hours ${minutes} minutes`,
+    ariaLabel,
   };
 }

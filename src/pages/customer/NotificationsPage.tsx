@@ -22,6 +22,7 @@ import {
 import { useShop } from '../../context/ShopContext';
 import { useConfirm } from '../../context/ConfirmContext';
 import { formatCustomerNotificationView } from '../../utils/userFacingText';
+import { getPushCapabilityStatus, isIOSDevice, isInstalledPWA, type PushCapabilityStatus } from '../../utils/pushPlatform';
 
 export const NotificationsPage: React.FC = () => {
   const {
@@ -59,30 +60,26 @@ export const NotificationsPage: React.FC = () => {
   };
 
   // Push notification state detection
-  const isPushSupported = typeof window !== 'undefined' && 'Notification' in window && 'serviceWorker' in navigator;
-  const isIOS =
-    typeof navigator !== 'undefined' &&
-    (/iPad|iPhone|iPod/.test(navigator.userAgent) ||
-      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
-  const isStandalone =
-    typeof window !== 'undefined' &&
-    (window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone === true);
-
-  const [pushStatus, setPushStatus] = useState<string>(() => {
-    if (!isPushSupported) return 'unsupported';
-    if (isIOS && !isStandalone) return 'ios_not_pwa';
-    return Notification.permission; // 'default' | 'granted' | 'denied'
-  });
+  type ExtendedPushStatus = PushCapabilityStatus | 'registration_failed';
+  const [pushStatus, setPushStatus] = useState<ExtendedPushStatus>(() => getPushCapabilityStatus());
   const [isEnablingPush, setIsEnablingPush] = useState(false);
 
   const handleEnablePush = async () => {
     setIsEnablingPush(true);
     try {
       const result = await enablePushNotifications();
-      if (result.status === 'granted') {
+      if (result.success && result.status === 'granted') {
         setPushStatus('granted');
       } else if (result.status === 'denied') {
         setPushStatus('denied');
+      } else if (result.status === 'registration_failed') {
+        setPushStatus('registration_failed');
+      } else if (result.status === 'ios_not_pwa') {
+        setPushStatus('ios_not_pwa');
+      } else if (result.status === 'unsupported') {
+        setPushStatus('unsupported');
+      } else {
+        setPushStatus('registration_failed');
       }
     } finally {
       setIsEnablingPush(false);
@@ -139,28 +136,47 @@ export const NotificationsPage: React.FC = () => {
 
       {/* Push Notifications Status / Control Card */}
       <div className="bg-allura-card border border-allura-border/80 rounded-2xl p-5 sm:p-6 shadow-subtle">
-        {pushStatus === 'unsupported' ? (
+        {pushStatus === 'unsupported' || pushStatus === 'ios_version_unsupported' ? (
           <div className="flex items-start sm:items-center gap-3.5">
             <div className="w-10 h-10 rounded-full bg-allura-bgSecondary flex items-center justify-center flex-shrink-0 text-allura-muted">
               <BellOff size={18} />
             </div>
             <div>
-              <h3 className="font-serif text-sm font-medium text-allura-text">Browser Unsupported</h3>
+              <h3 className="font-serif text-sm font-medium text-allura-text">
+                Push notifications are not supported in this browser.
+              </h3>
               <p className="text-xs font-sans text-allura-muted mt-0.5">
-                Push notifications are not supported on this device/browser.
+                {pushStatus === 'ios_version_unsupported'
+                  ? 'Web push notifications require iOS 16.4 or later. Please update your device software.'
+                  : 'Your browser environment does not support web push notifications.'}
               </p>
             </div>
           </div>
-        ) : pushStatus === 'ios_not_pwa' ? (
-          <div className="flex items-start sm:items-center gap-3.5">
-            <div className="w-10 h-10 rounded-full bg-amber-50 text-amber-700 flex items-center justify-center flex-shrink-0">
-              <Share2 size={18} />
+        ) : pushStatus === 'ios_not_pwa' && isIOSDevice() && !isInstalledPWA() ? (
+          <div className="space-y-4">
+            <div className="flex items-start gap-3.5">
+              <div className="w-10 h-10 rounded-full bg-amber-50 text-amber-700 flex items-center justify-center flex-shrink-0">
+                <Share2 size={18} />
+              </div>
+              <div className="space-y-1">
+                <h3 className="font-serif text-base font-normal text-allura-text">
+                  Add Allura Boutique to your Home Screen to enable notifications.
+                </h3>
+                <p className="text-xs font-sans text-allura-muted">
+                  Apple requires Allura Boutique to be installed as a Home Screen web app to receive push alerts.
+                </p>
+              </div>
             </div>
-            <div>
-              <h3 className="font-serif text-sm font-medium text-allura-text">Enable on iOS</h3>
-              <p className="text-xs font-sans text-allura-muted mt-0.5">
-                To enable notifications on iOS, tap the Share button and select "Add to Home Screen".
-              </p>
+
+            <div className="bg-allura-bg/80 border border-allura-border/60 rounded-xl p-4 text-xs font-sans space-y-2 text-allura-text">
+              <p className="font-bold uppercase tracking-wider text-[10px] text-allura-goldDark">Installation Steps:</p>
+              <ol className="list-decimal list-inside space-y-1.5 text-allura-muted">
+                <li>Open Safari's <span className="font-semibold text-allura-text">Share</span> button.</li>
+                <li>Select <span className="font-semibold text-allura-text">Add to Home Screen</span>.</li>
+                <li>Open <span className="font-semibold text-allura-text">Allura Boutique</span> using the Home Screen icon.</li>
+                <li>Log in to your account.</li>
+                <li>Tap <span className="font-semibold text-allura-text">Turn On Notifications</span>.</li>
+              </ol>
             </div>
           </div>
         ) : pushStatus === 'denied' ? (
@@ -169,9 +185,11 @@ export const NotificationsPage: React.FC = () => {
               <AlertCircle size={18} />
             </div>
             <div>
-              <h3 className="font-serif text-sm font-medium text-allura-text">Notifications Blocked</h3>
+              <h3 className="font-serif text-sm font-medium text-allura-text">
+                Notifications are blocked. Please enable them in your browser settings.
+              </h3>
               <p className="text-xs font-sans text-allura-muted mt-0.5">
-                Notifications are blocked. Please allow them in your browser site settings.
+                Notifications were denied. Allow them in your browser or device site permissions.
               </p>
             </div>
           </div>
@@ -182,16 +200,49 @@ export const NotificationsPage: React.FC = () => {
                 <CheckCircle2 size={18} />
               </div>
               <div>
-                <h3 className="font-serif text-sm font-medium text-allura-text">Push Notifications Active</h3>
+                <h3 className="font-serif text-sm font-medium text-allura-text">Notifications Enabled</h3>
                 <p className="text-xs font-sans text-allura-muted mt-0.5">
-                  Notifications are enabled. You will receive live updates on your orders and exclusive boutique offers.
+                  Live boutique updates on order delivery milestones and private releases are active.
                 </p>
               </div>
             </div>
             <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200/80 rounded-full text-xs font-sans font-semibold self-start sm:self-auto">
               <Check size={12} />
-              <span>Enabled</span>
+              <span>Notifications Enabled</span>
             </span>
+          </div>
+        ) : pushStatus === 'registration_failed' ? (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-start sm:items-center gap-3.5">
+              <div className="w-10 h-10 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center flex-shrink-0">
+                <AlertTriangle size={18} />
+              </div>
+              <div>
+                <h3 className="font-serif text-sm font-medium text-allura-text">
+                  Unable to register this device. Please try again.
+                </h3>
+                <p className="text-xs font-sans text-allura-muted mt-0.5">
+                  The push service registration failed. Please verify your internet connection and retry.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={handleEnablePush}
+              disabled={isEnablingPush}
+              className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-allura-darkBrown hover:bg-black text-white text-xs font-sans font-semibold rounded-xl transition-colors shadow-xs disabled:opacity-50 self-start sm:self-auto flex-shrink-0"
+            >
+              {isEnablingPush ? (
+                <>
+                  <Loader2 size={14} className="animate-spin" />
+                  <span>Enabling…</span>
+                </>
+              ) : (
+                <>
+                  <Bell size={14} />
+                  <span>Turn On Notifications</span>
+                </>
+              )}
+            </button>
           </div>
         ) : (
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -219,7 +270,7 @@ export const NotificationsPage: React.FC = () => {
               ) : (
                 <>
                   <Bell size={14} />
-                  <span>Enable Push Notifications</span>
+                  <span>Turn On Notifications</span>
                 </>
               )}
             </button>

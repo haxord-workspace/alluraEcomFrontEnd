@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { Phone, MapPin, MessageCircle, Send, CheckCircle2, Navigation } from 'lucide-react';
+import { Phone, MapPin, MessageCircle, Send, CheckCircle2, Navigation, Loader2 } from 'lucide-react';
 import { useShop } from '../context/ShopContext';
 import { useStoreAddress } from '../hooks/useStoreAddress';
 import { cleanProfileValue, formatPhoneDisplay, phoneDigits, storeDisplayName } from '../utils/storeProfile';
+import { submitPublicContactInquiry, contactInquiryErrorMessage } from '../service/contactInquiries';
 
 /** Skeleton in the same size as an info card, so the layout doesn't jump while settings load */
 const InfoCardSkeleton: React.FC<{ rows?: number }> = ({ rows = 1 }) => (
@@ -19,6 +20,26 @@ const InfoCardSkeleton: React.FC<{ rows?: number }> = ({ rows = 1 }) => (
     ))}
   </div>
 );
+
+function validateEnquiry(name: string, phone: string, message: string): string | null {
+  const trimmedName = name.trim();
+  if (!trimmedName) return 'Name is required.';
+  if (trimmedName.length < 2) return 'Name must be at least 2 characters.';
+  if (trimmedName.length > 80) return 'Name must not exceed 80 characters.';
+
+  const trimmedPhone = phone.trim();
+  if (!trimmedPhone) return 'Phone number is required.';
+  const digits = trimmedPhone.replace(/\D/g, '');
+  if (digits.length < 10 || digits.length > 15) {
+    return 'Please enter a valid phone number (10 to 15 digits).';
+  }
+
+  if (message.length > 2000) {
+    return 'Message must not exceed 2000 characters.';
+  }
+
+  return null;
+}
 
 export const ContactPage: React.FC = () => {
   const { showToast, storeSettings, storeSettingsStatus } = useShop();
@@ -37,20 +58,59 @@ export const ContactPage: React.FC = () => {
   const isSettingsError = storeSettingsStatus === 'error' && !storeSettings;
   const hasLocation = !!address;
   const hasContact = phoneNumbers.length > 0 || !!whatsappDigits;
+
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [occasion, setOccasion] = useState('Bridal');
   const [message, setMessage] = useState('');
+  const [website, setWebsite] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [submittedName, setSubmittedName] = useState('');
+  const [submittedPhone, setSubmittedPhone] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !phone) {
-      showToast('Please provide your name and phone number', 'info');
+    if (isSubmitting) return;
+
+    const validationError = validateEnquiry(name, phone, message);
+    if (validationError) {
+      showToast(validationError, 'error');
       return;
     }
-    setIsSubmitted(true);
-    showToast(storeName ? `Enquiry sent to ${storeName} stylists!` : 'Enquiry sent to our stylists!', 'gold');
+
+    setIsSubmitting(true);
+    try {
+      const response = await submitPublicContactInquiry({
+        name: name.trim(),
+        phone: phone.trim(),
+        occasionType: occasion || undefined,
+        message: message.trim() || undefined,
+        website: website || '',
+      });
+
+      setSubmittedName(name.trim());
+      setSubmittedPhone(phone.trim());
+      setIsSubmitted(true);
+      const successMsg =
+        response?.message ||
+        (storeName ? `Enquiry sent to ${storeName} stylists!` : 'Enquiry sent to our stylists!');
+      showToast(successMsg, 'gold');
+    } catch (err: any) {
+      const errorMsg = contactInquiryErrorMessage(err, 'Failed to submit enquiry. Please try again.');
+      showToast(errorMsg, 'error');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleResetForm = () => {
+    setName('');
+    setPhone('');
+    setOccasion('Bridal');
+    setMessage('');
+    setWebsite('');
+    setIsSubmitted(false);
   };
 
   const handleOpenWhatsApp = () => {
@@ -97,81 +157,78 @@ export const ContactPage: React.FC = () => {
 
           {/* Location Card — boutiqueProfile.address */}
           {hasLocation && (
-          <div className="p-6 rounded-xl bg-allura-card border border-allura-border shadow-xs space-y-3">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-allura-bgSecondary flex items-center justify-center text-allura-goldDark">
-                <MapPin size={18} />
+            <div className="p-6 rounded-xl bg-allura-card border border-allura-border shadow-xs space-y-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-allura-bgSecondary flex items-center justify-center text-allura-goldDark">
+                  <MapPin size={18} />
+                </div>
+                <div>
+                  <h3 className="font-serif text-base font-semibold uppercase text-allura-text">
+                    Boutique Location
+                  </h3>
+                  {address && (
+                    <p className="text-xs text-allura-muted font-sans">
+                      {address}
+                    </p>
+                  )}
+                </div>
               </div>
-              <div>
-                <h3 className="font-serif text-base font-semibold uppercase text-allura-text">
-                  Boutique Location
-                </h3>
-                {address && (
-                  <p className="text-xs text-allura-muted font-sans">
-                    {address}
-                  </p>
-                )}
-              </div>
+              {mapsUrl && (
+                <div className="pt-2">
+                  <a
+                    href={mapsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 text-xs font-sans font-bold text-allura-goldDark hover:text-allura-darkBrown uppercase tracking-wider"
+                  >
+                    <Navigation size={13} />
+                    <span>Open in Google Maps</span>
+                  </a>
+                </div>
+              )}
             </div>
-            {mapsUrl && (
-              <div className="pt-2">
-                <a
-                  href={mapsUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 text-xs font-sans font-bold text-allura-goldDark hover:text-allura-darkBrown uppercase tracking-wider"
-                >
-                  <Navigation size={13} />
-                  <span>Open in Google Maps</span>
-                </a>
-              </div>
-            )}
-          </div>
           )}
 
           {/* Contact Numbers — boutiqueProfile.whatsappNumber */}
           {hasContact && (
-          <div className="p-6 rounded-xl bg-allura-card border border-allura-border shadow-xs space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-allura-bgSecondary flex items-center justify-center text-allura-goldDark">
-                <Phone size={18} />
+            <div className="p-6 rounded-xl bg-allura-card border border-allura-border shadow-xs space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-allura-bgSecondary flex items-center justify-center text-allura-goldDark">
+                  <Phone size={18} />
+                </div>
+                <div>
+                  <h3 className="font-serif text-base font-semibold uppercase text-allura-text">
+                    Direct Phone & WhatsApp
+                  </h3>
+                </div>
               </div>
-              <div>
-                <h3 className="font-serif text-base font-semibold uppercase text-allura-text">
-                  Direct Phone & WhatsApp
-                </h3>
-              </div>
+
+              {phoneNumbers.length > 0 && (
+                <div className={`grid grid-cols-1 ${phoneNumbers.length > 1 ? 'sm:grid-cols-2' : ''} gap-3 pt-1`}>
+                  {phoneNumbers.map(number => (
+                    <a
+                      key={number}
+                      href={`tel:+${phoneDigits(number)}`}
+                      className="p-3 rounded-lg border border-allura-border/80 bg-allura-bg hover:border-allura-gold text-xs font-sans text-allura-text flex items-center justify-between"
+                    >
+                      <span>{formatPhoneDisplay(number)}</span>
+                      <Phone size={13} className="text-allura-muted" />
+                    </a>
+                  ))}
+                </div>
+              )}
+
+              {whatsappDigits && (
+                <button
+                  onClick={handleOpenWhatsApp}
+                  className="w-full bg-[#25D366]/10 text-[#128C7E] hover:bg-[#25D366]/20 border border-[#25D366]/40 py-2.5 px-4 rounded text-xs font-sans font-bold tracking-wider uppercase transition-colors flex items-center justify-center gap-2"
+                >
+                  <MessageCircle size={15} />
+                  <span>Instant WhatsApp Stylist Desk</span>
+                </button>
+              )}
             </div>
-
-            {phoneNumbers.length > 0 && (
-              <div className={`grid grid-cols-1 ${phoneNumbers.length > 1 ? 'sm:grid-cols-2' : ''} gap-3 pt-1`}>
-                {phoneNumbers.map(number => (
-                  <a
-                    key={number}
-                    href={`tel:+${phoneDigits(number)}`}
-                    className="p-3 rounded-lg border border-allura-border/80 bg-allura-bg hover:border-allura-gold text-xs font-sans text-allura-text flex items-center justify-between"
-                  >
-                    <span>{formatPhoneDisplay(number)}</span>
-                    <Phone size={13} className="text-allura-muted" />
-                  </a>
-                ))}
-              </div>
-            )}
-
-            {whatsappDigits && (
-              <button
-                onClick={handleOpenWhatsApp}
-                className="w-full bg-[#25D366]/10 text-[#128C7E] hover:bg-[#25D366]/20 border border-[#25D366]/40 py-2.5 px-4 rounded text-xs font-sans font-bold tracking-wider uppercase transition-colors flex items-center justify-center gap-2"
-              >
-                <MessageCircle size={15} />
-                <span>Instant WhatsApp Stylist Desk</span>
-              </button>
-            )}
-          </div>
           )}
-
-          {/* Boutique Hours card removed: it was hardcoded, and /store/settings has no
-              business-hours field. Add a card here once the API provides hours. */}
         </div>
 
         {/* Right: Interactive Enquiry Form (7 cols) */}
@@ -182,13 +239,14 @@ export const ContactPage: React.FC = () => {
                 <CheckCircle2 size={32} />
               </div>
               <h3 className="font-serif text-2xl font-semibold text-allura-text">
-                Thank you, {name}!
+                Thank you, {submittedName}!
               </h3>
               <p className="text-xs sm:text-sm text-allura-muted font-sans max-w-sm mx-auto leading-relaxed">
-                {storeName ? `A ${storeName} stylist` : 'Our stylist'} will reach out on WhatsApp / Phone ({phone}) shortly to assist you.
+                {storeName ? `A ${storeName} stylist` : 'Our stylist'} will reach out on WhatsApp / Phone ({submittedPhone}) shortly to assist you.
               </p>
               <button
-                onClick={() => setIsSubmitted(false)}
+                type="button"
+                onClick={handleResetForm}
                 className="text-xs font-sans font-bold text-allura-goldDark hover:text-allura-darkBrown underline uppercase tracking-wider"
               >
                 Send another enquiry
@@ -196,6 +254,20 @@ export const ContactPage: React.FC = () => {
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-6">
+              {/* Honeypot field (hidden from genuine users) */}
+              <div className="hidden" aria-hidden="true" style={{ display: 'none' }}>
+                <label htmlFor="website-field">Website</label>
+                <input
+                  id="website-field"
+                  type="text"
+                  name="website"
+                  tabIndex={-1}
+                  autoComplete="off"
+                  value={website}
+                  onChange={e => setWebsite(e.target.value)}
+                />
+              </div>
+
               <div className="space-y-1">
                 <span className="text-[10px] font-sans font-bold tracking-[0.25em] uppercase text-allura-goldDark">
                   PERSONAL CONSULTATION
@@ -216,7 +288,9 @@ export const ContactPage: React.FC = () => {
                     onChange={e => setName(e.target.value)}
                     placeholder="Enter your name"
                     required
-                    className="w-full bg-allura-bg border border-allura-border rounded p-3 text-xs sm:text-sm text-allura-text focus:outline-none focus:border-allura-gold font-sans"
+                    maxLength={80}
+                    disabled={isSubmitting}
+                    className="w-full bg-allura-bg border border-allura-border rounded p-3 text-xs sm:text-sm text-allura-text focus:outline-none focus:border-allura-gold font-sans disabled:opacity-60"
                   />
                 </div>
 
@@ -230,7 +304,8 @@ export const ContactPage: React.FC = () => {
                     onChange={e => setPhone(e.target.value)}
                     placeholder="Enter your phone number"
                     required
-                    className="w-full bg-allura-bg border border-allura-border rounded p-3 text-xs sm:text-sm text-allura-text focus:outline-none focus:border-allura-gold font-sans"
+                    disabled={isSubmitting}
+                    className="w-full bg-allura-bg border border-allura-border rounded p-3 text-xs sm:text-sm text-allura-text focus:outline-none focus:border-allura-gold font-sans disabled:opacity-60"
                   />
                 </div>
               </div>
@@ -242,7 +317,8 @@ export const ContactPage: React.FC = () => {
                 <select
                   value={occasion}
                   onChange={e => setOccasion(e.target.value)}
-                  className="w-full bg-allura-bg border border-allura-border rounded p-3 text-xs sm:text-sm text-allura-text focus:outline-none focus:border-allura-gold font-sans cursor-pointer"
+                  disabled={isSubmitting}
+                  className="w-full bg-allura-bg border border-allura-border rounded p-3 text-xs sm:text-sm text-allura-text focus:outline-none focus:border-allura-gold font-sans cursor-pointer disabled:opacity-60"
                 >
                   <option value="Bridal">Bridal Couture & Lehengas</option>
                   <option value="Festive">Festive Celebration (Eid / Onam / Diwali)</option>
@@ -253,24 +329,43 @@ export const ContactPage: React.FC = () => {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-allura-darkBrown uppercase tracking-wider">
-                  Your Message or Outfit Requirements
-                </label>
+                <div className="flex justify-between items-center">
+                  <label className="text-xs font-bold text-allura-darkBrown uppercase tracking-wider">
+                    Your Message or Outfit Requirements
+                  </label>
+                  {message.length > 0 && (
+                    <span className={`text-[10px] font-sans ${message.length > 2000 ? 'text-rose-600 font-bold' : 'text-allura-muted'}`}>
+                      {message.length} / 2000
+                    </span>
+                  )}
+                </div>
                 <textarea
                   rows={4}
                   value={message}
                   onChange={e => setMessage(e.target.value)}
+                  maxLength={2000}
+                  disabled={isSubmitting}
                   placeholder="Tell us about the design, size, or event date you have in mind..."
-                  className="w-full bg-allura-bg border border-allura-border rounded p-3 text-xs sm:text-sm text-allura-text focus:outline-none focus:border-allura-gold font-sans resize-none"
+                  className="w-full bg-allura-bg border border-allura-border rounded p-3 text-xs sm:text-sm text-allura-text focus:outline-none focus:border-allura-gold font-sans resize-none disabled:opacity-60"
                 />
               </div>
 
               <button
                 type="submit"
-                className="w-full bg-allura-goldDark hover:bg-allura-darkBrown text-allura-card text-xs font-sans font-bold tracking-[0.25em] uppercase py-4 px-6 rounded-sm transition-all duration-300 flex items-center justify-center gap-2 shadow-luxury"
+                disabled={isSubmitting}
+                className="w-full bg-allura-goldDark hover:bg-allura-darkBrown disabled:opacity-60 disabled:cursor-not-allowed text-allura-card text-xs font-sans font-bold tracking-[0.25em] uppercase py-4 px-6 rounded-sm transition-all duration-300 flex items-center justify-center gap-2 shadow-luxury"
               >
-                <span>SUBMIT ENQUIRY</span>
-                <Send size={14} />
+                {isSubmitting ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" />
+                    <span>SUBMITTING...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>SUBMIT ENQUIRY</span>
+                    <Send size={14} />
+                  </>
+                )}
               </button>
             </form>
           )}

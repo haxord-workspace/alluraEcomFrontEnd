@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { isPushConfigured, isPushSupported, requestPushToken, onForegroundPush } from '../service/firebase';
 import { registerDeviceToken } from '../service/notifications';
+import { getDevicePlatform, getOrCreateDeviceId } from '../utils/pushPlatform';
 
 type PermissionState = NotificationPermission | 'unsupported';
 
@@ -20,7 +21,11 @@ const registerIfNewToken = async (token: string): Promise<void> => {
     // ignore storage errors
   }
   if (lastToken === token) return;
-  await registerDeviceToken({ token, platform: 'WEB' });
+  await registerDeviceToken({
+    token,
+    platform: getDevicePlatform(),
+    deviceId: getOrCreateDeviceId(),
+  });
   try {
     localStorage.setItem(LAST_TOKEN_KEY, token);
   } catch {

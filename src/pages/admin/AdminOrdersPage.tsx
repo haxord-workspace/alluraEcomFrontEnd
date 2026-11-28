@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   Search,
   Eye,
-  Truck,
+  // Truck,
   RefreshCw,
   ChevronLeft,
   ChevronRight,
@@ -202,7 +202,7 @@ export const AdminOrdersPage: React.FC = () => {
           >
             <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
           </button>
-          {canViewOrders && (
+          {/* {canViewOrders && (
             <Link
               to="/admin/shipping"
               className="px-4 py-2 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-xl text-xs font-sans font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 shadow-sm"
@@ -210,7 +210,7 @@ export const AdminOrdersPage: React.FC = () => {
               <Truck size={14} />
               <span>Shipping Dispatch Hub</span>
             </Link>
-          )}
+          )} */}
         </div>
       </div>
 
@@ -273,7 +273,7 @@ export const AdminOrdersPage: React.FC = () => {
         {/* Status Pills */}
         <div className="flex gap-2 overflow-x-auto pb-1 border-t border-stone-100 pt-3">
           {statuses.map(st => {
-            const count = st === 'All' 
+            const count = st === 'All'
               ? (summary?.pagination.total ?? total)
               : summary?.countsByStatus?.[st.toUpperCase()];
 
@@ -284,17 +284,15 @@ export const AdminOrdersPage: React.FC = () => {
                   setStatusFilter(st);
                   setPage(1);
                 }}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-sans font-semibold transition-colors whitespace-nowrap flex items-center gap-1.5 ${
-                  statusFilter === st
-                    ? 'bg-[#561C08] text-white shadow-xs'
-                    : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-                }`}
+                className={`px-3.5 py-1.5 rounded-full text-xs font-sans font-semibold transition-colors whitespace-nowrap flex items-center gap-1.5 ${statusFilter === st
+                  ? 'bg-[#561C08] text-white shadow-xs'
+                  : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                  }`}
               >
                 <span>{st}</span>
                 {typeof count === 'number' && (
-                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
-                    statusFilter === st ? 'bg-white/20 text-white' : 'bg-stone-200 text-stone-700'
-                  }`}>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${statusFilter === st ? 'bg-white/20 text-white' : 'bg-stone-200 text-stone-700'
+                    }`}>
                     {count}
                   </span>
                 )}

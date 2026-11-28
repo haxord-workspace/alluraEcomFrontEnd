@@ -7,6 +7,7 @@ import type {
   PromotionStatus,
   PromotionApplicableTo,
   PromotionScopeType,
+  PromotionBackgroundImage,
 } from '../types/promotion';
 
 // -----------------------------------------------------------------------------
@@ -67,6 +68,20 @@ const toIdList = (value: any): string[] =>
     ? value.map((v: any) => (typeof v === 'string' ? v : String(v?._id || v?.id || ''))).filter(Boolean)
     : [];
 
+/** Admin Promotion Management only; absent/invalid -> undefined (no background image). */
+const mapBackgroundImage = (raw: any): PromotionBackgroundImage | undefined => {
+  const img = raw?.backgroundImage;
+  if (!img || !img.url) return undefined;
+  return {
+    url: img.url,
+    thumbnailUrl: img.thumbnailUrl,
+    publicId: img.publicId,
+    alt: img.alt,
+    width: num(img.width),
+    height: num(img.height),
+  };
+};
+
 /** Older promotions may have no `applicableTo` at all — treated as ALL with empty lists. */
 const mapApplicableTo = (raw: any): PromotionApplicableTo => {
   const a = raw?.applicableTo || {};
@@ -112,6 +127,7 @@ export const mapPromotion = (raw: any): AdminPromotion => {
     discountType: discountType === 'FIXED' ? 'Fixed' : 'Percentage',
     discountValue: num(discount.value, raw?.discountValue) ?? 0,
     maxDiscountAmount: num(discount.maxDiscountAmount, raw?.maxDiscountAmount, raw?.maxDiscount),
+    minimumOrderValue: num(raw?.minimumOrderValue, raw?.minOrderValue),
     startDate: toDateOnly(raw?.startsAt || raw?.startDate),
     endDate: toDateOnly(raw?.expiresAt || raw?.endDate),
     status: mapStatus(raw),
@@ -124,6 +140,7 @@ export const mapPromotion = (raw: any): AdminPromotion => {
     excludedProducts: toIdList(raw?.excludedProducts),
     excludedCategories: toIdList(raw?.excludedCategories),
     priority: Number.isInteger(Number(raw?.priority)) ? Number(raw.priority) : 0,
+    backgroundImage: mapBackgroundImage(raw),
   };
 };
 

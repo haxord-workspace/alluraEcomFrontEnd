@@ -10,10 +10,17 @@ import { getProductTitle } from '../../utils/productTitle';
 interface ProductCardProps {
   product: Product;
   showCategory?: boolean;
+  className?: string;
+  showColorSwatches?: boolean;
 }
 
 // Memoised so parent re-renders (sort dropdown, filter sheets) don't re-render every card in the grid
-export const ProductCard = React.memo(function ProductCard({ product, showCategory = true }: ProductCardProps) {
+export const ProductCard = React.memo(function ProductCard({
+  product,
+  showCategory = true,
+  className = '',
+  showColorSwatches = true,
+}: ProductCardProps) {
   const { toggleWishlist, isInWishlist, setQuickViewProduct, formatPrice } = useShop();
   const bag = useAddToBag();
   const [selectedColorIdx, setSelectedColorIdx] = useState(0);
@@ -42,7 +49,7 @@ export const ProductCard = React.memo(function ProductCard({ product, showCatego
 
   return (
     <div
-      className="group relative flex flex-col select-none bg-white rounded-2xl overflow-hidden shadow-xs hover:shadow-md transition-all duration-300"
+      className={`group relative flex flex-col select-none bg-white rounded-2xl overflow-hidden shadow-xs hover:shadow-md transition-all duration-300 ${className}`}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
@@ -53,9 +60,8 @@ export const ProductCard = React.memo(function ProductCard({ product, showCatego
           <img
             src={product.images.thumbnail || product.images.primary}
             alt={product.name}
-            className={`absolute inset-0 w-full h-full object-cover object-top transition-all duration-700 ${
-              isHovered && product.images.secondary ? 'opacity-0 scale-105' : 'opacity-100 scale-100'
-            }`}
+            className={`absolute inset-0 w-full h-full object-cover object-top transition-all duration-700 ${isHovered && product.images.secondary ? 'opacity-0 scale-105' : 'opacity-100 scale-100'
+              }`}
             loading="lazy"
           />
 
@@ -64,15 +70,14 @@ export const ProductCard = React.memo(function ProductCard({ product, showCatego
             <img
               src={product.images.secondary}
               alt={`${product.name} alternate view`}
-              className={`absolute inset-0 w-full h-full object-cover object-top transition-all duration-700 ${
-                isHovered ? 'opacity-100 scale-105' : 'opacity-0 scale-100'
-              }`}
+              className={`absolute inset-0 w-full h-full object-cover object-top transition-all duration-700 ${isHovered ? 'opacity-100 scale-105' : 'opacity-0 scale-100'
+                }`}
               loading="lazy"
             />
           )}
         </Link>
 
-        {/* Badges (New / Bestseller) */}
+        {/* Badges (New / Bestseller / Featured) */}
         <div className="absolute top-3 left-3 flex flex-col gap-1 z-10 pointer-events-none">
           {product.isNewArrival && (
             <span className="bg-[#561C08] text-white text-[9px] font-sans font-bold tracking-[0.2em] uppercase px-2.5 py-0.5 rounded-full shadow-xs">
@@ -82,6 +87,11 @@ export const ProductCard = React.memo(function ProductCard({ product, showCatego
           {product.isBestSeller && !product.isNewArrival && (
             <span className="bg-stone-900 text-white text-[9px] font-sans font-bold tracking-[0.2em] uppercase px-2.5 py-0.5 rounded-full shadow-xs">
               BESTSELLER
+            </span>
+          )}
+          {product.isFeatured && !product.isNewArrival && !product.isBestSeller && (
+            <span className="bg-[#C9A050] text-[#561C08] text-[9px] font-sans font-bold tracking-[0.2em] uppercase px-2.5 py-0.5 rounded-full shadow-xs">
+              FEATURED
             </span>
           )}
         </div>
@@ -96,11 +106,10 @@ export const ProductCard = React.memo(function ProductCard({ product, showCatego
           <Heart
             size={16}
             strokeWidth={1.8}
-            className={`transition-all duration-200 ${
-              inWishlist
-                ? 'fill-[#561C08] text-[#561C08] scale-110'
-                : 'text-stone-800 hover:text-[#561C08]'
-            }`}
+            className={`transition-all duration-200 ${inWishlist
+              ? 'fill-[#561C08] text-[#561C08] scale-110'
+              : 'text-stone-800 hover:text-[#561C08]'
+              }`}
           />
         </button>
 
@@ -142,7 +151,7 @@ export const ProductCard = React.memo(function ProductCard({ product, showCatego
           <div className="flex items-baseline gap-1.5 flex-wrap min-w-0">
             {/* Current Selling Price */}
             <span className="font-serif text-sm sm:text-base font-bold text-stone-900">
-              {formatPrice(product.price)}
+              {product.hasPriceRange ? `From ${formatPrice(product.price)}` : formatPrice(product.price)}
             </span>
 
             {/* Original Price (Strikethrough) */}
@@ -158,9 +167,8 @@ export const ProductCard = React.memo(function ProductCard({ product, showCatego
             type="button"
             onClick={handleQuickAdd}
             disabled={bag.isAdding}
-            className={`flex-shrink-0 w-8 h-8 sm:w-9 sm:h-9 rounded-full text-white shadow-xs flex items-center justify-center transition-colors focus:outline-none focus:ring-2 focus:ring-[#561C08]/40 focus:ring-offset-1 ${addToBagButtonState(bag.state)} ${
-              bag.justAdded ? 'bg-emerald-700' : 'bg-[#561C08] hover:bg-[#3D1406]'
-            }`}
+            className={`flex-shrink-0 w-8 h-8 sm:w-9 sm:h-9 rounded-full text-white shadow-xs flex items-center justify-center transition-colors focus:outline-none focus:ring-2 focus:ring-[#561C08]/40 focus:ring-offset-1 ${addToBagButtonState(bag.state)} ${bag.justAdded ? 'bg-emerald-700' : 'bg-[#561C08] hover:bg-[#3D1406]'
+              }`}
             title="Add to Bag"
             aria-label={bag.isAdding ? 'Adding to Bag' : bag.justAdded ? 'Added to Bag' : `Add ${product.name} to Bag`}
           >
@@ -175,7 +183,7 @@ export const ProductCard = React.memo(function ProductCard({ product, showCatego
         </div>
 
         {/* Color Swatches (if multiple colors are available) */}
-        {product.colors && product.colors.length > 1 && (
+        {showColorSwatches && product.colors && product.colors.length > 1 && (
           <div className="flex items-center gap-1.5 mt-2.5 pt-1.5 border-t border-stone-100">
             {product.colors.map((color, idx) => (
               <button
@@ -185,11 +193,10 @@ export const ProductCard = React.memo(function ProductCard({ product, showCatego
                   e.preventDefault();
                   setSelectedColorIdx(idx);
                 }}
-                className={`w-3 h-3 rounded-full border transition-all ${
-                  selectedColorIdx === idx
-                    ? 'border-[#561C08] scale-125 ring-1 ring-[#561C08]'
-                    : 'border-stone-300 hover:scale-110'
-                }`}
+                className={`w-3 h-3 rounded-full border transition-all ${selectedColorIdx === idx
+                  ? 'border-[#561C08] scale-125 ring-1 ring-[#561C08]'
+                  : 'border-stone-300 hover:scale-110'
+                  }`}
                 style={{ backgroundColor: color.hex }}
                 title={color.name}
               />

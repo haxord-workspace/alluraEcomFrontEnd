@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, X, Package, ShoppingBag, Users, Tag, Settings, ArrowRight, Truck, Loader2, Sparkles } from 'lucide-react';
+import { Search, X, Package, ShoppingBag, Users, Tag, Settings, ArrowRight, Truck, Loader2, Sparkles, MessageSquare } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAdmin } from '../../context/AdminContext';
 import { usePermissions } from '../../hooks/usePermissions';
@@ -192,6 +192,7 @@ export const AdminCommandSearch: React.FC = () => {
     { label: 'Order Processing', path: '/admin/orders', icon: <ShoppingBag size={14} />, module: 'order_processing' as const },
     { label: 'Stock Adjustments', path: '/admin/inventory', icon: <Package size={14} />, module: 'inventory_stock' as const },
     { label: 'Customer CRM', path: '/admin/customers', icon: <Users size={14} />, module: 'customer_crm' as const },
+    { label: 'Customer Enquiries', path: '/admin/enquiries', icon: <MessageSquare size={14} />, module: 'customer_crm' as const },
     { label: 'Homepage Experience', path: '/admin/homepage/experience', icon: <Sparkles size={14} />, module: 'cms_store_content' as const },
     { label: 'Coupons & Promos', path: '/admin/marketing/coupons', icon: <Tag size={14} />, module: 'coupons_banners' as const },
     { label: 'Store Settings', path: '/admin/settings', icon: <Settings size={14} />, module: 'system_settings' as const },

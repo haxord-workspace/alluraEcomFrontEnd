@@ -56,6 +56,7 @@ import {
   removeDeviceToken,
 } from '../service/notifications';
 import { requestPushToken, onForegroundPush } from '../service/firebase';
+import { getDevicePlatform, getOrCreateDeviceId, isIOSDevice, isInstalledPWA } from '../utils/pushPlatform';
 import { getBackendErrorMessage } from '../utils/apiResponse';
 import {
   isOrderCancellationNotification,
@@ -522,13 +523,16 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!customer || isAdminRoute) return;
     if (typeof window === 'undefined' || !('Notification' in window)) return;
     if (Notification.permission !== 'granted') return;
+    if (isIOSDevice() && !isInstalledPWA()) return;
 
     let isMounted = true;
     (async () => {
       try {
         const token = await requestPushToken();
         if (!token || !isMounted) return;
-        await registerDeviceToken({ token, platform: 'WEB' });
+        const platform = getDevicePlatform();
+        const deviceId = getOrCreateDeviceId();
+        await registerDeviceToken({ token, platform, deviceId });
         localStorage.setItem(DEVICE_TOKEN_STORAGE_KEY, token);
       } catch (err) {
         console.warn('Could not register the push device token:', err);
@@ -1611,7 +1615,15 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const enablePushNotifications = useCallback(async (): Promise<{ success: boolean; status: string }> => {
-    if (typeof window === 'undefined' || !('Notification' in window) || !('serviceWorker' in navigator)) {
+    if (typeof window === 'undefined') {
+      return { success: false, status: 'unsupported' };
+    }
+
+    if (isIOSDevice() && !isInstalledPWA()) {
+      return { success: false, status: 'ios_not_pwa' };
+    }
+
+    if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
       return { success: false, status: 'unsupported' };
     }
 
@@ -1630,15 +1642,19 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { success: false, status: 'token_failed' };
       }
 
+      const platform = getDevicePlatform();
+      const deviceId = getOrCreateDeviceId();
+
       if (customer) {
         try {
-          await registerDeviceToken({ token, platform: 'WEB' });
+          await registerDeviceToken({ token, platform, deviceId });
         } catch (err) {
           console.warn('Could not register device token on backend:', err);
+          return { success: false, status: 'registration_failed' };
         }
       }
       localStorage.setItem(DEVICE_TOKEN_STORAGE_KEY, token);
-      showToast('Push notifications enabled', 'success');
+      showToast('Notifications Enabled', 'success');
       return { success: true, status: 'granted' };
     } catch (err: any) {
       console.warn('Could not enable push notifications:', err);

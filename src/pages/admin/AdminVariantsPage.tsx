@@ -333,9 +333,8 @@ export const AdminVariantsPage: React.FC = () => {
                             onClick={() => handleToggleStatus(v)}
                             disabled={busyId === v.id}
                             title={v.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
-                            className={`p-1.5 rounded-lg hover:bg-stone-100 disabled:opacity-50 ${
-                              v.status === 'ACTIVE' ? 'text-emerald-600 hover:text-emerald-800' : 'text-stone-400 hover:text-stone-800'
-                            }`}
+                            className={`p-1.5 rounded-lg hover:bg-stone-100 disabled:opacity-50 ${v.status === 'ACTIVE' ? 'text-emerald-600 hover:text-emerald-800' : 'text-stone-400 hover:text-stone-800'
+                              }`}
                           >
                             <Power size={14} />
                           </button>
@@ -382,164 +381,164 @@ export const AdminVariantsPage: React.FC = () => {
         backdropClassName="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-sm"
         panelClassName="relative bg-white border border-stone-200 rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] flex flex-col focus:outline-none"
       >
-          <div className="overflow-y-auto p-6 space-y-4">
-            <h3 className="font-serif text-xl text-stone-900 pr-8">
-              {editingId ? 'Edit Variant' : 'New Variant'}
-            </h3>
+        <div className="overflow-y-auto p-6 space-y-4">
+          <h3 className="font-serif text-xl text-stone-900 pr-8">
+            {editingId ? 'Edit Variant' : 'New Variant'}
+          </h3>
 
-            {formError && (
-              <AdminErrorBanner
-                title="Variant Save Failed"
-                error={formError}
-                onDismiss={() => setFormError(null)}
+          {formError && (
+            <AdminErrorBanner
+              title="Variant Save Failed"
+              error={formError}
+              onDismiss={() => setFormError(null)}
+            />
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-3 text-xs font-sans">
+            <div>
+              <label className="block text-[10px] uppercase font-bold text-stone-500 mb-1">Product *</label>
+              <select
+                required
+                value={formData.productId}
+                onChange={e => setFormData({ ...formData, productId: e.target.value })}
+                className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-stone-800"
+              >
+                <option value="">Select a product</option>
+                {products.map(p => (
+                  <option key={p.id} value={p.id}>{p.name} ({p.sku})</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[10px] uppercase font-bold text-stone-500 mb-1">SKU *</label>
+              <input
+                required
+                value={formData.sku}
+                onChange={e => setFormData({ ...formData, sku: e.target.value })}
+                className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl font-mono focus:outline-none focus:border-stone-800"
               />
-            )}
+            </div>
 
-            <form onSubmit={handleSubmit} className="space-y-3 text-xs font-sans">
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-[10px] uppercase font-bold text-stone-500 mb-1">Product *</label>
+                <label className="block text-[10px] uppercase font-bold text-stone-500 mb-1">Color</label>
+                <input
+                  value={formData.color}
+                  onChange={e => setFormData({ ...formData, color: e.target.value })}
+                  className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-stone-800"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] uppercase font-bold text-stone-500 mb-1">Size</label>
+                <input
+                  value={formData.size}
+                  onChange={e => setFormData({ ...formData, size: e.target.value })}
+                  className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-stone-800"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[10px] uppercase font-bold text-stone-500 mb-1">Barcode Value</label>
+                <input
+                  value={formData.barcodeValue}
+                  onChange={e => setFormData({ ...formData, barcodeValue: e.target.value })}
+                  placeholder="8901234567890"
+                  className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl font-mono focus:outline-none focus:border-stone-800"
+                />
+                {!validateBarcodeFormat(formData.barcodeValue, formData.barcodeType).valid && (
+                  <p className="mt-1 text-[10px] text-rose-600 font-sans">
+                    {validateBarcodeFormat(formData.barcodeValue, formData.barcodeType).message}
+                  </p>
+                )}
+              </div>
+              <div>
+                <label className="block text-[10px] uppercase font-bold text-stone-500 mb-1">Barcode Type</label>
                 <select
-                  required
-                  value={formData.productId}
-                  onChange={e => setFormData({ ...formData, productId: e.target.value })}
+                  value={formData.barcodeType}
+                  onChange={e => setFormData({ ...formData, barcodeType: e.target.value })}
                   className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-stone-800"
                 >
-                  <option value="">Select a product</option>
-                  {products.map(p => (
-                    <option key={p.id} value={p.id}>{p.name} ({p.sku})</option>
-                  ))}
+                  <option value="EAN13">EAN13</option>
+                  <option value="UPC-A">UPC-A</option>
+                  <option value="CODE128">CODE128</option>
+                  <option value="QR">QR</option>
                 </select>
               </div>
+            </div>
 
+            <div className="grid grid-cols-3 gap-3">
               <div>
-                <label className="block text-[10px] uppercase font-bold text-stone-500 mb-1">SKU *</label>
+                <label className="block text-[10px] uppercase font-bold text-stone-500 mb-1">MRP *</label>
                 <input
+                  type="number"
                   required
-                  value={formData.sku}
-                  onChange={e => setFormData({ ...formData, sku: e.target.value })}
+                  min={0}
+                  step={0.01}
+                  value={formData.mrp}
+                  onChange={e => setFormData({ ...formData, mrp: parseFloat(e.target.value) || 0 })}
                   className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl font-mono focus:outline-none focus:border-stone-800"
                 />
               </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[10px] uppercase font-bold text-stone-500 mb-1">Color</label>
-                  <input
-                    value={formData.color}
-                    onChange={e => setFormData({ ...formData, color: e.target.value })}
-                    className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-stone-800"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] uppercase font-bold text-stone-500 mb-1">Size</label>
-                  <input
-                    value={formData.size}
-                    onChange={e => setFormData({ ...formData, size: e.target.value })}
-                    className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-stone-800"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[10px] uppercase font-bold text-stone-500 mb-1">Barcode Value</label>
-                  <input
-                    value={formData.barcodeValue}
-                    onChange={e => setFormData({ ...formData, barcodeValue: e.target.value })}
-                    placeholder="8901234567890"
-                    className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl font-mono focus:outline-none focus:border-stone-800"
-                  />
-                  {!validateBarcodeFormat(formData.barcodeValue, formData.barcodeType).valid && (
-                    <p className="mt-1 text-[10px] text-rose-600 font-sans">
-                      {validateBarcodeFormat(formData.barcodeValue, formData.barcodeType).message}
-                    </p>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-[10px] uppercase font-bold text-stone-500 mb-1">Barcode Type</label>
-                  <select
-                    value={formData.barcodeType}
-                    onChange={e => setFormData({ ...formData, barcodeType: e.target.value })}
-                    className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-stone-800"
-                  >
-                    <option value="EAN13">EAN13</option>
-                    <option value="UPC-A">UPC-A</option>
-                    <option value="CODE128">CODE128</option>
-                    <option value="QR">QR</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-[10px] uppercase font-bold text-stone-500 mb-1">MRP *</label>
-                  <input
-                    type="number"
-                    required
-                    min={0}
-                    step={0.01}
-                    value={formData.mrp}
-                    onChange={e => setFormData({ ...formData, mrp: parseFloat(e.target.value) || 0 })}
-                    className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl font-mono focus:outline-none focus:border-stone-800"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] uppercase font-bold text-stone-500 mb-1">Selling Price *</label>
-                  <input
-                    type="number"
-                    required
-                    min={0}
-                    step={0.01}
-                    value={formData.sellingPrice}
-                    onChange={e => setFormData({ ...formData, sellingPrice: parseFloat(e.target.value) || 0 })}
-                    className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl font-mono focus:outline-none focus:border-stone-800"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] uppercase font-bold text-stone-500 mb-1">Currency</label>
-                  <select
-                    value={formData.currency}
-                    onChange={e => setFormData({ ...formData, currency: e.target.value })}
-                    className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-stone-800"
-                  >
-                    <option value="USD">USD ($)</option>
-                    <option value="INR">INR (₹)</option>
-                    <option value="AED">AED</option>
-                  </select>
-                </div>
-              </div>
-
               <div>
-                <label className="block text-[10px] uppercase font-bold text-stone-500 mb-1">Status</label>
+                <label className="block text-[10px] uppercase font-bold text-stone-500 mb-1">Selling Price *</label>
+                <input
+                  type="number"
+                  required
+                  min={0}
+                  step={0.01}
+                  value={formData.sellingPrice}
+                  onChange={e => setFormData({ ...formData, sellingPrice: parseFloat(e.target.value) || 0 })}
+                  className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl font-mono focus:outline-none focus:border-stone-800"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] uppercase font-bold text-stone-500 mb-1">Currency</label>
                 <select
-                  value={formData.status}
-                  onChange={e => setFormData({ ...formData, status: e.target.value })}
+                  value={formData.currency}
+                  onChange={e => setFormData({ ...formData, currency: e.target.value })}
                   className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-stone-800"
                 >
-                  <option value="ACTIVE">Active</option>
-                  <option value="INACTIVE">Inactive</option>
+                  <option value="INR">INR (₹)</option>
+                  {/* <option value="USD">USD ($)</option>
+                    <option value="AED">AED</option> */}
                 </select>
               </div>
+            </div>
 
-              <div className="flex justify-end gap-2 pt-3 border-t border-stone-100">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 border border-stone-200 rounded-xl text-stone-500 hover:bg-stone-50 font-bold"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSaving || !validateBarcodeFormat(formData.barcodeValue, formData.barcodeType).valid}
-                  className="px-5 py-2 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-xl font-bold uppercase tracking-wider disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm"
-                >
-                  {isSaving && <Loader2 size={14} className="animate-spin" />}
-                  <span>{isSaving ? 'Saving...' : 'Save Variant'}</span>
-                </button>
-              </div>
-            </form>
-          </div>
+            <div>
+              <label className="block text-[10px] uppercase font-bold text-stone-500 mb-1">Status</label>
+              <select
+                value={formData.status}
+                onChange={e => setFormData({ ...formData, status: e.target.value })}
+                className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-stone-800"
+              >
+                <option value="ACTIVE">Active</option>
+                <option value="INACTIVE">Inactive</option>
+              </select>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-stone-100">
+              <button
+                type="button"
+                onClick={() => setIsModalOpen(false)}
+                className="px-4 py-2 border border-stone-200 rounded-xl text-stone-500 hover:bg-stone-50 font-bold"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isSaving || !validateBarcodeFormat(formData.barcodeValue, formData.barcodeType).valid}
+                className="px-5 py-2 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-xl font-bold uppercase tracking-wider disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm"
+              >
+                {isSaving && <Loader2 size={14} className="animate-spin" />}
+                <span>{isSaving ? 'Saving...' : 'Save Variant'}</span>
+              </button>
+            </div>
+          </form>
+        </div>
       </Modal>
 
       <ConfirmModal

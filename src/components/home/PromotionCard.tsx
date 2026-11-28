@@ -1,9 +1,8 @@
-import React, { useRef, useState, useEffect, useId } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Calendar, Scissors, ShoppingBag, Sparkles, Tag } from 'lucide-react';
+import { ArrowRight, Calendar, Scissors, ShoppingBag, Sparkles } from 'lucide-react';
 import type { StorePromotion } from '../../types/storePromotion';
 import {
-  getApplicableGroups,
   getCtaDestination,
   getDiscountParts,
   formatValidityPeriod,
@@ -13,15 +12,13 @@ import {
 import { generateTicketData } from '../../utils/ticketGeometry';
 import { PromotionCountdown } from './PromotionCountdown';
 
-const MAX_CHIPS_PER_GROUP = 3;
-
 interface PromotionCardProps {
   promotion: StorePromotion;
   /** "featured" = wide horizontal card when space permits */
   variant: 'featured' | 'grid';
   /** Sizing/shrink classes */
   className?: string;
-  animationDelayMs: number;
+  animationDelayMs?: number;
   onExpire: (id: string) => void;
   index?: number;
   total?: number;
@@ -43,10 +40,12 @@ const PromoBarcode: React.FC<{ code: string }> = ({ code }) => (
   </div>
 );
 
+// Constant clip path ID to prevent recreating SVG clipPath on promotion changes
+const PERSISTENT_TICKET_CLIP_ID = 'persistent-ticket-clip-path';
+
 export const PromotionCard: React.FC<PromotionCardProps> = ({
   promotion,
   className,
-  animationDelayMs,
   onExpire,
   index = 0,
   total = 1,
@@ -70,16 +69,15 @@ export const PromotionCard: React.FC<PromotionCardProps> = ({
     cardSize: 'lg',
   });
 
-  const rawClipId = useId();
-  const baseId = rawClipId.replace(/:/g, '');
-  const clipId = `ticket-clip-${promotion.id}-${baseId}`;
-
   const discountParts = getDiscountParts(promotion);
-  const applicableGroups = getApplicableGroups(promotion);
   const ctaDestination = getCtaDestination(promotion);
   const validityText = formatValidityPeriod(promotion.startsAt, promotion.expiresAt);
-  const eyebrowText = getPromotionEyebrow(promotion.startsAt, promotion.expiresAt);
-  const ticketCode = promotion.id.slice(-8).toUpperCase();
+  const eyebrowText = getPromotionEyebrow(
+    promotion.startsAt,
+    promotion.expiresAt,
+    promotion.applicableTo?.type
+  );
+  const ticketCode = (promotion.id || 'ALLURA').slice(-8).toUpperCase();
 
   const handleExpire = React.useCallback(() => {
     setIsRemoving(true);
@@ -93,7 +91,8 @@ export const PromotionCard: React.FC<PromotionCardProps> = ({
     promotion.minimumOrderValue && promotion.minimumOrderValue > 0
   );
 
-  // ResizeObserver to track card dimensions and determine layout by container size
+  // ResizeObserver to track card dimensions and determine layout by container size.
+  // Note: Dependency array is empty [] so this effect runs once on mount and attaches to the persistent card DOM node.
   useEffect(() => {
     const measure = () => {
       const cardEl = cardRef.current;
@@ -131,7 +130,7 @@ export const PromotionCard: React.FC<PromotionCardProps> = ({
       if (ro) ro.disconnect();
       window.removeEventListener('resize', measure);
     };
-  }, [promotion]);
+  }, []);
 
   const isWide = dimensions.cardSize === 'lg';
   const isCompact = dimensions.cardSize === 'sm';
@@ -149,22 +148,21 @@ export const PromotionCard: React.FC<PromotionCardProps> = ({
 
   return (
     <div
-      className={`ticket-container-wrapper ticket-drop-shadow-wrapper snap-start select-none ${
-        isRemoving ? 'opacity-0 scale-95' : 'opacity-100'
-      } ${className || ''} ${isWide ? 'h-[260px]' : 'h-[520px]'}`}
+      className={`ticket-container-wrapper snap-start select-none bg-transparent ${isRemoving ? 'opacity-0 scale-95' : 'opacity-100'
+        } ${className || ''} ${isWide ? 'h-[260px]' : 'h-[520px]'}`}
       data-size={dimensions.cardSize}
       style={
         {
           containerType: 'inline-size',
           containerName: 'ticket',
-          animationDelay: `${animationDelayMs}ms`,
         } as React.CSSProperties
       }
     >
+      {/* ─── LAYER 1: PERSISTENT BACKGROUND & CARD STRUCTURE ─── */}
       {/* SVG ClipPath: Full Outer Silhouette */}
       <svg width="0" height="0" className="absolute" aria-hidden="true">
         <defs>
-          <clipPath id={clipId}>
+          <clipPath id={PERSISTENT_TICKET_CLIP_ID}>
             <path d={ticketData.outer} />
           </clipPath>
         </defs>
@@ -173,14 +171,13 @@ export const PromotionCard: React.FC<PromotionCardProps> = ({
       <article
         ref={cardRef}
         aria-label={`Offer ${index + 1} of ${total}: ${promotion.name}`}
-        className={`ticket-card-shape relative overflow-hidden flex flex-col ${
-          isWide ? 'h-[260px]' : 'h-[520px]'
-        }`}
+        className={`ticket-card-shape relative overflow-hidden flex flex-col ${isWide ? 'h-[260px]' : 'h-[520px]'
+          }`}
         style={{
-          clipPath: `url(#${clipId})`,
+          clipPath: `url(#${PERSISTENT_TICKET_CLIP_ID})`,
         }}
       >
-        {/* Two-Tone Panel Backgrounds: solid base (main) + deeper shade (stub), each with a quiet geometric pattern band */}
+        {/* Two-Tone Panel Backgrounds: solid base (main) + deeper shade (stub) */}
         <div
           className={`absolute inset-0 flex ${isWide ? 'flex-row' : 'flex-col'}`}
           aria-hidden="true"
@@ -200,7 +197,7 @@ export const PromotionCard: React.FC<PromotionCardProps> = ({
           </div>
         </div>
 
-        {/* SVG Decorative Overlays: unified outer perimeter border, edge thickness/rim, and gold inner stitched border */}
+        {/* SVG Decorative Overlays: outer rim and gold inner stitched border */}
         <svg
           className="absolute inset-0 w-full h-full pointer-events-none z-5"
           aria-hidden="true"
@@ -238,11 +235,11 @@ export const PromotionCard: React.FC<PromotionCardProps> = ({
           />
         </svg>
 
-        {/* ─── CARD CONTENT ─── */}
+        {/* ─── LAYER 2: DYNAMIC PROMOTION CONTENT ─── */}
+        {/* Textual and dynamic content that changes per promotion without affecting the background shell */}
         <div
-          className={`relative z-10 flex h-full ${
-            isWide ? 'flex-row items-stretch' : 'flex-col justify-between'
-          }`}
+          className={`relative z-10 flex h-full ${isWide ? 'flex-row items-stretch' : 'flex-col justify-between'
+            }`}
         >
           {/* Rotated Coupon Stub label inside scalloped edge — shown only on wide layout */}
           {isWide && (
@@ -261,17 +258,16 @@ export const PromotionCard: React.FC<PromotionCardProps> = ({
           {/* ─── MAIN TICKET PANEL ─── */}
           <div
             ref={mainPanelRef}
-            className={`relative flex-1 ${
-              isWide
-                ? 'px-7 py-6 flex items-center justify-between gap-6 min-w-0 h-full'
-                : 'p-5 sm:p-6 flex flex-col justify-between min-w-0 h-1/2'
-            }`}
+            className={`relative flex-1 ${isWide
+              ? 'px-7 py-6 flex items-center justify-between gap-6 min-w-0 h-full'
+              : 'p-5 sm:p-6 flex flex-col justify-between min-w-0 h-1/2'
+              }`}
           >
             {isWide ? (
               /* WIDE BALANCED LAYOUT (Card width >= 720px) */
               <>
                 {/* Left Block: Eyebrow + Poster-style discount */}
-                <div className="flex flex-col justify-center space-y-3 flex-shrink-0">
+                <div key={`left-${promotion.id}`} className="promo-content-transition flex flex-col justify-center space-y-3 flex-shrink-0">
                   <div>
                     <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-[10px] font-heading font-bold uppercase tracking-[0.2em] text-[#F7E6C8] bg-[#F7E6C8]/10 px-3 py-1 rounded-full border border-[#F7E6C8]/25">
                       <Sparkles size={11} className="text-[#C9A050]" />
@@ -284,7 +280,7 @@ export const PromotionCard: React.FC<PromotionCardProps> = ({
                       className="promo-value-shadow font-black text-[#F7E6C8] uppercase tracking-tight whitespace-nowrap"
                       style={{
                         fontFamily: "'Anton', 'Quicksand', sans-serif",
-                        fontSize: 'clamp(44px, 5.5cqi, 72px)',
+                        fontSize: 'clamp(52px, 6.2cqi, 80px)',
                         lineHeight: 0.92,
                       }}
                     >
@@ -293,10 +289,10 @@ export const PromotionCard: React.FC<PromotionCardProps> = ({
                     </div>
                     {discountParts.label && (
                       <div
-                        className="promo-off-outline font-black uppercase tracking-tight whitespace-nowrap"
+                        className="promo-off-outline font-black uppercase tracking-tight whitespace-nowrap mt-0.5"
                         style={{
                           fontFamily: "'Anton', 'Quicksand', sans-serif",
-                          fontSize: 'clamp(22px, 2.8cqi, 36px)',
+                          fontSize: 'clamp(26px, 3.2cqi, 40px)',
                           lineHeight: 0.92,
                         }}
                       >
@@ -306,7 +302,7 @@ export const PromotionCard: React.FC<PromotionCardProps> = ({
                   </div>
                 </div>
 
-                {/* Vertical Center Diamond Divider */}
+                {/* Vertical Center Diamond Divider (Persistent) */}
                 <div
                   className="h-28 w-[1px] bg-[#F7E6C8]/20 relative flex items-center justify-center flex-shrink-0"
                   aria-hidden="true"
@@ -315,7 +311,7 @@ export const PromotionCard: React.FC<PromotionCardProps> = ({
                 </div>
 
                 {/* Right Block: Title, description, info chips, validity */}
-                <div className="flex-1 flex flex-col justify-center space-y-2 min-w-0 pr-2">
+                <div key={`right-${promotion.id}`} className="promo-content-transition flex-1 flex flex-col justify-center space-y-2 min-w-0 pr-2">
                   <h3
                     className="font-heading font-bold uppercase tracking-tight text-[#F7E6C8] leading-snug line-clamp-2 break-words"
                     style={{ textWrap: 'balance', fontSize: 'clamp(18px, 2.5cqi, 26px)' }}
@@ -356,21 +352,15 @@ export const PromotionCard: React.FC<PromotionCardProps> = ({
               </>
             ) : (
               /* STACKED COMPACT LAYOUT (Card width < 720px) */
-              <>
-                <div className="space-y-1.5">
-                  <div>
-                    <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-[10px] font-heading font-bold uppercase tracking-[0.2em] text-[#F7E6C8] bg-[#F7E6C8]/10 px-2.5 py-0.5 rounded-full border border-[#F7E6C8]/25">
-                      <Sparkles size={11} className="text-[#C9A050]" />
-                      <span className="whitespace-nowrap">{eyebrowText}</span>
-                    </span>
-                  </div>
-
-                  <div className="leading-none">
+              <div key={`stacked-${promotion.id}`} className="promo-content-transition flex flex-col justify-between h-full">
+                {/* Top Row: Discount on left, Limited Offer badge neatly on top-right */}
+                <div className="flex items-start justify-between gap-2">
+                  <div className="leading-none flex-1 min-w-0">
                     <div
                       className="promo-value-shadow font-black text-[#F7E6C8] uppercase tracking-tight whitespace-nowrap"
                       style={{
                         fontFamily: "'Anton', 'Quicksand', sans-serif",
-                        fontSize: 'clamp(40px, 14cqi, 60px)',
+                        fontSize: 'clamp(46px, 15cqi, 68px)',
                         lineHeight: 0.88,
                       }}
                     >
@@ -379,16 +369,24 @@ export const PromotionCard: React.FC<PromotionCardProps> = ({
                     </div>
                     {discountParts.label && (
                       <div
-                        className="promo-off-outline font-black uppercase tracking-tight whitespace-nowrap"
+                        className="promo-off-outline font-black uppercase tracking-tight whitespace-nowrap mt-0.5"
                         style={{
                           fontFamily: "'Anton', 'Quicksand', sans-serif",
-                          fontSize: 'clamp(20px, 7cqi, 32px)',
+                          fontSize: 'clamp(23px, 7.5cqi, 36px)',
                           lineHeight: 0.9,
                         }}
                       >
                         {discountParts.label}
                       </div>
                     )}
+                  </div>
+
+                  {/* Limited Offer Badge: Positioned top-right on mobile */}
+                  <div className="flex-shrink-0 pt-0.5">
+                    <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-[10px] font-heading font-bold uppercase tracking-[0.2em] text-[#F7E6C8] bg-[#F7E6C8]/10 px-2.5 py-0.5 rounded-full border border-[#F7E6C8]/25 shadow-xs">
+                      <Sparkles size={11} className="text-[#C9A050]" />
+                      <span className="whitespace-nowrap">{eyebrowText}</span>
+                    </span>
                   </div>
                 </div>
 
@@ -426,18 +424,17 @@ export const PromotionCard: React.FC<PromotionCardProps> = ({
                     </div>
                   )}
                 </div>
-              </>
+              </div>
             )}
           </div>
 
           {/* ─── PUNCHED PERFORATION DIVIDER LINE ─── */}
           <div
             ref={dividerRef}
-            className={`relative ${
-              isWide
-                ? 'ticket-punched-divider-vertical h-auto'
-                : 'ticket-punched-divider-horizontal w-full'
-            }`}
+            className={`relative ${isWide
+              ? 'ticket-punched-divider-vertical h-auto'
+              : 'ticket-punched-divider-horizontal w-full'
+              }`}
             aria-hidden="true"
           >
             <Scissors
@@ -454,12 +451,11 @@ export const PromotionCard: React.FC<PromotionCardProps> = ({
 
           {/* ─── STUB PANEL ─── */}
           <div
-            className={`p-5 sm:p-6 flex flex-col items-center justify-between text-center bg-transparent text-white ${
-              isWide ? 'flex-shrink-0 h-full' : 'w-full h-1/2 flex-shrink-0'
-            }`}
+            className={`p-5 sm:p-6 flex flex-col items-center justify-between text-center bg-transparent text-white ${isWide ? 'flex-shrink-0 h-full' : 'w-full h-1/2 flex-shrink-0'
+              }`}
             style={isWide ? { width: `clamp(280px, 36%, 360px)` } : undefined}
           >
-            {/* Countdown Segmented Timer */}
+            {/* Countdown Segmented Timer — updates its target time dynamically without remounting */}
             <div className="w-full">
               <PromotionCountdown
                 expiresAt={promotion.expiresAt}
@@ -469,52 +465,12 @@ export const PromotionCard: React.FC<PromotionCardProps> = ({
               />
             </div>
 
-            {/* Eligible Items Chips */}
-            <div className="w-full space-y-1 my-auto">
-              <div className="flex items-center justify-center gap-1.5 text-[10px] font-sans font-bold uppercase tracking-wider text-[#E2C299]">
-                <Tag size={11} className="text-[#E2C299]" />
-                <span className="gold-foil-text font-bold">Eligible Items</span>
-              </div>
-
-              {applicableGroups.map((group) => (
-                <div key={group.kind} className="w-full">
-                  {group.items.length === 0 ? (
-                    <span className="inline-flex items-center text-xs font-sans px-3 py-1 rounded-full border bg-[#6E2C10]/35 border-[#F7E6C8]/45 text-[#F7E6C8]">
-                      Sitewide: all products
-                    </span>
-                  ) : (
-                    <div className="flex flex-wrap justify-center gap-1.5 max-h-[3rem] overflow-hidden">
-                      {group.items.slice(0, MAX_CHIPS_PER_GROUP).map((item) =>
-                        item.href ? (
-                          <Link
-                            key={item.id}
-                            to={item.href}
-                            className="inline-flex items-center max-w-[12rem] truncate text-xs font-sans px-2.5 py-1 rounded-full border bg-[#6E2C10]/35 border-[#F7E6C8]/45 text-[#F7E6C8] active:bg-[#6E2C10]/55 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60 min-h-[32px]"
-                          >
-                            <span className="truncate">{item.name}</span>
-                          </Link>
-                        ) : (
-                          <span
-                            key={item.id}
-                            className="inline-flex items-center max-w-[12rem] truncate text-xs font-sans px-2.5 py-1 rounded-full border bg-[#6E2C10]/20 border-[#F7E6C8]/30 text-[#F7E6C8]/80 cursor-default min-h-[32px]"
-                          >
-                            <span className="truncate">{item.name}</span>
-                          </span>
-                        )
-                      )}
-                      {group.items.length > MAX_CHIPS_PER_GROUP && (
-                        <span className="inline-flex items-center text-xs font-sans px-2 py-0.5 rounded-full border bg-[#6E2C10]/20 border-[#F7E6C8]/30 text-[#F7E6C8]/70 cursor-default">
-                          +{group.items.length - MAX_CHIPS_PER_GROUP} more
-                        </span>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-
             {/* Decorative ticket-number barcode — wide layout only */}
-            {isWide && <PromoBarcode code={ticketCode} />}
+            {isWide && (
+              <div key={`barcode-${promotion.id}`} className="promo-content-transition">
+                <PromoBarcode code={ticketCode} />
+              </div>
+            )}
 
             {/* Primary Action Button (full width of stub, min 44px tap target) */}
             <div className="w-full pt-1">

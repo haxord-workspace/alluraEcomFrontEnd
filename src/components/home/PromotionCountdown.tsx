@@ -13,29 +13,32 @@ const pad = (n: number): string => String(n).padStart(2, '0');
 
 /**
  * Isolated countdown component with printed paper tab pills and high-contrast crimson digits.
+ * Dynamically displays Days, Hours, Minutes, Seconds where appropriate.
  */
 export const PromotionCountdown: React.FC<PromotionCountdownProps> = React.memo(
   ({ expiresAt, startsAt, onExpire, size = 'featured' }) => {
     const countdown = useCountdown(expiresAt);
 
     React.useEffect(() => {
-      if (countdown.isExpired) onExpire();
+      if (countdown.isExpired) {
+        onExpire();
+      }
     }, [countdown.isExpired, onExpire]);
 
     const isUpcoming = startsAt ? Date.now() < new Date(startsAt).getTime() : false;
     const isFeatured = size === 'featured';
 
     const pillClass = isFeatured
-      ? 'w-13 sm:w-16 h-12 sm:h-14 rounded-xl sm:rounded-2xl'
-      : 'w-11 sm:w-13 h-10 sm:h-12 rounded-lg sm:rounded-xl';
+      ? 'w-11 sm:w-14 h-11 sm:h-13 rounded-xl'
+      : 'w-10 sm:w-12 h-9 sm:h-11 rounded-lg';
 
     const numClass = isFeatured
-      ? 'text-lg sm:text-2xl font-heading font-bold'
-      : 'text-base sm:text-lg font-heading font-bold';
+      ? 'text-base sm:text-xl font-heading font-bold'
+      : 'text-sm sm:text-base font-heading font-bold';
 
     const labelClass = isFeatured
-      ? 'text-[9px] sm:text-[10px] font-sans font-bold uppercase tracking-widest text-[#F7E6C8]/80 mt-1'
-      : 'text-[8px] sm:text-[9px] font-sans font-bold uppercase tracking-wider text-[#F7E6C8]/80 mt-0.5';
+      ? 'text-[8px] sm:text-[9px] font-sans font-bold uppercase tracking-widest text-[#F7E6C8]/80 mt-1'
+      : 'text-[7px] sm:text-[8px] font-sans font-bold uppercase tracking-wider text-[#F7E6C8]/80 mt-0.5';
 
     // Elapsed progress calculation
     const elapsedPercent = React.useMemo(() => {
@@ -47,6 +50,8 @@ export const PromotionCountdown: React.FC<PromotionCountdownProps> = React.memo(
       const elapsed = Date.now() - start;
       return Math.min(100, Math.max(0, (elapsed / total) * 100));
     }, [startsAt, expiresAt, countdown.remainingMs]);
+
+    const showDays = countdown.days > 0;
 
     return (
       <div
@@ -62,8 +67,31 @@ export const PromotionCountdown: React.FC<PromotionCountdownProps> = React.memo(
           <span>{isUpcoming ? 'Offer starts in' : 'Offer ends in'}</span>
         </div>
 
-        {/* Segmented timer pills with subtle inner shadow & bottom highlight */}
-        <div className="flex items-center gap-1.5 sm:gap-2">
+        {/* Segmented timer pills */}
+        <div className="flex items-center gap-1 sm:gap-1.5">
+          {/* Days (when applicable) */}
+          {showDays && (
+            <>
+              <div className="flex flex-col items-center">
+                <div
+                  className={`${pillClass} bg-[#F7E6C8] ticket-timer-pill border border-amber-200/70 flex items-center justify-center`}
+                >
+                  <span
+                    className={`${numClass} text-[#8B1A1A] tabular-nums`}
+                    style={{ fontVariantNumeric: 'tabular-nums' }}
+                  >
+                    {pad(countdown.days)}
+                  </span>
+                </div>
+                <span className={labelClass}>Days</span>
+              </div>
+
+              <span className="text-sm sm:text-base font-bold text-[#F7E6C8]/60 font-heading -mt-3">
+                :
+              </span>
+            </>
+          )}
+
           {/* Hours */}
           <div className="flex flex-col items-center">
             <div
@@ -73,13 +101,13 @@ export const PromotionCountdown: React.FC<PromotionCountdownProps> = React.memo(
                 className={`${numClass} text-[#8B1A1A] tabular-nums`}
                 style={{ fontVariantNumeric: 'tabular-nums' }}
               >
-                {pad(countdown.hours)}
+                {pad(showDays ? countdown.hours : countdown.totalHours)}
               </span>
             </div>
             <span className={labelClass}>Hours</span>
           </div>
 
-          <span className="text-base sm:text-xl font-bold text-[#F7E6C8]/60 font-heading -mt-3.5 sm:-mt-4">
+          <span className="text-sm sm:text-base font-bold text-[#F7E6C8]/60 font-heading -mt-3">
             :
           </span>
 
@@ -98,7 +126,7 @@ export const PromotionCountdown: React.FC<PromotionCountdownProps> = React.memo(
             <span className={labelClass}>Mins</span>
           </div>
 
-          <span className="text-base sm:text-xl font-bold text-[#F7E6C8]/60 font-heading -mt-3.5 sm:-mt-4">
+          <span className="text-sm sm:text-base font-bold text-[#F7E6C8]/60 font-heading -mt-3">
             :
           </span>
 

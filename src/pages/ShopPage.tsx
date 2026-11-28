@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useParams } from 'react-router-dom';
 import { SlidersHorizontal, ArrowUpDown, Check, RotateCcw, Sparkles, ArrowRight, ChevronDown } from 'lucide-react';
 import { useShop } from '../context/ShopContext';
 import { useAdmin } from '../context/AdminContext';
@@ -61,11 +61,12 @@ const parseMaxPriceParam = (raw: string | null): number => {
 };
 
 export const ShopPage: React.FC = () => {
+  const { slug: categorySlug } = useParams<{ slug?: string }>();
   const { categories, isLoadingProducts } = useShop();
   const { banners } = useAdmin();
   const [searchParams, setSearchParams] = useSearchParams();
   const filterParam = searchParams.get('filter');
-  const catParam = searchParams.get('category');
+  const catParam = searchParams.get('category') || categorySlug;
   const colParam = searchParams.get('collection');
   const qParam = searchParams.get('q') || searchParams.get('search');
   // TODO(backend): `?occasion=` and colour filtering are not supported by GET /products/search,
@@ -224,7 +225,10 @@ export const ShopPage: React.FC = () => {
   const selectedCategoryId = useMemo(() => {
     if (!selectedCategory || selectedCategory === 'All') return undefined;
     const found = categories.find(
-      c => c.name.toLowerCase() === selectedCategory.toLowerCase() || c.id === selectedCategory
+      c =>
+        c.slug?.toLowerCase() === selectedCategory.toLowerCase() ||
+        c.name.toLowerCase() === selectedCategory.toLowerCase() ||
+        c.id === selectedCategory
     );
     return found ? found.id : undefined;
   }, [selectedCategory, categories]);

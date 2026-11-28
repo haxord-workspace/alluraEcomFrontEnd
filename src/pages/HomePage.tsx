@@ -52,19 +52,19 @@ const TrustFeatureItems: React.FC = () => {
   ];
 
   return (
-  <>
-    {features.map(({ icon: Icon, title, text }) => (
-      <div key={title} className="flex flex-col items-center space-y-2">
-        <div className="w-11 h-11 rounded-full bg-white flex items-center justify-center text-[#561C08] shadow-xs border border-[#561C08]/15">
-          <Icon size={20} />
+    <>
+      {features.map(({ icon: Icon, title, text }) => (
+        <div key={title} className="flex flex-col items-center space-y-2">
+          <div className="w-11 h-11 rounded-full bg-white flex items-center justify-center text-[#561C08] shadow-xs border border-[#561C08]/15">
+            <Icon size={20} />
+          </div>
+          <h4 className="font-heading text-sm font-bold tracking-wider uppercase text-[#000000]">
+            {title}
+          </h4>
+          <p className="text-xs text-[#561C08] font-body font-medium">{text}</p>
         </div>
-        <h4 className="font-heading text-sm font-bold tracking-wider uppercase text-[#000000]">
-          {title}
-        </h4>
-        <p className="text-xs text-[#561C08] font-body font-medium">{text}</p>
-      </div>
-    ))}
-  </>
+      ))}
+    </>
   );
 };
 
@@ -193,7 +193,7 @@ export const HomePage: React.FC = () => {
       subtitle: 'Fresh modest styles, handpicked for your celebratory wardrobe.',
       image: '/images/editorial-banners/new-arrivals.jpeg',
       ctaText: 'SHOP NOW',
-      targetUrl: '/shop?filter=new',
+      targetUrl: '/shop?sort=new',
     },
     {
       id: 'curated-allura-collection',
@@ -438,8 +438,8 @@ export const HomePage: React.FC = () => {
                     src={slide.image}
                     alt={slide.headingLines.join(' ')}
                     className={`w-full h-full object-cover transition-transform duration-[8500ms] ease-out z-0 ${hasCustomMobileImage
-                        ? 'object-[center_top]'
-                        : 'object-[82%_20%] sm:object-[center_top]'
+                      ? 'object-[center_top]'
+                      : 'object-[82%_20%] sm:object-[center_top]'
                       }`}
                     style={{
                       transform: isActive ? 'scale(1.04)' : 'scale(1)',
@@ -898,8 +898,8 @@ export const HomePage: React.FC = () => {
               <div
                 key={faq.id}
                 className={`bg-white/95 rounded-2xl border transition-all duration-300 overflow-hidden ${isOpen
-                    ? 'border-[#561C08]/40 shadow-md ring-1 ring-[#561C08]/20'
-                    : 'border-[#561C08]/15 shadow-xs hover:border-[#561C08]/30'
+                  ? 'border-[#561C08]/40 shadow-md ring-1 ring-[#561C08]/20'
+                  : 'border-[#561C08]/15 shadow-xs hover:border-[#561C08]/30'
                   }`}
               >
                 <button

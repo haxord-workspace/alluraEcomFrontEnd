@@ -189,7 +189,8 @@
 }
 
 .ticket-drop-shadow-wrapper {
-  filter: drop-shadow(0 2px 5px rgba(20, 6, 2, 0.28)) drop-shadow(0 14px 30px rgba(20, 6, 2, 0.32));
+  /* Removed heavy rectangular panel drop-shadows so ticket sits directly on page */
+  filter: none;
   cursor: default;
 }
 
@@ -353,4 +354,28 @@
 
 .ticket-stub-bg {
   background: #421405;
+}
+
+/* Dynamic Promotion Text Cross-fade */
+@keyframes promoContentFadeIn {
+  from {
+    opacity: 0.2;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.promo-content-transition {
+  animation: promoContentFadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .promo-content-transition {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
 }

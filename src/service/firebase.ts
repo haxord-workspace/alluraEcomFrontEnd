@@ -16,9 +16,12 @@ const firebaseConfig = {
 
 const vapidKey: string | undefined = import.meta.env.VITE_FIREBASE_VAPID_KEY;
 
-/** True if the current browser environment supports notifications and service workers. */
+/** True if the current browser environment supports notifications, service workers, and push manager. */
 export const isPushSupported = (): boolean =>
-  typeof window !== 'undefined' && 'Notification' in window && 'serviceWorker' in navigator;
+  typeof window !== 'undefined' &&
+  'Notification' in window &&
+  'serviceWorker' in navigator &&
+  'PushManager' in window;
 
 /** True only when required Firebase env vars are set and push is supported. */
 export const isPushConfigured = (): boolean =>
@@ -86,7 +89,11 @@ export const requestPushToken = async (): Promise<string | null> => {
     if (firebaseConfig.authDomain) swParams.set('authDomain', firebaseConfig.authDomain);
     if (firebaseConfig.storageBucket) swParams.set('storageBucket', firebaseConfig.storageBucket);
 
-    const registration = await navigator.serviceWorker.register(`/firebase-messaging-sw.js?${swParams.toString()}`);
+    const registration = await navigator.serviceWorker.register(
+      `/firebase-messaging-sw.js?${swParams.toString()}`,
+      { scope: '/' }
+    );
+    await navigator.serviceWorker.ready;
     const { getToken } = await import('firebase/messaging');
     return await getToken(messaging, { vapidKey, serviceWorkerRegistration: registration });
   } catch (err) {

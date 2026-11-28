@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Plus, RefreshCw, Search, Loader2, Power, Edit3, Trash2, Calendar, ChevronDown } from 'lucide-react';
+import { Plus, RefreshCw, Search, Loader2, Power, Edit3, Trash2, Calendar, ChevronDown, ImagePlus, X } from 'lucide-react';
+import { uploadImage } from '../../service/uploadService';
 import { useAdmin } from '../../context/AdminContext';
 import { useShop } from '../../context/ShopContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
@@ -26,6 +27,7 @@ import type {
   PromotionStatus,
   PromotionDiscountType,
   PromotionScopeType,
+  PromotionBackgroundImage,
 } from '../../types/promotion';
 import type { Category } from '../../types';
 import { PromotionItemPicker } from '../../components/admin/promotions/PromotionItemPicker';
@@ -38,6 +40,21 @@ import { validatePromotionScope, scopeAllowsExclusions } from '../../utils/promo
 import { getBackendFieldErrors } from '../../utils/apiResponse';
 
 const PAGE_SIZE = 10;
+
+// --- Promotion background image (Admin Promotion Management only) -----------
+const BG_IMAGE_ALLOWED_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+const BG_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+
+/** Client-side check only; the backend independently validates actual file content. */
+const checkPromotionImage = (file: File): string | null => {
+  if (!BG_IMAGE_ALLOWED_TYPES.includes(file.type)) {
+    return 'Use a JPG, PNG or WebP image';
+  }
+  if (file.size > BG_IMAGE_MAX_BYTES) {
+    return 'Image must be 5 MB or less';
+  }
+  return null;
+};
 
 /** Replaced by Applies to > Categories; no longer used. Keeps the old Eligible Categories
  *  picker (and its category fetch) in the file without rendering or running it. */
@@ -80,6 +97,7 @@ interface FormState {
   discountType: PromotionDiscountType;
   discountValue: string;
   maxDiscountAmount: string;
+  minimumOrderValue: string;
   conditions: string;
   startDate: string;
   endDate: string;
@@ -94,6 +112,8 @@ interface FormState {
   excludedCategories: string[];
   /** Raw input text; integer */
   priority: string;
+  /** Admin Promotion Management only; null means no image / to be removed. */
+  backgroundImage: PromotionBackgroundImage | null;
 }
 
 const EMPTY_FORM: FormState = {
@@ -102,6 +122,7 @@ const EMPTY_FORM: FormState = {
   discountType: 'Percentage',
   discountValue: '',
   maxDiscountAmount: '',
+  minimumOrderValue: '',
   conditions: '',
   startDate: today(),
   endDate: inDays(30),
@@ -114,6 +135,7 @@ const EMPTY_FORM: FormState = {
   excludedProducts: [],
   excludedCategories: [],
   priority: '0',
+  backgroundImage: null,
 };
 
 export const AdminPromotionsPage: React.FC = () => {
@@ -150,6 +172,71 @@ export const AdminPromotionsPage: React.FC = () => {
   /** Status as loaded for edit; the status endpoint is called only when it changes */
   const [loadedStatus, setLoadedStatus] = useState<PromotionStatus | null>(null);
   const [showExclusions, setShowExclusions] = useState(false);
+
+  // Background image (Admin Promotion Management only)
+  const [bgPreview, setBgPreview] = useState<string | null>(null);
+  const [bgUploading, setBgUploading] = useState(false);
+  const [bgError, setBgError] = useState<string | null>(null);
+  const [bgAction, setBgAction] = useState<'keep' | 'replace' | 'remove'>('keep');
+  const bgFileInputRef = useRef<HTMLInputElement>(null);
+  const bgObjectUrlRef = useRef<string | null>(null);
+  const initialBackgroundImageRef = useRef<PromotionBackgroundImage | null>(null);
+
+  // Revoke the locally-created preview URL when swapped or on unmount
+  useEffect(() => {
+    return () => {
+      if (bgObjectUrlRef.current) URL.revokeObjectURL(bgObjectUrlRef.current);
+    };
+  }, []);
+
+  const resetBgPreview = () => {
+    if (bgObjectUrlRef.current) {
+      URL.revokeObjectURL(bgObjectUrlRef.current);
+      bgObjectUrlRef.current = null;
+    }
+    setBgPreview(null);
+  };
+
+  const handleBgFileSelect = async (file: File) => {
+    setBgError(null);
+    const validationError = checkPromotionImage(file);
+    if (validationError) {
+      setBgError(validationError);
+      return;
+    }
+    resetBgPreview();
+    const localUrl = URL.createObjectURL(file);
+    bgObjectUrlRef.current = localUrl;
+    setBgPreview(localUrl);
+    setBgUploading(true);
+    try {
+      const res = await uploadImage(file, 'promotions');
+      setForm(f => ({
+        ...f,
+        backgroundImage: { url: res.secureUrl, publicId: res.publicId, width: res.width, height: res.height },
+      }));
+      setBgAction('replace');
+    } catch (err: any) {
+      setBgError(err?.message || 'Failed to upload image');
+      resetBgPreview();
+    } finally {
+      setBgUploading(false);
+    }
+  };
+
+  const handleBgRemove = () => {
+    resetBgPreview();
+    setBgError(null);
+    setForm(f => ({ ...f, backgroundImage: null }));
+    setBgAction('remove');
+  };
+
+  const handleBgUndo = () => {
+    resetBgPreview();
+    setBgError(null);
+    setForm(f => ({ ...f, backgroundImage: initialBackgroundImageRef.current }));
+    setBgAction('keep');
+  };
 
   // Picker data loads only when the modal needs it; categories/collections are cached per session
   const exclusionsAllowed = scopeAllowsExclusions(form.scopeType);
@@ -221,6 +308,10 @@ export const AdminPromotionsPage: React.FC = () => {
     setFieldErrors({});
     setLoadedStatus(null);
     setShowExclusions(false);
+    resetBgPreview();
+    setBgError(null);
+    setBgAction('keep');
+    initialBackgroundImageRef.current = null;
     const next = { ...EMPTY_FORM, startDate: today(), endDate: inDays(30) };
     setForm(next);
     initialFormSnapshotRef.current = JSON.stringify(next);
@@ -236,6 +327,7 @@ export const AdminPromotionsPage: React.FC = () => {
       discountType: promo.discountType,
       discountValue: promo.discountValue ? String(promo.discountValue) : '',
       maxDiscountAmount: promo.maxDiscountAmount ? String(promo.maxDiscountAmount) : '',
+      minimumOrderValue: promo.minimumOrderValue ? String(promo.minimumOrderValue) : '',
       conditions: promo.conditions,
       startDate: promo.startDate || today(),
       endDate: promo.endDate || inDays(30),
@@ -249,12 +341,17 @@ export const AdminPromotionsPage: React.FC = () => {
       excludedProducts: promo.excludedProducts,
       excludedCategories: promo.excludedCategories,
       priority: String(promo.priority),
+      backgroundImage: promo.backgroundImage ?? null,
     };
     setForm(next);
     initialFormSnapshotRef.current = JSON.stringify(next);
     setFieldErrors({});
     setLoadedStatus(promo.status);
     setShowExclusions(promo.excludedProducts.length > 0 || promo.excludedCategories.length > 0);
+    resetBgPreview();
+    setBgError(null);
+    setBgAction('keep');
+    initialBackgroundImageRef.current = promo.backgroundImage ?? null;
     setIsFormOpen(true);
   };
 
@@ -306,6 +403,10 @@ export const AdminPromotionsPage: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name.trim()) return;
+    if (bgUploading) {
+      showToast('Please wait for the background image to finish uploading', 'error');
+      return;
+    }
 
     const discountValue = Number(form.discountValue);
     if (!form.discountValue.trim() || Number.isNaN(discountValue) || discountValue <= 0) {
@@ -323,6 +424,11 @@ export const AdminPromotionsPage: React.FC = () => {
     const maxDiscountAmount = form.maxDiscountAmount.trim() ? Number(form.maxDiscountAmount) : undefined;
     if (maxDiscountAmount !== undefined && (Number.isNaN(maxDiscountAmount) || maxDiscountAmount <= 0)) {
       showToast('Max discount cap must be a positive number', 'error');
+      return;
+    }
+    const minimumOrderValue = form.minimumOrderValue.trim() ? Number(form.minimumOrderValue) : undefined;
+    if (minimumOrderValue !== undefined && (Number.isNaN(minimumOrderValue) || minimumOrderValue < 0)) {
+      showToast('Minimum order value must be 0 or more', 'error');
       return;
     }
 
@@ -357,6 +463,7 @@ export const AdminPromotionsPage: React.FC = () => {
         value: discountValue,
         ...(maxDiscountAmount !== undefined ? { maxDiscountAmount } : {}),
       },
+      ...(minimumOrderValue !== undefined ? { minimumOrderValue } : {}),
       startsAt: toIsoDateTime(form.startDate),
       // End of the chosen local day (23:59:59), same as coupons
       expiresAt: toIsoEndOfDay(form.endDate),
@@ -368,6 +475,17 @@ export const AdminPromotionsPage: React.FC = () => {
         ? form.excludedCategories.filter(id => !applicableTo.categoryIds.includes(id))
         : [],
       ...(priorityText !== '' ? { priority: Number(priorityText) } : {}),
+      // Background image: 'keep' omits the field entirely (never send null by default);
+      // 'remove' sends null; 'replace' (or a first-time pick on create) sends the new image.
+      ...(editingId
+        ? bgAction === 'remove'
+          ? { backgroundImage: null }
+          : bgAction === 'replace' && form.backgroundImage
+            ? { backgroundImage: { ...form.backgroundImage, alt: form.name.trim() } }
+            : {}
+        : form.backgroundImage
+          ? { backgroundImage: { ...form.backgroundImage, alt: form.name.trim() } }
+          : {}),
     };
 
     setIsSaving(true);
@@ -527,7 +645,19 @@ export const AdminPromotionsPage: React.FC = () => {
                       )}
                     </td>
                     <td className="p-4 font-bold text-[#561C08]">
-                      {promo.discountValue ? formatDiscount(promo.discountType, promo.discountValue) : '—'}
+                      <div className="flex items-baseline gap-1.5 flex-wrap">
+                        <span>{promo.discountValue ? formatDiscount(promo.discountType, promo.discountValue) : '—'}</span>
+                        {promo.discountType === 'Percentage' && promo.maxDiscountAmount ? (
+                          <span className="text-[11px] font-normal text-stone-500">
+                            (max ₹{promo.maxDiscountAmount.toLocaleString('en-IN')})
+                          </span>
+                        ) : null}
+                      </div>
+                      {promo.minimumOrderValue ? (
+                        <p className="text-[11px] font-medium text-emerald-700 mt-0.5">
+                          Min. order ₹{promo.minimumOrderValue.toLocaleString('en-IN')}
+                        </p>
+                      ) : null}
                       {(() => {
                         const { scope, excluded } = scopeSummary(promo);
                         return (
@@ -688,8 +818,8 @@ export const AdminPromotionsPage: React.FC = () => {
                 {errorFor('description') && <p className="mt-1 text-[11px] text-rose-600">{errorFor('description')}</p>}
               </div>
 
-              <SectionTitle>Discount</SectionTitle>
-              <div className="grid grid-cols-3 gap-4">
+              <SectionTitle>Discount & Thresholds</SectionTitle>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div>
                   <label htmlFor="promo-discount-type" className="block text-[10px] font-bold uppercase text-stone-500 mb-1">
                     Discount Type
@@ -739,6 +869,27 @@ export const AdminPromotionsPage: React.FC = () => {
                     />
                   </div>
                 )}
+                <div>
+                  <label htmlFor="promo-min-order" className="block text-[10px] font-bold uppercase text-stone-500 mb-1">
+                    Min. Order Value (₹)
+                  </label>
+                  <input
+                    id="promo-min-order"
+                    type="number"
+                    min={0}
+                    placeholder="Optional (e.g. 1500)"
+                    value={form.minimumOrderValue}
+                    onChange={e => {
+                      setForm({ ...form, minimumOrderValue: e.target.value });
+                      clearFieldError('minimumOrderValue');
+                    }}
+                    disabled={isSaving}
+                    className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl"
+                  />
+                  {errorFor('minimumOrderValue') && (
+                    <p className="mt-1 text-[11px] text-rose-600">{errorFor('minimumOrderValue')}</p>
+                  )}
+                </div>
               </div>
               {errorFor('discount') && <p className="-mt-2 text-[11px] text-rose-600">{errorFor('discount')}</p>}
 
@@ -862,6 +1013,87 @@ export const AdminPromotionsPage: React.FC = () => {
                 </div>
               )}
 
+              <SectionTitle>Background Image (Optional)</SectionTitle>
+              <div className="space-y-2">
+                {bgPreview || form.backgroundImage?.url ? (
+                  <div className="relative rounded-2xl border border-stone-200 overflow-hidden bg-stone-100">
+                    <img
+                      src={bgPreview || form.backgroundImage?.thumbnailUrl || form.backgroundImage?.url}
+                      alt="Promotion background preview"
+                      className="w-full h-40 object-cover"
+                    />
+                    {bgUploading && (
+                      <div className="absolute inset-0 bg-stone-900/40 flex items-center justify-center">
+                        <Loader2 size={20} className="animate-spin text-white" />
+                      </div>
+                    )}
+                    <div className="absolute top-2 right-2 flex gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => bgFileInputRef.current?.click()}
+                        disabled={isSaving || bgUploading}
+                        className="p-1.5 bg-white/90 hover:bg-white text-stone-700 rounded-lg shadow-xs disabled:opacity-50"
+                        title="Change image"
+                        aria-label="Change background image"
+                      >
+                        <RefreshCw size={13} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleBgRemove}
+                        disabled={isSaving || bgUploading}
+                        className="p-1.5 bg-white/90 hover:bg-white text-rose-600 rounded-lg shadow-xs disabled:opacity-50"
+                        title="Remove image"
+                        aria-label="Remove background image"
+                      >
+                        <X size={13} />
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    onClick={() => !bgUploading && bgFileInputRef.current?.click()}
+                    onDragOver={e => e.preventDefault()}
+                    onDrop={e => {
+                      e.preventDefault();
+                      const file = e.dataTransfer.files?.[0];
+                      if (file) handleBgFileSelect(file);
+                    }}
+                    className={`border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer bg-stone-50/50 transition-colors ${isSaving || bgUploading ? 'opacity-60 pointer-events-none' : 'border-stone-300 hover:border-stone-400'}`}
+                  >
+                    <ImagePlus size={20} className="mx-auto text-stone-400 mb-1.5" />
+                    <p className="text-xs font-semibold text-stone-700">
+                      {bgUploading ? 'Uploading…' : 'Drag and drop or Browse files'}
+                    </p>
+                    <p className="text-[10px] text-stone-400 mt-0.5">JPG, PNG, WebP</p>
+                  </div>
+                )}
+                <input
+                  ref={bgFileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  onChange={e => {
+                    const file = e.target.files?.[0];
+                    if (file) handleBgFileSelect(file);
+                    e.target.value = '';
+                  }}
+                />
+                <p className="text-[10px] text-stone-400 leading-relaxed">
+                  Recommended: 1600 × 900 px · Minimum: 1200 × 675 px · Aspect ratio 16:9 · Max 5 MB · JPG, PNG or WebP · One image per promotion.
+                </p>
+                {bgError && <p className="text-[11px] text-rose-600">{bgError}</p>}
+                {editingId && bgAction !== 'keep' && (
+                  <button
+                    type="button"
+                    onClick={handleBgUndo}
+                    className="text-[11px] font-bold text-allura-goldDark underline"
+                  >
+                    Undo
+                  </button>
+                )}
+              </div>
+
               <SectionTitle>Schedule</SectionTitle>
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -979,7 +1211,7 @@ export const AdminPromotionsPage: React.FC = () => {
             </button>
             <button
               type="submit"
-              disabled={isSaving}
+              disabled={isSaving || bgUploading}
               className="px-6 py-2 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-xl font-bold uppercase tracking-wider shadow-sm disabled:opacity-50 flex items-center gap-2"
             >
               {isSaving && <Loader2 size={13} className="animate-spin" />}
