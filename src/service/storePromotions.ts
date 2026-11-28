@@ -293,6 +293,12 @@ const mapPromotion = (raw: any): StorePromotion => {
     displayOrder: typeof raw?.displayOrder === 'number' ? raw.displayOrder : undefined,
     sortOrder: typeof raw?.sortOrder === 'number' ? raw.sortOrder : undefined,
     backgroundImage: mapBackgroundImage(raw),
+    displayOptions: Array.isArray(raw?.displayOptions)
+      ? raw.displayOptions.map((o: any) => ({
+          key: String(o?.key || ''),
+          enabled: Boolean(o?.enabled ?? true),
+        }))
+      : undefined,
   };
 };
 

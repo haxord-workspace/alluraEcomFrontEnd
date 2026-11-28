@@ -3,27 +3,30 @@ import { Link } from 'react-router-dom';
 import { Sparkles, Scissors, Heart, Award, MessageCircle } from 'lucide-react';
 import { AlluraLogo } from '../components/common/AlluraLogo';
 import { useStoreAddress } from '../hooks/useStoreAddress';
+import alluraShowroom from '../assets/about/allura-showroom.png';
+import alluraReception from '../assets/about/allura-reception.png';
 
 export const AboutPage: React.FC = () => {
   const { address } = useStoreAddress();
   return (
     <div className="space-y-16 sm:space-y-24 pb-6 sm:pb-20">
       {/* Hero Header */}
-      <section className="relative h-[45vh] sm:h-[52vh] min-h-[360px] bg-allura-bgSecondary flex items-center justify-center text-center px-6 overflow-hidden">
+      <section className="relative h-[45vh] sm:h-[52vh] min-h-[360px] bg-allura-darkBrown flex items-center justify-center text-center px-6 overflow-hidden">
         <img
-          src="https://images.unsplash.com/photo-1610030469983-98e550d6193c?auto=format&fit=crop&w=1600&q=85"
-          alt="Allura Boutique Heritage"
-          className="absolute inset-0 w-full h-full object-cover object-center opacity-30"
+          src={alluraShowroom}
+          alt="Allura Boutique Showroom"
+          className="absolute inset-0 w-full h-full object-cover object-center"
         />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/50 to-black/30" />
         <div className="relative z-10 max-w-2xl space-y-4">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-allura-card/80 border border-allura-border text-allura-goldDark text-[11px] font-sans font-bold tracking-[0.25em] uppercase">
             <Sparkles size={12} />
             <span>OUR HERITAGE</span>
           </div>
-          <h1 className="font-serif text-3xl sm:text-5xl font-normal text-allura-text tracking-tight uppercase">
+          <h1 className="font-serif text-3xl sm:text-5xl font-normal text-white tracking-tight uppercase">
             MORE THAN A BOUTIQUE
           </h1>
-          <p className="text-xs sm:text-sm text-allura-muted font-sans leading-relaxed">
+          <p className="text-xs sm:text-sm text-white/80 font-sans leading-relaxed">
             A sanctuary of quiet luxury, bespoke craftsmanship, and timeless silhouettes situated in the heart of Perinthalmanna, Kerala.
           </p>
         </div>
@@ -54,8 +57,8 @@ export const AboutPage: React.FC = () => {
 
           <div className="lg:col-span-6 relative aspect-[4/5] rounded-xl overflow-hidden shadow-luxury border border-allura-border/60">
             <img
-              src="https://images.unsplash.com/photo-1583391733975-088dd9fa7182?auto=format&fit=crop&w=1000&q=85"
-              alt="Allura Boutique Perinthalmanna"
+              src={alluraReception}
+              alt="Allura Boutique Reception"
               className="w-full h-full object-cover object-top"
             />
           </div>

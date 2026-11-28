@@ -20,8 +20,10 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
   const dispatch = useDispatch<AppDispatch>();
   const navigate = useNavigate();
   const adminAuthStatus = useSelector((state: RootState) => state.adminAuth.status);
+  const admin = useSelector((state: RootState) => state.adminAuth.admin);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
-  const lastFocusRef = useRef<number>(0);
+  const HIDDEN_RECHECK_MS = 5 * 60 * 1000;
+  const hiddenAt = useRef<number | null>(null);
 
   // Handle global permission denied and account deactivation events
   useEffect(() => {
@@ -29,9 +31,9 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
       const detail = (e as CustomEvent)?.detail;
       const msg = detail?.message || 'Access denied: You do not have permission for this action.';
       showToast(msg, 'error');
-      // Refetch /auth/me to update permission flags and adjust button visibility immediately
+      // Refetch /auth/me silently to update permission flags and adjust button visibility immediately
       if (isAdminAuthenticated) {
-        dispatch(fetchAdminProfile());
+        dispatch(fetchAdminProfile({ background: true }));
       }
     };
 
@@ -50,21 +52,26 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
     };
   }, [showToast, dispatch, navigate, isAdminAuthenticated]);
 
-  // Window focus throttling: refresh /auth/me at most once every 60 seconds
+  // Silent re-check only when the TAB comes back after >= 5 minutes hidden
+  // (the file picker never hides the tab, so it cannot trigger this)
   useEffect(() => {
-    const onFocus = () => {
-      const now = Date.now();
-      if (isAdminAuthenticated && now - lastFocusRef.current >= 60000) {
-        lastFocusRef.current = now;
-        dispatch(fetchAdminProfile());
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        hiddenAt.current = Date.now();
+        return;
+      }
+      const away = hiddenAt.current ? Date.now() - hiddenAt.current : 0;
+      hiddenAt.current = null;
+      if (isAdminAuthenticated && away >= HIDDEN_RECHECK_MS) {
+        dispatch(fetchAdminProfile({ background: true }));
       }
     };
-    window.addEventListener('focus', onFocus);
-    return () => window.removeEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
   }, [isAdminAuthenticated, dispatch]);
 
-  // While /auth/me is in flight on page refresh, wait — don't redirect yet
-  if (adminAuthStatus === 'loading') {
+  // While /auth/me is in flight on initial page load (before admin profile is known), show spinner
+  if (adminAuthStatus === 'loading' && !admin) {
     return (
       <div className="min-h-screen bg-stone-50 flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">

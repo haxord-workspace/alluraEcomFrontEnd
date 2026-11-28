@@ -72,6 +72,8 @@ export interface AdminPromotion {
   priority: number;
   /** Optional admin-uploaded background image; absent when none was set. */
   backgroundImage?: PromotionBackgroundImage;
+  /** Display options for image banner (6 keys); controls visibility of storefront banner elements */
+  displayOptions?: { key: string; enabled: boolean }[];
 }
 
 /** Body for POST/PATCH /admin/promotions. Only `name`, `discount`, `startsAt`,
@@ -106,6 +108,8 @@ export interface PromotionInput {
   /** Admin Promotion Management only. Omit to keep the existing image, an object to set/replace
    *  it, or `null` to remove it — never send `null` by default. */
   backgroundImage?: PromotionBackgroundImage | null;
+  /** Controls which elements appear on the promotion banner */
+  displayOptions?: { key: string; enabled: boolean }[];
 }
 
 /** Starting set of campaign types, taken from the existing mock data. Free text is also allowed. */

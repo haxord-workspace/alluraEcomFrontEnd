@@ -141,6 +141,12 @@ export const mapPromotion = (raw: any): AdminPromotion => {
     excludedCategories: toIdList(raw?.excludedCategories),
     priority: Number.isInteger(Number(raw?.priority)) ? Number(raw.priority) : 0,
     backgroundImage: mapBackgroundImage(raw),
+    displayOptions: Array.isArray(raw?.displayOptions)
+      ? raw.displayOptions.map((o: any) => ({
+          key: String(o?.key || ''),
+          enabled: Boolean(o?.enabled ?? true),
+        }))
+      : undefined,
   };
 };
 
