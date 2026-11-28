@@ -27,6 +27,23 @@ const processQueue = (error: any, token: string | null = null) => {
   failedQueue = [];
 };
 
+/** Helper to cleanly end the admin session and notify listeners */
+const endAdminSession = (message: string) => {
+  clearAdminSession();
+  import('../store').then(({ store }) => {
+    import('../store/slices/adminAuthSlice').then(({ clearAdmin }) => {
+      store.dispatch(clearAdmin());
+    });
+  });
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent('allura:admin-auth-error', {
+        detail: { message, redirectToLogin: true },
+      })
+    );
+  }
+};
+
 // ─── Admin Axios Instance ─────────────────────────────────────────────────────
 
 const adminApi = axios.create({
@@ -65,75 +82,94 @@ adminApi.interceptors.response.use(
       originalRequest.url || ''
     );
 
-    // Only attempt refresh on 401 and if we haven't already retried this request
-    if (error.response?.status === 401 && !originalRequest._retry && !isAuthEndpoint) {
+    const status = error.response?.status;
+    const code =
+      error.response?.data?.error?.code ||
+      (typeof error.response?.data?.error === 'string' ? error.response?.data?.error : undefined) ||
+      error.response?.data?.code;
+
+    // 1) Expired access token → ONE refresh (others wait in the queue) → retry
+    if (status === 401 && code === 'TOKEN_EXPIRED' && !originalRequest._retry && !isAuthEndpoint) {
       if (isRefreshing) {
-        // Another refresh is already in flight — queue this request
-        return new Promise((resolve, reject) => {
-          failedQueue.push({ resolve, reject });
-        })
+        return new Promise((resolve, reject) => failedQueue.push({ resolve, reject }))
           .then((token) => {
             if (originalRequest.headers) {
               originalRequest.headers['Authorization'] = `Bearer ${token}`;
             }
             return adminApi(originalRequest);
-          })
-          .catch((err) => Promise.reject(err));
+          });
       }
-
       originalRequest._retry = true;
       isRefreshing = true;
-
       try {
-        // POST /auth/refresh requires { refreshToken } in the body
         const refreshToken = getAdminRefreshToken();
         if (!refreshToken) throw new Error('No admin refresh token');
-
-        const refreshResponse = await axios.post(
-          `${API_BASE_URL}/auth/refresh`,
-          { refreshToken },
-          { withCredentials: true }
-        );
-
-        // Stores the new access token and, if the backend rotates it, the new refresh token
-        const { accessToken: newToken } = storeAdminTokens(refreshResponse.data);
-
-        if (!newToken) throw new Error('Refresh response did not include an access token');
-
-        processQueue(null, newToken);
+        const res = await axios.post(`${API_BASE_URL}/auth/refresh`, { refreshToken }, { withCredentials: true });
+        const { accessToken } = storeAdminTokens(res.data);
+        if (!accessToken) throw new Error('Refresh response did not include an access token');
+        processQueue(null, accessToken);
         if (originalRequest.headers) {
-          originalRequest.headers['Authorization'] = `Bearer ${newToken}`;
+          originalRequest.headers['Authorization'] = `Bearer ${accessToken}`;
         }
         return adminApi(originalRequest);
-      } catch (refreshError) {
-        // Refresh failed — there's no valid session (or never was one, e.g.
-        // a fresh visit to /admin/login itself). Just clear local state and
-        // let it reject; AdminLayout's own <Navigate> already redirects
-        // unauthenticated visitors to /admin/login client-side. A forced
-        // `window.location.href` reload here used to retrigger the mount-time
-        // session check, which 401s again, which reloads again — an infinite
-        // reload loop that also stomped on in-progress login submissions.
+      } catch (refreshError: any) {
         processQueue(refreshError, null);
-        clearAdminSession();
-
-        // Dynamically import store to avoid circular dep, then dispatch clearAdmin
-        import('../store').then(({ store }) => {
-          import('../store/slices/adminAuthSlice').then(({ clearAdmin }) => {
-            store.dispatch(clearAdmin());
-          });
-        });
-
-        return Promise.reject(refreshError);
+        if (refreshError?.response?.status === 401 || refreshError?.message === 'No admin refresh token') {
+          endAdminSession('Your session has expired. Please sign in again.');
+        }
+        // network error / 5xx on refresh → do NOT log out; just fail this request
+        return Promise.reject(error);
       } finally {
         isRefreshing = false;
       }
     }
 
-    // 403 error handling based on backend error envelope
-    if (error.response?.status === 403) {
+    // 2) Invalid or missing token → sign in again (no refresh attempt)
+    if (status === 401 && !isAuthEndpoint && (code === 'INVALID_TOKEN' || code === 'UNAUTHORIZED')) {
+      endAdminSession('Please sign in again.');
+      return Promise.reject(error);
+    }
+
+    // 3) Older backend without codes (401 + no code) → keep today's behaviour (refresh once)
+    if (status === 401 && !code && !originalRequest._retry && !isAuthEndpoint) {
+      if (isRefreshing) {
+        return new Promise((resolve, reject) => failedQueue.push({ resolve, reject }))
+          .then((token) => {
+            if (originalRequest.headers) {
+              originalRequest.headers['Authorization'] = `Bearer ${token}`;
+            }
+            return adminApi(originalRequest);
+          });
+      }
+      originalRequest._retry = true;
+      isRefreshing = true;
+      try {
+        const refreshToken = getAdminRefreshToken();
+        if (!refreshToken) throw new Error('No admin refresh token');
+        const res = await axios.post(`${API_BASE_URL}/auth/refresh`, { refreshToken }, { withCredentials: true });
+        const { accessToken } = storeAdminTokens(res.data);
+        if (!accessToken) throw new Error('Refresh response did not include an access token');
+        processQueue(null, accessToken);
+        if (originalRequest.headers) {
+          originalRequest.headers['Authorization'] = `Bearer ${accessToken}`;
+        }
+        return adminApi(originalRequest);
+      } catch (refreshError: any) {
+        processQueue(refreshError, null);
+        if (refreshError?.response?.status === 401 || refreshError?.message === 'No admin refresh token') {
+          endAdminSession('Your session has expired. Please sign in again.');
+        }
+        return Promise.reject(error);
+      } finally {
+        isRefreshing = false;
+      }
+    }
+
+    // 4) 403 handling: unchanged (ACCOUNT_INACTIVE / FORBIDDEN → endAdminSession,
+    //    PERMISSION_DENIED → dispatch "allura:permission-denied")
+    if (status === 403) {
       const data = error.response?.data;
-      const errorCode =
-        data?.error?.code || (typeof data?.error === 'string' ? data.error : undefined) || data?.code;
+      const errorCode = code;
       const details = data?.error?.details || data?.details;
       const detail0 = Array.isArray(details) && details.length > 0 ? details[0] : undefined;
       const errModule = detail0?.module;
@@ -141,42 +177,12 @@ adminApi.interceptors.response.use(
       const serverMessage = data?.message || data?.error?.message;
 
       if (errorCode === 'ACCOUNT_INACTIVE') {
-        clearAdminSession();
-        import('../store').then(({ store }) => {
-          import('../store/slices/adminAuthSlice').then(({ clearAdmin }) => {
-            store.dispatch(clearAdmin());
-          });
-        });
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(
-            new CustomEvent('allura:admin-auth-error', {
-              detail: {
-                message: 'Your account has been deactivated. Contact the Super Admin.',
-                redirectToLogin: true,
-              },
-            })
-          );
-        }
+        endAdminSession('Your account has been deactivated. Contact the Super Admin.');
         return Promise.reject(error);
       }
 
       if (errorCode === 'FORBIDDEN') {
-        clearAdminSession();
-        import('../store').then(({ store }) => {
-          import('../store/slices/adminAuthSlice').then(({ clearAdmin }) => {
-            store.dispatch(clearAdmin());
-          });
-        });
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(
-            new CustomEvent('allura:admin-auth-error', {
-              detail: {
-                message: 'Admin access only.',
-                redirectToLogin: true,
-              },
-            })
-          );
-        }
+        endAdminSession('Admin access only.');
         return Promise.reject(error);
       }
 

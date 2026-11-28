@@ -77,15 +77,13 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
       }
     };
 
-    window.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('focus', fetchUnreadCount);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener(CONTACT_INQUIRIES_UPDATED_EVENT, fetchUnreadCount);
 
     return () => {
       isMounted = false;
       clearInterval(interval);
-      window.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('focus', fetchUnreadCount);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener(CONTACT_INQUIRIES_UPDATED_EVENT, fetchUnreadCount);
     };
   }, [canViewCrm]);

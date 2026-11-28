@@ -361,7 +361,7 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
       // Non-super roles MUST NEVER call getRolesMatrix() (avoids 403)
       if (realRole !== 'SUPER_ADMIN') {
-        await dispatch(fetchAdminProfile());
+        await dispatch(fetchAdminProfile({ background: true }));
         return null;
       }
 

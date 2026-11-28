@@ -93,4 +93,6 @@ export interface StorePromotion {
   sortOrder?: number;
   /** Optional admin-uploaded banner background; absent/undefined when the promotion has none. */
   backgroundImage?: StorePromotionBackgroundImage;
+  /** Controls which elements appear on the promotion banner (6 keys) */
+  displayOptions?: { key: string; enabled: boolean }[];
 }

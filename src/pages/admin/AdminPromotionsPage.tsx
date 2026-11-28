@@ -37,6 +37,13 @@ import {
   useCollectionPickerOptions,
 } from '../../hooks/usePromotionPickerOptions';
 import { validatePromotionScope, scopeAllowsExclusions } from '../../utils/promotionValidation';
+import {
+  DISPLAY_KEYS,
+  DISPLAY_LABELS,
+  toDisplayOptionsMap,
+  toDisplayOptionsArray,
+  type PromotionDisplayKey,
+} from '../../utils/promotionDisplayOptions';
 import { getBackendFieldErrors } from '../../utils/apiResponse';
 
 const PAGE_SIZE = 10;
@@ -182,6 +189,10 @@ export const AdminPromotionsPage: React.FC = () => {
   const bgObjectUrlRef = useRef<string | null>(null);
   const initialBackgroundImageRef = useRef<PromotionBackgroundImage | null>(null);
 
+  // Banner display options (6 keys; active only when background image is present)
+  const [displayOptions, setDisplayOptions] = useState<Record<PromotionDisplayKey, boolean>>(toDisplayOptionsMap());
+  const initialDisplayOptionsRef = useRef<Record<PromotionDisplayKey, boolean>>(toDisplayOptionsMap());
+
   // Revoke the locally-created preview URL when swapped or on unmount
   useEffect(() => {
     return () => {
@@ -312,6 +323,8 @@ export const AdminPromotionsPage: React.FC = () => {
     setBgError(null);
     setBgAction('keep');
     initialBackgroundImageRef.current = null;
+    setDisplayOptions(toDisplayOptionsMap());
+    initialDisplayOptionsRef.current = toDisplayOptionsMap();
     const next = { ...EMPTY_FORM, startDate: today(), endDate: inDays(30) };
     setForm(next);
     initialFormSnapshotRef.current = JSON.stringify(next);
@@ -352,6 +365,9 @@ export const AdminPromotionsPage: React.FC = () => {
     setBgError(null);
     setBgAction('keep');
     initialBackgroundImageRef.current = promo.backgroundImage ?? null;
+    const initDisplay = toDisplayOptionsMap(promo.displayOptions);
+    setDisplayOptions(initDisplay);
+    initialDisplayOptionsRef.current = initDisplay;
     setIsFormOpen(true);
   };
 
@@ -487,6 +503,32 @@ export const AdminPromotionsPage: React.FC = () => {
           ? { backgroundImage: { ...form.backgroundImage, alt: form.name.trim() } }
           : {}),
     };
+
+    // Banner display options:
+    // Create: if hasImage, send all 6; if not, do not send displayOptions.
+    // Edit: if hasImage, send only changed keys; if not, do not send displayOptions.
+    const hasImage = Boolean(
+      editingId
+        ? bgAction === 'remove'
+          ? false
+          : form.backgroundImage || bgPreview
+        : form.backgroundImage
+    );
+
+    if (editingId) {
+      if (hasImage) {
+        const changed = DISPLAY_KEYS
+          .filter(k => displayOptions[k] !== initialDisplayOptionsRef.current[k])
+          .map(k => ({ key: k, enabled: displayOptions[k] }));
+        if (changed.length > 0) {
+          input.displayOptions = changed;
+        }
+      }
+    } else {
+      if (hasImage) {
+        input.displayOptions = toDisplayOptionsArray(displayOptions);
+      }
+    }
 
     setIsSaving(true);
     try {
@@ -1093,6 +1135,57 @@ export const AdminPromotionsPage: React.FC = () => {
                   </button>
                 )}
               </div>
+
+              {Boolean(bgPreview || form.backgroundImage?.url) && (
+                <div className="space-y-2">
+                  <SectionTitle>Banner Display</SectionTitle>
+                  <p className="text-xs text-stone-500 font-sans -mt-1 mb-2.5">
+                    Choose which elements appear on the promotion banner.
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {DISPLAY_KEYS.map((key) => {
+                      const isEnabled = displayOptions[key];
+                      return (
+                        <div
+                          key={key}
+                          className="flex items-center justify-between p-3 rounded-xl border border-stone-200 bg-stone-50/50 hover:bg-stone-50 transition-colors"
+                        >
+                          <span className="text-xs font-medium text-stone-700">
+                            {DISPLAY_LABELS[key]}
+                          </span>
+                          <button
+                            type="button"
+                            role="switch"
+                            id={`toggle-display-${key}`}
+                            aria-checked={isEnabled}
+                            aria-label={DISPLAY_LABELS[key]}
+                            onClick={() =>
+                              setDisplayOptions((prev) => ({
+                                ...prev,
+                                [key]: !prev[key],
+                              }))
+                            }
+                            disabled={isSaving}
+                            className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#561C08]/30 ${
+                              isEnabled ? 'bg-[#561C08]' : 'bg-stone-300'
+                            }`}
+                          >
+                            <span
+                              aria-hidden="true"
+                              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                                isEnabled ? 'translate-x-5' : 'translate-x-0'
+                              }`}
+                            />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {errorFor('displayOptions') && (
+                    <p className="text-[11px] text-rose-600 mt-1">{errorFor('displayOptions')}</p>
+                  )}
+                </div>
+              )}
 
               <SectionTitle>Schedule</SectionTitle>
               <div className="grid grid-cols-2 gap-4">

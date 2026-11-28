@@ -43,6 +43,8 @@ export const clearAdminSession = () => {
   document.cookie = `${ADMIN_REFRESH_TOKEN_COOKIE}=; path=/; max-age=0; SameSite=Strict`;
 };
 
+export const clearAdminTokens = clearAdminSession;
+
 /** Pulls the access / refresh tokens out of a login or refresh response and stores them */
 export const storeAdminTokens = (body: any) => {
   const data = body?.data || body;
@@ -53,6 +55,8 @@ export const storeAdminTokens = (body: any) => {
   if (refreshToken) setAdminRefreshToken(refreshToken);
   return { accessToken: accessToken as string | undefined, refreshToken: refreshToken as string | undefined };
 };
+
+export const saveAdminTokens = storeAdminTokens;
 
 /** True when there is anything to restore a session from */
 export const hasAdminSession = () => !!(getAdminAccessToken() || getAdminRefreshToken());
@@ -184,9 +188,8 @@ export const loginAdmin = createAsyncThunk(
  */
 export const fetchAdminProfile = createAsyncThunk(
   'adminAuth/fetchProfile',
-  async (_, { rejectWithValue }) => {
-    // Nothing to restore from: don't send a request that can only fail
-    if (!hasAdminSession()) return rejectWithValue('Not signed in');
+  async (_arg: { background?: boolean } | undefined, { rejectWithValue }) => {
+    if (!getAdminAccessToken()) return rejectWithValue({ message: 'Not signed in', authFailure: true });
     try {
       const { default: adminApi } = await import('../../service/adminApi');
       const response = await adminApi.get('/auth/me');
@@ -195,7 +198,7 @@ export const fetchAdminProfile = createAsyncThunk(
 
       if (!adminRole) {
         clearAdminSession();
-        return rejectWithValue('Access denied: Active session is not an admin account.');
+        return rejectWithValue({ message: 'Access denied: Active session is not an admin account.', authFailure: true });
       }
 
       const effectivePermissions: AdminPermissions = permissions || {
@@ -208,13 +211,22 @@ export const fetchAdminProfile = createAsyncThunk(
         user: { ...(typeof user === 'object' && user ? user : {}), role: adminRole },
         permissions: effectivePermissions,
       };
-    } catch (error: any) {
-      return rejectWithValue(
-        getBackendErrorMessage(error, 'Session expired')
-      );
+    } catch (err: any) {
+      const status = err?.response?.status;
+      const code =
+        err?.response?.data?.error?.code ||
+        (typeof err?.response?.data?.error === 'string' ? err?.response?.data?.error : undefined) ||
+        err?.response?.data?.code;
+      const authFailure = status === 401 || code === 'ACCOUNT_INACTIVE' || code === 'FORBIDDEN';
+      return rejectWithValue({
+        message: getBackendErrorMessage(err, 'Session expired'),
+        authFailure,
+      });
     }
   }
 );
+
+export const fetchProfile = fetchAdminProfile;
 
 /**
  * Logout: POST /admin/auth/logout
@@ -281,8 +293,8 @@ const adminAuthSlice = createSlice({
 
     // Fetch Profile
     builder
-      .addCase(fetchAdminProfile.pending, (state) => {
-        state.status = 'loading';
+      .addCase(fetchAdminProfile.pending, (state, action) => {
+        if (!action.meta.arg?.background) state.status = 'loading'; // background → no spinner
       })
       .addCase(fetchAdminProfile.fulfilled, (state, action) => {
         state.status = 'succeeded';
@@ -291,13 +303,17 @@ const adminAuthSlice = createSlice({
         state.isAuthenticated = true;
         state.error = null;
       })
-      .addCase(fetchAdminProfile.rejected, (state) => {
-        state.status = 'failed';
-        state.admin = null;
-        state.permissions = null;
-        state.isAuthenticated = false;
-        // Tokens are cleared by adminApi only when the refresh itself is rejected, so a
-        // network blip or a 5xx on /auth/me doesn't throw away a still-valid session.
+      .addCase(fetchAdminProfile.rejected, (state, action) => {
+        const p = action.payload as { authFailure?: boolean; message?: string } | undefined;
+        if (p?.authFailure) { // real session end → sign out
+          state.status = 'failed';
+          state.admin = null;
+          state.permissions = null;
+          state.isAuthenticated = false;
+        } else { // network blip / 5xx → keep the session
+          state.status = state.admin ? 'succeeded' : 'failed';
+          state.error = p?.message ?? null;
+        }
       });
 
     // Logout

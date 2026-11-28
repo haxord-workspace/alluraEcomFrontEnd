@@ -13,7 +13,7 @@ const MANUAL_PAUSE_DURATION_MS = 300000; // 5 minutes (300,000 ms)
 const VIEW_ALL_PAUSE_DURATION_MS = 9000; // 9 seconds
 
 const PromotionsSkeleton: React.FC = () => (
-  <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6" aria-hidden="true">
+  <section className="max-w-7xl mx-auto px-6 lg:px-8 py-4 sm:py-6" aria-hidden="true">
     <div className="flex items-center justify-between gap-3 mb-6 sm:mb-8 border-b border-[#561C08]/15 pb-4 max-md:mb-3 max-md:pb-2.5">
       <div className="h-6 sm:h-8 w-48 bg-[#561C08]/10 rounded animate-pulse" />
     </div>
@@ -238,13 +238,10 @@ export const PromotionsSection: React.FC = () => {
   }
 
   const currentPromotion = visible[activeIndex] || visible[0];
-  // The image-background card breaks out to full viewport width on desktop; the ticket
-  // design never overflows its container, so only it needs `overflow-hidden` kept.
-  const currentHasBackgroundImage = Boolean(currentPromotion?.backgroundImage?.url?.trim());
 
   return (
     <section
-      className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6"
+      className="max-w-7xl mx-auto px-6 lg:px-8 py-4 sm:py-6"
       aria-label="Current Promotions and Offers"
       onKeyDown={handleKeyDown}
       tabIndex={0}
@@ -293,7 +290,7 @@ export const PromotionsSection: React.FC = () => {
       </div>
 
       {/* ─── SINGLE ACTIVE PROMOTION DISPLAY CONTAINER ─── */}
-      <div className={`w-full relative ${currentHasBackgroundImage ? 'overflow-visible' : 'overflow-hidden'}`}>
+      <div className="w-full relative overflow-hidden">
         <div className="w-full flex flex-col">
           <ActivePromotionBlock
             promotion={currentPromotion}
