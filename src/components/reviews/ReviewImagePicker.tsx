@@ -1,6 +1,7 @@
 import React, { useCallback, useId, useRef, useState } from 'react';
 import { Camera, X } from 'lucide-react';
 import { REVIEW_LIMITS } from '../../config/reviews';
+import { validateImageFile } from '../../utils/imageUpload';
 
 /**
  * Preview for a selected file. The object URL is created when the <img> mounts and
@@ -46,10 +47,14 @@ export const ReviewImagePicker: React.FC<ReviewImagePickerProps> = ({ files, onC
     const accepted: File[] = [];
     const problems: string[] = [];
     Array.from(list).forEach(file => {
-      if (!REVIEW_LIMITS.imageMimeTypes.includes(file.type)) {
-        problems.push(`${file.name}: only JPG, PNG or WebP images are allowed.`);
-      } else if (file.size > REVIEW_LIMITS.imageMaxBytes) {
-        problems.push(`${file.name}: larger than ${REVIEW_LIMITS.imageMaxBytes / MB} MB.`);
+      const validation = validateImageFile(file, {
+        maxMB: 5,
+        allowedTypes: ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'],
+        allowSvg: false,
+      });
+
+      if (!validation.valid) {
+        problems.push(`${file.name}: ${validation.error}`);
       } else if (accepted.length >= remaining) {
         problems.push(`${file.name}: you can add up to ${REVIEW_LIMITS.imagesMax} photos.`);
       } else {

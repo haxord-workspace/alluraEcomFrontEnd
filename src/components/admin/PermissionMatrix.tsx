@@ -820,7 +820,7 @@ export const PermissionMatrix: React.FC<PermissionMatrixProps> = ({
               type="button"
               onClick={() => void handleSaveChanges()}
               disabled={isSaving}
-              className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-brand-cream text-brand-brown hover:bg-white text-xs font-bold transition-all shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+              className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-[#F7E6C8] text-[#561C08] hover:bg-white hover:text-[#561C08] text-xs font-bold transition-all shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {isSaving ? (
                 <Loader2 size={13} className="animate-spin" />

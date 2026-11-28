@@ -19,6 +19,7 @@ import { SearchModal } from './components/modals/SearchModal';
 import { QuickViewModal } from './components/modals/QuickViewModal';
 import { ToastContainer } from './components/common/ToastContainer';
 import { ProtectedRoute } from './components/common/ProtectedRoute';
+import { IOSInstallPrompt } from './components/customer/IOSInstallPrompt';
 // import { AlluraAIAssistant } from './components/customer/AlluraAIAssistant';
 
 // Storefront Core Pages
@@ -79,6 +80,7 @@ import { AdminPaymentsPage } from './pages/admin/AdminPaymentsPage';
 // import { AdminShippingPage } from './pages/admin/AdminShippingPage';
 import { AdminCustomersPage } from './pages/admin/AdminCustomersPage';
 import { AdminCustomerDetailPage } from './pages/admin/AdminCustomerDetailPage';
+import { AdminCustomerEnquiriesPage } from './pages/admin/AdminCustomerEnquiriesPage';
 import { AdminCouponsPage } from './pages/admin/AdminCouponsPage';
 import { AdminPromotionsPage } from './pages/admin/AdminPromotionsPage';
 import { AdminBannersPage } from './pages/admin/AdminBannersPage';
@@ -97,6 +99,7 @@ import { AdminSupplierCreatePage } from './pages/admin/AdminSupplierCreatePage';
 import { AdminSupplierEditPage } from './pages/admin/AdminSupplierEditPage';
 import { AdminSupplierDetailPage } from './pages/admin/AdminSupplierDetailPage';
 import { AdminSupplierAnalyticsPage } from './pages/admin/AdminSupplierAnalyticsPage';
+import { HomepageExperiencePage } from './pages/admin/customerCRM/HomepageExperience/HomepageExperiencePage';
 
 const ScrollToTop: React.FC = () => {
   const { pathname } = useLocation();
@@ -157,6 +160,9 @@ export const AppContent: React.FC = () => {
             {/* <Route path="/admin/shipping" element={<AdminAccessGuard module="orders"><AdminShippingPage /></AdminAccessGuard>} /> */}
             <Route path="/admin/customers" element={<AdminAccessGuard module="customers"><AdminCustomersPage /></AdminAccessGuard>} />
             <Route path="/admin/customers/:id" element={<AdminAccessGuard module="customers"><AdminCustomerDetailPage /></AdminAccessGuard>} />
+            <Route path="/admin/enquiries" element={<AdminAccessGuard module="customer_crm"><AdminCustomerEnquiriesPage /></AdminAccessGuard>} />
+            <Route path="/admin/customer-enquiries" element={<Navigate to="/admin/enquiries" replace />} />
+            <Route path="/admin/homepage/experience" element={<AdminAccessGuard module="cms_store_content" action="view"><HomepageExperiencePage /></AdminAccessGuard>} />
             <Route path="/admin/marketing/coupons" element={<AdminAccessGuard module="coupons_banners"><AdminCouponsPage /></AdminAccessGuard>} />
             <Route path="/admin/marketing/promotions" element={<AdminAccessGuard module="coupons_banners"><AdminPromotionsPage /></AdminAccessGuard>} />
             <Route path="/admin/marketing/banners" element={<AdminAccessGuard module="coupons_banners"><AdminBannersPage /></AdminAccessGuard>} />
@@ -193,6 +199,7 @@ export const AppContent: React.FC = () => {
       {/* Top Bars (Hidden on minimal checkout) */}
       {!isCheckout && (
         <>
+          <IOSInstallPrompt />
           <AnnouncementBar />
           <DesktopHeader />
           <MobileHeader />
@@ -207,9 +214,11 @@ export const AppContent: React.FC = () => {
           {/* Core Pages */}
           <Route path="/" element={<HomePage />} />
           <Route path="/shop" element={<ShopPage />} />
+          <Route path="/category/:slug" element={<ShopPage />} />
           <Route path="/collections" element={<CollectionsPage />} />
           <Route path="/collections/:slug" element={<CollectionPage />} />
           <Route path="/product/:slug" element={<ProductDetailPage />} />
+          <Route path="/products/:slug" element={<ProductDetailPage />} />
           {/* LOOKBOOK DISABLED
           <Route path="/lookbook" element={<LookbookPage />} />
           */}

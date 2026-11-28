@@ -235,29 +235,39 @@ export const getAdminBanner = async (id: string): Promise<Banner> => {
  */
 export const createAdminBanner = async (payload: BannerPayload): Promise<BannerWithMessage> => {
   const placement = payload.placement || (payload.position === 'Editorial' ? 'HOME_PROMOTION' : 'HOME_HERO');
+  const desktopObj = payload.images?.desktop;
+  const mobileObj = payload.images?.mobile;
   const desktopUrl = normalizeBannerImageUrl(
-    payload.images?.desktop?.url ||
+    desktopObj?.url ||
     payload.desktopImage ||
     (typeof payload.image === 'object' ? payload.image?.url : '')
   );
   const mobileUrl = normalizeBannerImageUrl(
-    payload.images?.mobile?.url || payload.mobileImage || desktopUrl,
+    mobileObj?.url || payload.mobileImage || desktopUrl,
     desktopUrl
   );
+
+  const desktopImagePayload: any = {
+    url: desktopUrl,
+    alt: desktopObj?.alt || (payload.headline || payload.title || 'Banner Image').toString().trim(),
+  };
+  if (desktopObj?.width) desktopImagePayload.width = desktopObj.width;
+  if (desktopObj?.height) desktopImagePayload.height = desktopObj.height;
+
+  const mobileImagePayload: any = {
+    url: mobileUrl,
+    alt: mobileObj?.alt || (payload.headline || payload.title || 'Banner Mobile Image').toString().trim(),
+  };
+  if (mobileObj?.width) mobileImagePayload.width = mobileObj.width;
+  if (mobileObj?.height) mobileImagePayload.height = mobileObj.height;
 
   const body: any = {
     title: (payload.headline || payload.title || 'Boutique Banner').toString().trim(),
     placement,
     description: payload.description || payload.subtitle || '',
     images: {
-      desktop: {
-        url: desktopUrl,
-        alt: (payload.headline || payload.title || 'Banner Image').toString().trim(),
-      },
-      mobile: {
-        url: mobileUrl,
-        alt: (payload.headline || payload.title || 'Banner Mobile Image').toString().trim(),
-      },
+      desktop: desktopImagePayload,
+      ...(mobileUrl && mobileUrl !== desktopUrl || mobileObj ? { mobile: mobileImagePayload } : {}),
     },
     cta: {
       label: payload.ctaText || 'SHOP NOW',
@@ -314,18 +324,35 @@ export const updateAdminBanner = async (id: string, payload: Partial<BannerPaylo
     body.description = payload.description || payload.subtitle;
   }
   if (payload.desktopImage || payload.mobileImage || payload.images || payload.image) {
+    const desktopObj = payload.images?.desktop;
+    const mobileObj = payload.images?.mobile;
     const desktopUrl = normalizeBannerImageUrl(
-      payload.images?.desktop?.url ||
+      desktopObj?.url ||
       payload.desktopImage ||
       (typeof payload.image === 'object' ? payload.image?.url : '')
     );
     const mobileUrl = normalizeBannerImageUrl(
-      payload.images?.mobile?.url || payload.mobileImage || desktopUrl,
+      mobileObj?.url || payload.mobileImage || desktopUrl,
       desktopUrl
     );
+
+    const desktopImagePayload: any = {
+      url: desktopUrl,
+      alt: desktopObj?.alt || body.title || 'Banner',
+    };
+    if (desktopObj?.width) desktopImagePayload.width = desktopObj.width;
+    if (desktopObj?.height) desktopImagePayload.height = desktopObj.height;
+
+    const mobileImagePayload: any = {
+      url: mobileUrl,
+      alt: mobileObj?.alt || body.title || 'Banner',
+    };
+    if (mobileObj?.width) mobileImagePayload.width = mobileObj.width;
+    if (mobileObj?.height) mobileImagePayload.height = mobileObj.height;
+
     body.images = {
-      desktop: { url: desktopUrl, alt: body.title || 'Banner' },
-      mobile: { url: mobileUrl, alt: body.title || 'Banner' },
+      desktop: desktopImagePayload,
+      ...(mobileUrl && mobileUrl !== desktopUrl || mobileObj ? { mobile: mobileImagePayload } : {}),
     };
   }
   if (payload.ctaText !== undefined || payload.targetUrl !== undefined || payload.cta !== undefined) {

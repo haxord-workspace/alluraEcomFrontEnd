@@ -36,8 +36,8 @@ export const MobileMenuDrawer: React.FC = () => {
             <div className="space-y-1">
               {[
                 { label: 'All Products', to: '/shop' },
-                { label: 'New Arrivals', to: '/shop?filter=new' },
-                { label: 'Best Sellers', to: '/shop?filter=bestseller' },
+                { label: 'New Arrivals', to: '/shop?sort=new' },
+                { label: 'Best Sellers', to: '/shop?sort=bestseller' },
               ].map(item => (
                 <Link
                   key={item.label}

@@ -37,7 +37,8 @@ try {
         const title = payload?.data?.title || 'Allura Boutique';
         const options = {
           body: payload?.data?.body || '',
-          icon: payload?.data?.icon || '/favicon.svg',
+          icon: payload?.data?.icon || '/allura-logo.png',
+          badge: '/allura-logo.png',
           image: payload?.data?.image || payload?.data?.imageUrl,
           data: payload?.data || {},
         };
@@ -58,7 +59,12 @@ self.addEventListener('notificationclick', (event) => {
     event.notification?.data?.url ||
     '/';
 
-  const targetUrl = new URL(rawUrl, self.location.origin).href;
+  let targetUrl = self.location.origin;
+  try {
+    targetUrl = new URL(rawUrl, self.location.origin).href;
+  } catch {
+    targetUrl = self.location.origin;
+  }
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {

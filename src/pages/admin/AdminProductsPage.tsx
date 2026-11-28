@@ -37,6 +37,7 @@ import {
 import type { VariantPayload } from '../../service/adminVariants';
 import { ProductVariantsEditor, buildVariantSku, normalizeVariantImages } from '../../components/admin/ProductVariantsEditor';
 import { ProductImagesEditor } from '../../components/admin/ProductImagesEditor';
+import { deleteImage } from '../../service/uploadService';
 import type { VariantRow } from '../../components/admin/ProductVariantsEditor';
 import { useShop } from '../../context/ShopContext';
 import { getDashboardProducts, type ProductAnalyticsResponse } from '../../service/adminDashboard';
@@ -206,6 +207,7 @@ export const AdminProductsPage: React.FC = () => {
   const [originalSupplier, setOriginalSupplier] = useState<ProductSupplierRef | null>(null);
   const [supplierError, setSupplierError] = useState<string | null>(null);
   const [supplierReloadToken, setSupplierReloadToken] = useState(0);
+  const [pendingDeletePublicIds, setPendingDeletePublicIds] = useState<string[]>([]);
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
   // Variant prices per product, to flag products whose variants are priced differently
@@ -375,6 +377,7 @@ export const AdminProductsPage: React.FC = () => {
     setChosenSupplier(null);
     setOriginalSupplier(null);
     setSupplierError(null);
+    setPendingDeletePublicIds([]);
     setIsModalOpen(true);
     initialSnapshotRef.current = JSON.stringify({ formData: EMPTY_FORM, supplierId: '' });
   };
@@ -405,6 +408,7 @@ export const AdminProductsPage: React.FC = () => {
     setChosenSupplier(currentSupplier);
     setOriginalSupplier(currentSupplier);
     setSupplierError(null);
+    setPendingDeletePublicIds([]);
     setIsModalOpen(true);
 
     // Load this product's existing colour / size variants
@@ -563,6 +567,12 @@ export const AdminProductsPage: React.FC = () => {
           'error'
         );
         return;
+      }
+
+      // Trigger deferred deletion of removed R2 images now that product saved successfully
+      if (pendingDeletePublicIds.length > 0) {
+        pendingDeletePublicIds.forEach(id => void deleteImage(id));
+        setPendingDeletePublicIds([]);
       }
 
       showToast(saved._message || (editingId ? 'Product updated successfully' : 'Product created successfully'), 'success');
@@ -1021,187 +1031,189 @@ export const AdminProductsPage: React.FC = () => {
         panelClassName="relative bg-white border border-stone-200 rounded-2xl w-full max-w-2xl shadow-2xl h-max my-auto max-h-[90vh] flex flex-col focus:outline-none"
       >
         <div className="overflow-y-auto p-6 space-y-5">
-            <h3 className="font-serif text-xl text-stone-900 pr-8">
-              {editingId ? 'Edit Product' : 'Add New Product'}
-            </h3>
+          <h3 className="font-serif text-xl text-stone-900 pr-8">
+            {editingId ? 'Edit Product' : 'Add New Product'}
+          </h3>
 
-            {formError && (
-              <AdminErrorBanner
-                title="Product Save Failed"
-                error={formError}
-                onDismiss={() => setFormError(null)}
+          {formError && (
+            <AdminErrorBanner
+              title="Product Save Failed"
+              error={formError}
+              onDismiss={() => setFormError(null)}
+            />
+          )}
+
+          <form onSubmit={handleSave} className="space-y-4 text-xs font-sans">
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[10px] uppercase font-bold text-stone-500 mb-1">Product Name *</label>
+                <input
+                  required
+                  value={formData.name}
+                  onChange={e => setFormData({ ...formData, name: e.target.value })}
+                  className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-stone-800"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] uppercase font-bold text-stone-500 mb-1">SKU *</label>
+                <input
+                  required
+                  value={formData.sku}
+                  onChange={e => setFormData({ ...formData, sku: e.target.value })}
+                  className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl font-mono focus:outline-none focus:border-stone-800"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[10px] uppercase font-bold text-stone-500 mb-1">Short Description</label>
+              <input
+                value={formData.shortDescription}
+                onChange={e => setFormData({ ...formData, shortDescription: e.target.value })}
+                className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-stone-800"
               />
-            )}
+            </div>
 
-            <form onSubmit={handleSave} className="space-y-4 text-xs font-sans">
+            <div>
+              <label className="block text-[10px] uppercase font-bold text-stone-500 mb-1">Description</label>
+              <textarea
+                rows={3}
+                value={formData.description}
+                onChange={e => setFormData({ ...formData, description: e.target.value })}
+                className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-stone-800 resize-none"
+              />
+            </div>
 
-              <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[10px] uppercase font-bold text-stone-500 mb-1">Category</label>
+                <CategorySelect
+                  value={formData.categoryId}
+                  onChange={categoryId => setFormData({ ...formData, categoryId })}
+                  placeholder="Select a category"
+                />
+              </div>
+              <div>
+                <label htmlFor="product-supplier" className="block text-[10px] uppercase font-bold text-stone-500 mb-1">
+                  Supplier <span className="normal-case font-normal text-stone-400">(optional)</span>
+                </label>
+                <SupplierSelect
+                  id="product-supplier"
+                  value={supplierId}
+                  currentSupplier={originalSupplier}
+                  error={supplierError ?? undefined}
+                  reloadToken={supplierReloadToken}
+                  onChange={(id, supplier) => {
+                    setSupplierId(id);
+                    setChosenSupplier(supplier ?? null);
+                    setSupplierError(null);
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Pricing */}
+            <div>
+              <label className="block text-[10px] uppercase font-bold text-stone-500 mb-2">Pricing</label>
+              <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-[10px] uppercase font-bold text-stone-500 mb-1">Product Name *</label>
+                  <label className="block text-[10px] text-stone-400 mb-1">MRP *</label>
                   <input
+                    type="number"
                     required
-                    value={formData.name}
-                    onChange={e => setFormData({ ...formData, name: e.target.value })}
-                    className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-stone-800"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] uppercase font-bold text-stone-500 mb-1">SKU *</label>
-                  <input
-                    required
-                    value={formData.sku}
-                    onChange={e => setFormData({ ...formData, sku: e.target.value })}
+                    min={0}
+                    step={1}
+                    value={formData.pricing.mrp === 0 ? '' : formData.pricing.mrp}
+                    onChange={e => setFormData({
+                      ...formData,
+                      pricing: { ...formData.pricing, mrp: e.target.value === '' ? 0 : parseFloat(e.target.value) || 0 },
+                    })}
                     className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl font-mono focus:outline-none focus:border-stone-800"
                   />
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-[10px] uppercase font-bold text-stone-500 mb-1">Short Description</label>
-                <input
-                  value={formData.shortDescription}
-                  onChange={e => setFormData({ ...formData, shortDescription: e.target.value })}
-                  className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-stone-800"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[10px] uppercase font-bold text-stone-500 mb-1">Description</label>
-                <textarea
-                  rows={3}
-                  value={formData.description}
-                  onChange={e => setFormData({ ...formData, description: e.target.value })}
-                  className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-stone-800 resize-none"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[10px] uppercase font-bold text-stone-500 mb-1">Category</label>
-                  <CategorySelect
-                    value={formData.categoryId}
-                    onChange={categoryId => setFormData({ ...formData, categoryId })}
-                    placeholder="Select a category"
+                  <label className="block text-[10px] text-stone-400 mb-1">Selling Price *</label>
+                  <input
+                    type="number"
+                    required
+                    min={0}
+                    step={1}
+                    value={formData.pricing.sellingPrice === 0 ? '' : formData.pricing.sellingPrice}
+                    onChange={e => setFormData({
+                      ...formData,
+                      pricing: { ...formData.pricing, sellingPrice: e.target.value === '' ? 0 : parseFloat(e.target.value) || 0 },
+                    })}
+                    className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl font-mono focus:outline-none focus:border-stone-800"
                   />
                 </div>
                 <div>
-                  <label htmlFor="product-supplier" className="block text-[10px] uppercase font-bold text-stone-500 mb-1">
-                    Supplier <span className="normal-case font-normal text-stone-400">(optional)</span>
-                  </label>
-                  <SupplierSelect
-                    id="product-supplier"
-                    value={supplierId}
-                    currentSupplier={originalSupplier}
-                    error={supplierError ?? undefined}
-                    reloadToken={supplierReloadToken}
-                    onChange={(id, supplier) => {
-                      setSupplierId(id);
-                      setChosenSupplier(supplier ?? null);
-                      setSupplierError(null);
-                    }}
-                  />
+                  <label className="block text-[10px] text-stone-400 mb-1">Currency</label>
+                  <select
+                    value={formData.pricing.currency}
+                    onChange={e => setFormData({
+                      ...formData,
+                      pricing: { ...formData.pricing, currency: e.target.value },
+                    })}
+                    className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-stone-800"
+                  >
+                    <option value="INR">INR (₹)</option>
+                    {/* <option value="USD">USD ($)</option>
+                      <option value="AED">AED</option> */}
+                  </select>
                 </div>
               </div>
+            </div>
 
-              {/* Pricing */}
-              <div>
-                <label className="block text-[10px] uppercase font-bold text-stone-500 mb-2">Pricing</label>
-                <div className="grid grid-cols-3 gap-3">
-                  <div>
-                    <label className="block text-[10px] text-stone-400 mb-1">MRP *</label>
-                    <input
-                      type="number"
-                      required
-                      min={0}
-                      step={1}
-                      value={formData.pricing.mrp === 0 ? '' : formData.pricing.mrp}
-                      onChange={e => setFormData({
-                        ...formData,
-                        pricing: { ...formData.pricing, mrp: e.target.value === '' ? 0 : parseFloat(e.target.value) || 0 },
-                      })}
-                      className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl font-mono focus:outline-none focus:border-stone-800"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] text-stone-400 mb-1">Selling Price *</label>
-                    <input
-                      type="number"
-                      required
-                      min={0}
-                      step={1}
-                      value={formData.pricing.sellingPrice === 0 ? '' : formData.pricing.sellingPrice}
-                      onChange={e => setFormData({
-                        ...formData,
-                        pricing: { ...formData.pricing, sellingPrice: e.target.value === '' ? 0 : parseFloat(e.target.value) || 0 },
-                      })}
-                      className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl font-mono focus:outline-none focus:border-stone-800"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] text-stone-400 mb-1">Currency</label>
-                    <select
-                      value={formData.pricing.currency}
-                      onChange={e => setFormData({
-                        ...formData,
-                        pricing: { ...formData.pricing, currency: e.target.value },
-                      })}
-                      className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-stone-800"
-                    >
-                      <option value="INR">INR (₹)</option>
-                      <option value="USD">USD ($)</option>
-                      <option value="AED">AED</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
+            {/* Images: main + gallery */}
+            <ProductImagesEditor
+              images={formData.images || []}
+              productName={formData.name}
+              onChange={images => setFormData(prev => ({ ...prev, images }))}
+              onRemoveExisting={publicId => setPendingDeletePublicIds(prev => [...prev, publicId])}
+            />
 
-              {/* Images: main + gallery */}
-              <ProductImagesEditor
-                images={formData.images || []}
-                onChange={images => setFormData(prev => ({ ...prev, images }))}
-              />
+            {/* Colours & sizes */}
+            <ProductVariantsEditor
+              variants={formData.variants}
+              onChange={variants => setFormData(prev => ({ ...prev, variants }))}
+              productSku={formData.sku}
+              isLoading={isLoadingVariants}
+              productPrice={formData.pricing.sellingPrice}
+              productImages={formData.images || []}
+            />
 
-              {/* Colours & sizes */}
-              <ProductVariantsEditor
-                variants={formData.variants}
-                onChange={variants => setFormData(prev => ({ ...prev, variants }))}
-                productSku={formData.sku}
-                isLoading={isLoadingVariants}
-                productPrice={formData.pricing.sellingPrice}
-                productImages={formData.images || []}
-              />
+            <div>
+              <label className="block text-[10px] uppercase font-bold text-stone-500 mb-1">Status</label>
+              <select
+                value={formData.status}
+                onChange={e => setFormData({ ...formData, status: e.target.value as AdminProduct['status'] })}
+                className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-stone-800"
+              >
+                <option value="ACTIVE">Active</option>
+                <option value="DRAFT">Draft</option>
+                <option value="ARCHIVED">Archived</option>
+              </select>
+            </div>
 
-              <div>
-                <label className="block text-[10px] uppercase font-bold text-stone-500 mb-1">Status</label>
-                <select
-                  value={formData.status}
-                  onChange={e => setFormData({ ...formData, status: e.target.value as AdminProduct['status'] })}
-                  className="w-full p-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-stone-800"
-                >
-                  <option value="ACTIVE">Active</option>
-                  <option value="DRAFT">Draft</option>
-                  <option value="ARCHIVED">Archived</option>
-                </select>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2 border-t border-stone-100">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 border border-stone-200 rounded-xl text-stone-500 hover:bg-stone-50 text-xs font-bold"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSaving}
-                  className="px-5 py-2 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-xl text-xs font-bold uppercase tracking-wider disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm"
-                >
-                  {isSaving && <Loader2 size={13} className="animate-spin" />}
-                  <span>{isSaving ? saveProgress || 'Saving...' : 'Save Product'}</span>
-                </button>
-              </div>
-            </form>
+            <div className="flex justify-end gap-2 pt-2 border-t border-stone-100">
+              <button
+                type="button"
+                onClick={() => setIsModalOpen(false)}
+                className="px-4 py-2 border border-stone-200 rounded-xl text-stone-500 hover:bg-stone-50 text-xs font-bold"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isSaving}
+                className="px-5 py-2 bg-[#561C08] hover:bg-[#561C08]/90 text-white rounded-xl text-xs font-bold uppercase tracking-wider disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm"
+              >
+                {isSaving && <Loader2 size={13} className="animate-spin" />}
+                <span>{isSaving ? saveProgress || 'Saving...' : 'Save Product'}</span>
+              </button>
+            </div>
+          </form>
         </div>
       </Modal>
 

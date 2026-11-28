@@ -20,8 +20,8 @@ export const DesktopHeader: React.FC = () => {
       hasDropdown: true,
       items: [
         { label: 'All Products', to: '/shop' },
-        { label: 'New Arrivals', to: '/shop?filter=new' },
-        { label: 'Best Sellers', to: '/shop?filter=bestseller' },
+        { label: 'New Arrivals', to: '/shop?sort=new' },
+        { label: 'Best Sellers', to: '/shop?sort=bestseller' },
       ],
     },
     {
@@ -54,17 +54,15 @@ export const DesktopHeader: React.FC = () => {
               >
                 <Link
                   to={link.to}
-                  className={`text-[12px] tracking-[0.2em] font-heading font-medium flex items-center gap-1.5 transition-colors py-1 ${
-                    isActive ? 'text-[#561C08] font-bold' : 'text-[#000000] hover:text-[#561C08]'
-                  }`}
+                  className={`text-[12px] tracking-[0.2em] font-heading font-medium flex items-center gap-1.5 transition-colors py-1 ${isActive ? 'text-[#561C08] font-bold' : 'text-[#000000] hover:text-[#561C08]'
+                    }`}
                 >
                   <span>{link.label}</span>
                   {link.hasDropdown && (
                     <ChevronDown
                       size={12}
-                      className={`transition-transform duration-200 opacity-60 translate-y-[-0.5px] ${
-                        activeDropdown === link.label ? 'rotate-180 text-[#561C08]' : ''
-                      }`}
+                      className={`transition-transform duration-200 opacity-60 translate-y-[-0.5px] ${activeDropdown === link.label ? 'rotate-180 text-[#561C08]' : ''
+                        }`}
                     />
                   )}
                 </Link>

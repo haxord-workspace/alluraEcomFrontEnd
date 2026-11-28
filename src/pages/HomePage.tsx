@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import {
   ArrowRight,
   ChevronLeft,
@@ -9,10 +9,6 @@ import {
   ShieldCheck,
   RefreshCw,
   MessageSquare,
-  Play,
-  Diamond,
-  Feather,
-  Heart
 } from 'lucide-react';
 import { ProductCard } from '../components/ui/ProductCard';
 import { ProductCardSkeleton } from '../components/ui/ProductCardSkeleton';
@@ -29,6 +25,11 @@ import { getPublicBanners } from '../service/adminBanners';
 import type { Banner } from '../types';
 import { useCategoryCarousel } from '../hooks/useCategoryCarousel';
 import { cleanProfileValue, formatPhoneDisplay } from '../utils/storeProfile';
+import { PromotionsSection } from '../components/home/PromotionsSection';
+import { PromotionsErrorBoundary } from '../components/home/PromotionsErrorBoundary';
+import { AlluraExperienceSection } from '../components/home/AlluraExperienceSection';
+import { AlluraExperienceSkeleton } from '../components/home/AlluraExperienceSkeleton';
+import { useHomepageExperience } from '../hooks/useHomepageExperience';
 
 /** Trust strip items; shipping threshold & WhatsApp number come from GET /store/settings via ShopContext */
 const TrustFeatureItems: React.FC = () => {
@@ -51,25 +52,25 @@ const TrustFeatureItems: React.FC = () => {
   ];
 
   return (
-  <>
-    {features.map(({ icon: Icon, title, text }) => (
-      <div key={title} className="flex flex-col items-center space-y-2">
-        <div className="w-11 h-11 rounded-full bg-white flex items-center justify-center text-[#561C08] shadow-xs border border-[#561C08]/15">
-          <Icon size={20} />
+    <>
+      {features.map(({ icon: Icon, title, text }) => (
+        <div key={title} className="flex flex-col items-center space-y-2">
+          <div className="w-11 h-11 rounded-full bg-white flex items-center justify-center text-[#561C08] shadow-xs border border-[#561C08]/15">
+            <Icon size={20} />
+          </div>
+          <h4 className="font-heading text-sm font-bold tracking-wider uppercase text-[#000000]">
+            {title}
+          </h4>
+          <p className="text-xs text-[#561C08] font-body font-medium">{text}</p>
         </div>
-        <h4 className="font-heading text-sm font-bold tracking-wider uppercase text-[#000000]">
-          {title}
-        </h4>
-        <p className="text-xs text-[#561C08] font-body font-medium">{text}</p>
-      </div>
-    ))}
-  </>
+      ))}
+    </>
   );
 };
 
 export const HomePage: React.FC = () => {
-  const navigate = useNavigate();
   const { products, categories, isLoadingProducts } = useShop();
+  const { data: experienceData, isLoading: isLoadingExperience } = useHomepageExperience();
   const { address: storeAddress } = useStoreAddress();
   const [currentSlide, setCurrentSlide] = useState(0);
   const [openFaqId, setOpenFaqId] = useState<string | null>(null);
@@ -192,7 +193,7 @@ export const HomePage: React.FC = () => {
       subtitle: 'Fresh modest styles, handpicked for your celebratory wardrobe.',
       image: '/images/editorial-banners/new-arrivals.jpeg',
       ctaText: 'SHOP NOW',
-      targetUrl: '/shop?filter=new',
+      targetUrl: '/shop?sort=new',
     },
     {
       id: 'curated-allura-collection',
@@ -437,8 +438,8 @@ export const HomePage: React.FC = () => {
                     src={slide.image}
                     alt={slide.headingLines.join(' ')}
                     className={`w-full h-full object-cover transition-transform duration-[8500ms] ease-out z-0 ${hasCustomMobileImage
-                        ? 'object-[center_top]'
-                        : 'object-[82%_20%] sm:object-[center_top]'
+                      ? 'object-[center_top]'
+                      : 'object-[82%_20%] sm:object-[center_top]'
                       }`}
                     style={{
                       transform: isActive ? 'scale(1.04)' : 'scale(1)',
@@ -650,6 +651,11 @@ export const HomePage: React.FC = () => {
         </section>
       ) : null}
 
+      {/* 2.5 CURRENT OFFERS (storefront promotions) — isolated: never affects the rest of the home page */}
+      <PromotionsErrorBoundary>
+        <PromotionsSection />
+      </PromotionsErrorBoundary>
+
       {/* 3. SIGNATURE COLLECTIONS / EDITORIAL SHOWCASE (Two dynamic tiles with independent <> navigation) */}
       <section className="max-w-7xl mx-auto px-6 lg:px-8">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8 max-md:gap-4">
@@ -856,100 +862,20 @@ export const HomePage: React.FC = () => {
         </div>
       </section>
 
-      {/* 6. THE ALLURA EXPERIENCE & BRAND STORY */}
-      <section className="max-w-7xl mx-auto px-6 lg:px-8">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center max-md:gap-4">
-          <div className="lg:col-span-5 relative aspect-[4/5] rounded-2xl overflow-hidden shadow-md group border border-[#561C08]/15">
-            <img
-              src="/images/boutique-experience/boutique-store.jpeg"
-              alt="The Allura Boutique Experience"
-              className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-700"
-            />
-            <div className="absolute inset-0 bg-[#561C08]/20 flex items-center justify-center">
-              <button
-                onClick={() => navigate('/about')}
-                className="w-16 h-16 rounded-full bg-white/90 backdrop-blur-md text-[#561C08] flex items-center justify-center shadow-md hover:scale-110 transition-transform hover:bg-[#561C08] hover:text-white"
-                aria-label="Play boutique film"
-              >
-                <Play size={22} className="ml-1 fill-current" />
-              </button>
-            </div>
-          </div>
-
-          {/* Mobile only — trust strip shown under the image card */}
-          <div className="md:hidden grid grid-cols-2 gap-x-4 gap-y-5 text-center rounded-2xl border border-[#561C08]/15 bg-[#F7E6C8] py-5 px-4">
+      {/* 6. THE ALLURA EXPERIENCE & BRAND STORY (DYNAMIC) */}
+      {isLoadingExperience ? (
+        <AlluraExperienceSkeleton mobileTrustStrip={<TrustFeatureItems />} />
+      ) : experienceData ? (
+        <AlluraExperienceSection data={experienceData} mobileTrustStrip={<TrustFeatureItems />} />
+      ) : (
+        /* If section is 404, unpublished, or failed, hide the entire section.
+           On mobile, preserve the TrustFeatureItems so mobile shoppers still see it. */
+        <div className="md:hidden max-w-7xl mx-auto px-6">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-5 text-center rounded-2xl border border-[#561C08]/15 bg-[#F7E6C8] py-5 px-4">
             <TrustFeatureItems />
           </div>
-
-          <div className="lg:col-span-4 space-y-5 max-md:space-y-3 max-md:pt-2">
-            <span className="text-[11px] font-heading font-bold tracking-[0.25em] uppercase text-[#561C08]">
-              WEAR YOUR STORY WITH ALLURA
-            </span>
-
-            <h2 className="font-heading text-3xl sm:text-4xl text-[#000000] font-bold leading-tight uppercase max-md:text-base max-md:font-semibold max-md:tracking-[0.06em] max-md:leading-[1.2]">
-              THE ALLURA EXPERIENCE
-            </h2>
-
-            <p className="text-xs sm:text-sm text-[#561C08] font-body leading-relaxed font-normal">
-              A curated destination for modern women who appreciate modesty, timeless elegance, quality and individuality. From everyday essentials to statement pieces, Allura brings you thoughtfully selected fashion for every celebration.
-            </p>
-
-            <div className="pt-2">
-              <Link
-                to="/about"
-                className="inline-flex items-center gap-2 bg-[#561C08] hover:bg-[#3D1406] text-white text-xs font-heading font-bold tracking-[0.25em] uppercase py-3.5 px-6 rounded-xl transition-all duration-300 shadow-md"
-              >
-                <span>OUR STORY</span>
-                <ArrowRight size={14} />
-              </Link>
-            </div>
-          </div>
-
-          <div className="lg:col-span-3 space-y-6 lg:border-l lg:border-[#561C08]/15 lg:pl-8 max-md:space-y-4 max-md:pt-1">
-            <div className="flex items-start gap-4">
-              <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-[#561C08] flex-shrink-0 border border-[#561C08]/15 shadow-xs">
-                <Diamond size={18} />
-              </div>
-              <div>
-                <h4 className="font-heading text-sm font-bold tracking-wider uppercase text-[#000000]">
-                  WARM LUXURY
-                </h4>
-                <p className="text-xs text-[#561C08] font-body mt-0.5 font-medium">
-                  Handcrafted styles for every you
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-4">
-              <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-[#561C08] flex-shrink-0 border border-[#561C08]/15 shadow-xs">
-                <Feather size={18} />
-              </div>
-              <div>
-                <h4 className="font-heading text-sm font-bold tracking-wider uppercase text-[#000000]">
-                  PREMIUM FABRICS
-                </h4>
-                <p className="text-xs text-[#561C08] font-body mt-0.5 font-medium">
-                  Pure georgette, silk & organza
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-4">
-              <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-[#561C08] flex-shrink-0 border border-[#561C08]/15 shadow-xs">
-                <Heart size={18} />
-              </div>
-              <div>
-                <h4 className="font-heading text-sm font-bold tracking-wider uppercase text-[#000000]">
-                  MADE FOR YOUR MOMENTS
-                </h4>
-                <p className="text-xs text-[#561C08] font-body mt-0.5 font-medium">
-                  Modest fashion that feels like you
-                </p>
-              </div>
-            </div>
-          </div>
         </div>
-      </section>
+      )}
 
       {/* 6.5. FREQUENTLY ASKED QUESTIONS (FAQ DROPDOWN ACCORDION) */}
       <section className="max-w-4xl mx-auto px-5 sm:px-6 lg:px-8 space-y-8 pt-4 sm:pt-8 max-md:space-y-4 max-md:pt-0">
@@ -972,8 +898,8 @@ export const HomePage: React.FC = () => {
               <div
                 key={faq.id}
                 className={`bg-white/95 rounded-2xl border transition-all duration-300 overflow-hidden ${isOpen
-                    ? 'border-[#561C08]/40 shadow-md ring-1 ring-[#561C08]/20'
-                    : 'border-[#561C08]/15 shadow-xs hover:border-[#561C08]/30'
+                  ? 'border-[#561C08]/40 shadow-md ring-1 ring-[#561C08]/20'
+                  : 'border-[#561C08]/15 shadow-xs hover:border-[#561C08]/30'
                   }`}
               >
                 <button

@@ -17,7 +17,8 @@ import {
   Palette,
 } from 'lucide-react';
 import { SIZE_PRESETS, colorHex, encodeColor, decodeColor } from '../../data/colorPalette';
-import { fileToResizedDataUrl } from './ProductImagesEditor';
+import { validateImageFile, compressImage, createThumbnail } from '../../utils/imageUpload';
+import { uploadImages } from '../../service/uploadService';
 import { ColorPickerPopover, COLOR_PICKER_PORTAL_ATTR } from './ColorPicker';
 import type { PickedColor } from './ColorPicker';
 
@@ -382,14 +383,47 @@ export const ProductVariantsEditor: React.FC<ProductVariantsEditorProps> = ({
 
   const addBlankRow = () => onChange([...variants, { sku: '', color: '', size: '', images: [] }]);
 
-  // Process files with canvas resizing
-  const processFiles = async (fileList: FileList | File[]): Promise<{ url: string; isPrimary?: boolean }[]> => {
-    const files = Array.from(fileList).filter(f => f.type.startsWith('image/'));
-    if (!files.length) return [];
+  // Process files with compression, thumbnail and upload to R2
+  const processFiles = async (fileList: FileList | File[]): Promise<{ url: string; thumbnailUrl?: string; publicId?: string; isPrimary?: boolean; position?: number }[]> => {
+    const rawFiles = Array.from(fileList).filter(f => f.type.startsWith('image/'));
+    if (!rawFiles.length) return [];
+
+    // Validate
+    for (const f of rawFiles) {
+      const val = validateImageFile(f, { maxMB: 10, allowSvg: false });
+      if (!val.valid) {
+        alert(`${f.name}: ${val.error}`);
+        return [];
+      }
+    }
+
     setIsProcessing(true);
     try {
-      const urls = await Promise.all(files.map(fileToResizedDataUrl));
-      return urls.map((url, i) => ({ url, isPrimary: i === 0 }));
+      const processedPairs: { mainFile: File; thumbFile: File }[] = [];
+      for (const f of rawFiles) {
+        const compressed = await compressImage(f, { maxSide: 1600, quality: 0.8, outputType: 'image/webp' });
+        const thumb = await createThumbnail(f, 400);
+        processedPairs.push({ mainFile: compressed, thumbFile: thumb });
+      }
+
+      const mainFiles = processedPairs.map(p => p.mainFile);
+      const thumbFiles = processedPairs.map(p => p.thumbFile);
+
+      const [mainUploads, thumbUploads] = await Promise.all([
+        uploadImages(mainFiles, 'variants'),
+        uploadImages(thumbFiles, 'variants'),
+      ]);
+
+      return mainUploads.map((res, i) => ({
+        url: res.secureUrl || res.url,
+        thumbnailUrl: thumbUploads[i]?.secureUrl || thumbUploads[i]?.url,
+        publicId: res.publicId,
+        position: i + 1,
+        isPrimary: i === 0,
+      }));
+    } catch (err: any) {
+      alert(err.message || 'Failed to upload variant images.');
+      return [];
     } finally {
       setIsProcessing(false);
     }

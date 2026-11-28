@@ -208,8 +208,8 @@ export const AdminSettingsPage: React.FC = () => {
   const isSelfUser = (u: AdminStaffMember) =>
     Boolean(
       currentAdmin &&
-        (u.id === currentAdmin.id ||
-          (currentAdmin.email && u.email.toLowerCase() === currentAdmin.email.toLowerCase()))
+      (u.id === currentAdmin.id ||
+        (currentAdmin.email && u.email.toLowerCase() === currentAdmin.email.toLowerCase()))
     );
 
   // STAFF-ACTIONS-DISABLED START
@@ -859,7 +859,7 @@ export const AdminSettingsPage: React.FC = () => {
                   <BoutiqueFieldError field="email" />
                 </div>
 
-                <div>
+                {/* <div>
                   <label className="block text-xs font-semibold uppercase tracking-wider text-primary-700 mb-1.5">
                     GSTIN / Tax Identification
                   </label>
@@ -875,7 +875,7 @@ export const AdminSettingsPage: React.FC = () => {
                     aria-describedby={boutiqueErrors.gstin ? boutiqueErrorId('gstin') : undefined}
                   />
                   <BoutiqueFieldError field="gstin" />
-                </div>
+                </div> */}
 
                 <div>
                   <label className="block text-xs font-semibold uppercase tracking-wider text-primary-700 mb-1.5">

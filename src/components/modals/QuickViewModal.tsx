@@ -99,7 +99,7 @@ export const QuickViewModal: React.FC = () => {
     product.images.primary,
     product.images.secondary,
     ...(product.images.gallery || []),
-  ].filter((v, i, a) => a.indexOf(v) === i);
+  ].filter((v, i, a) => Boolean(v) && a.indexOf(v) === i);
 
   const handleAddToCart = async () => {
     const ok = await bag.add(product, currentSize, currentColor);
@@ -122,66 +122,65 @@ export const QuickViewModal: React.FC = () => {
       panelClassName="relative w-full max-w-3xl bg-allura-card rounded-xl border border-allura-border shadow-luxury overflow-hidden max-h-[90vh] flex flex-col md:flex-row animate-slide-up focus:outline-none"
       closeButtonClassName="absolute top-3 right-3 z-20 w-10 h-10 flex items-center justify-center rounded-full bg-allura-card/80 backdrop-blur-md text-allura-text hover:bg-allura-bgSecondary transition-colors"
     >
-        {/* Left: Product Images */}
-        <div className="md:w-1/2 bg-allura-bgSecondary flex flex-col relative">
-          <div className="aspect-[4/5] w-full overflow-hidden">
-            <img
-              src={allImages[activeImageIdx] || product.images.primary}
-              alt={product.name}
-              className="w-full h-full object-cover object-top transition-all duration-500"
-            />
-          </div>
-
-          {/* Thumbnail row if multiple */}
-          {allImages.length > 1 && (
-            <div className="flex gap-2 p-3 overflow-x-auto bg-allura-card border-t border-allura-border/60">
-              {allImages.map((img, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => setActiveImageIdx(idx)}
-                  className={`w-12 h-14 rounded overflow-hidden flex-shrink-0 border-2 transition-all ${
-                    activeImageIdx === idx ? 'border-allura-gold' : 'border-transparent opacity-70 hover:opacity-100'
-                  }`}
-                >
-                  <img src={img} alt="Thumbnail" className="w-full h-full object-cover object-top" />
-                </button>
-              ))}
-            </div>
-          )}
+      {/* Left: Product Images */}
+      <div className="md:w-1/2 bg-allura-bgSecondary flex flex-col relative">
+        <div className="aspect-[4/5] w-full overflow-hidden">
+          <img
+            src={allImages[activeImageIdx] || product.images.primary}
+            alt={product.name}
+            className="w-full h-full object-cover object-top transition-all duration-500"
+          />
         </div>
 
-        {/* Right: Product Details & Purchase Actions */}
-        <div className="md:w-1/2 p-6 overflow-y-auto flex flex-col justify-between space-y-4">
-          <div>
-            <div className="flex items-center justify-between text-xs text-allura-goldDark font-sans font-semibold tracking-widest uppercase">
-              <span>{product.category} • {product.occasion}</span>
-              <div className="flex items-center gap-1 text-amber-700">
-                <Star size={12} className="fill-amber-500 text-amber-500" />
-                <span>{product.rating} ({product.reviewsCount})</span>
-              </div>
+        {/* Thumbnail row if multiple */}
+        {allImages.length > 1 && (
+          <div className="flex gap-2 p-3 overflow-x-auto bg-allura-card border-t border-allura-border/60">
+            {allImages.map((img, idx) => (
+              <button
+                key={idx}
+                onClick={() => setActiveImageIdx(idx)}
+                className={`w-12 h-14 rounded overflow-hidden flex-shrink-0 border-2 transition-all ${activeImageIdx === idx ? 'border-allura-gold' : 'border-transparent opacity-70 hover:opacity-100'
+                  }`}
+              >
+                <img src={img} alt="Thumbnail" className="w-full h-full object-cover object-top" />
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Right: Product Details & Purchase Actions */}
+      <div className="md:w-1/2 p-6 overflow-y-auto flex flex-col justify-between space-y-4">
+        <div>
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 pr-10 text-xs text-allura-goldDark font-sans font-semibold tracking-widest uppercase">
+            <span>{product.category} • {product.occasion}</span>
+            <div className="flex items-center gap-1 text-amber-700 whitespace-nowrap">
+              <Star size={12} className="fill-amber-500 text-amber-500" />
+              <span>{product.rating}</span>
             </div>
+          </div>
 
-            <h3 className="font-serif text-2xl font-medium text-allura-text mt-1">
-              {product.name}
-            </h3>
+          <h3 className="font-serif text-2xl font-medium text-allura-text mt-1">
+            {product.name}
+          </h3>
 
-            <div className="flex items-baseline gap-3 mt-2">
-              <span className="font-serif text-xl font-semibold text-allura-darkBrown">
-                {formatPrice(product.price)}
+          <div className="flex items-baseline gap-3 mt-2">
+            <span className="font-serif text-xl font-semibold text-allura-darkBrown">
+              {formatPrice(product.price)}
+            </span>
+            {product.originalPrice && (
+              <span className="text-xs text-allura-muted line-through font-sans">
+                {formatPrice(product.originalPrice)}
               </span>
-              {product.originalPrice && (
-                <span className="text-xs text-allura-muted line-through font-sans">
-                  {formatPrice(product.originalPrice)}
-                </span>
-              )}
-            </div>
+            )}
+          </div>
 
-            <p className="text-xs text-allura-muted font-sans leading-relaxed mt-3 line-clamp-3">
-              {product.description}
-            </p>
+          <p className="text-xs text-allura-muted font-sans leading-relaxed mt-3 line-clamp-3">
+            {product.description}
+          </p>
 
-            {/* Colors */}
-            {product.colors.length > 0 && (
+          {/* Colors */}
+          {product.colors.length > 0 && (
             <div className="mt-4">
               <span className="text-xs font-semibold text-allura-text">
                 Color: <span className="font-normal text-allura-muted">{currentColor?.name}</span>
@@ -191,9 +190,8 @@ export const QuickViewModal: React.FC = () => {
                   <button
                     key={c.name}
                     onClick={() => handleColorSelect(idx)}
-                    className={`w-6 h-6 rounded-full border-2 transition-all flex items-center justify-center ${
-                      selectedColorIdx === idx ? 'border-allura-gold scale-110' : 'border-allura-border'
-                    }`}
+                    className={`w-6 h-6 rounded-full border-2 transition-all flex items-center justify-center ${selectedColorIdx === idx ? 'border-allura-gold scale-110' : 'border-allura-border'
+                      }`}
                     style={{ backgroundColor: c.hex }}
                     title={`${c.name} — ${c.hex}`}
                     aria-label={`${c.name} (${c.hex})`}
@@ -206,10 +204,10 @@ export const QuickViewModal: React.FC = () => {
                 ))}
               </div>
             </div>
-            )}
+          )}
 
-            {/* Sizes */}
-            {availableSizes.length > 0 && (
+          {/* Sizes */}
+          {availableSizes.length > 0 && (
             <div className="mt-4">
               <div className="flex items-center justify-between text-xs">
                 <span className="font-semibold text-allura-text">Select Size</span>
@@ -226,64 +224,62 @@ export const QuickViewModal: React.FC = () => {
                   <button
                     key={size}
                     onClick={() => setSelectedSize(size)}
-                    className={`px-3 py-1.5 rounded text-xs font-sans font-medium transition-all ${
-                      currentSize.toLowerCase().trim() === size.toLowerCase().trim()
-                        ? 'bg-allura-darkBrown text-allura-card border border-allura-darkBrown'
-                        : 'border border-allura-border bg-allura-bg hover:border-allura-gold text-allura-text'
-                    }`}
+                    className={`px-3 py-1.5 rounded text-xs font-sans font-medium transition-all ${currentSize.toLowerCase().trim() === size.toLowerCase().trim()
+                      ? 'bg-allura-darkBrown text-allura-card border border-allura-darkBrown'
+                      : 'border border-allura-border bg-allura-bg hover:border-allura-gold text-allura-text'
+                      }`}
                   >
                     {size}
                   </button>
                 ))}
               </div>
             </div>
-            )}
-          </div>
+          )}
+        </div>
 
-          {/* Action Buttons */}
-          <div className="space-y-2 pt-4 border-t border-allura-border/60">
-            <div className="flex gap-2">
-              <button
-                onClick={handleAddToCart}
-                disabled={bag.isAdding}
-                className={`flex-1 bg-allura-goldDark hover:bg-allura-darkBrown text-allura-card text-xs font-sans font-bold tracking-[0.2em] uppercase py-3 px-4 rounded-sm flex items-center justify-center gap-2 ${addToBagButtonState(bag.state)}`}
-              >
-                <AddToBagLabel state={bag.state} label="ADD TO BAG" />
-              </button>
-
-              <button
-                onClick={() => toggleWishlist(product)}
-                className={`p-3 rounded-sm border transition-colors ${
-                  inWishlist
-                    ? 'border-red-400 bg-red-50 text-red-600'
-                    : 'border-allura-border bg-allura-card text-allura-muted hover:text-allura-text'
-                }`}
-                aria-label="Wishlist"
-              >
-                <Heart size={16} className={inWishlist ? 'fill-current' : ''} />
-              </button>
-            </div>
-
+        {/* Action Buttons */}
+        <div className="space-y-2 pt-4 border-t border-allura-border/60">
+          <div className="flex gap-2">
             <button
-              onClick={handleWhatsAppEnquire}
-              className="w-full bg-[#25D366]/10 text-[#128C7E] hover:bg-[#25D366]/20 border border-[#25D366]/30 py-2 px-3 rounded text-xs font-semibold tracking-wider transition-colors flex items-center justify-center gap-2"
+              onClick={handleAddToCart}
+              disabled={bag.isAdding}
+              className={`flex-1 bg-allura-goldDark hover:bg-allura-darkBrown text-allura-card text-xs font-sans font-bold tracking-[0.2em] uppercase py-3 px-4 rounded-sm flex items-center justify-center gap-2 ${addToBagButtonState(bag.state)}`}
             >
-              <MessageCircle size={14} />
-              <span>Ask Allura Stylist on WhatsApp</span>
+              <AddToBagLabel state={bag.state} label="ADD TO BAG" />
             </button>
 
-            <div className="text-center pt-1">
-              <Link
-                to={`/product/${product.slug}`}
-                onClick={() => setQuickViewProduct(null)}
-                className="text-[11px] font-sans text-allura-muted hover:text-allura-goldDark transition-colors inline-flex items-center gap-1 uppercase tracking-wider"
-              >
-                <span>View Full Product Page</span>
-                <ArrowRight size={12} />
-              </Link>
-            </div>
+            <button
+              onClick={() => toggleWishlist(product)}
+              className={`p-3 rounded-sm border transition-colors ${inWishlist
+                ? 'border-red-400 bg-red-50 text-red-600'
+                : 'border-allura-border bg-allura-card text-allura-muted hover:text-allura-text'
+                }`}
+              aria-label="Wishlist"
+            >
+              <Heart size={16} className={inWishlist ? 'fill-current' : ''} />
+            </button>
+          </div>
+
+          <button
+            onClick={handleWhatsAppEnquire}
+            className="w-full bg-[#25D366]/10 text-[#128C7E] hover:bg-[#25D366]/20 border border-[#25D366]/30 py-2 px-3 rounded text-xs font-semibold tracking-wider transition-colors flex items-center justify-center gap-2"
+          >
+            <MessageCircle size={14} />
+            <span>Ask Allura Stylist on WhatsApp</span>
+          </button>
+
+          <div className="text-center pt-1">
+            <Link
+              to={`/product/${product.slug}`}
+              onClick={() => setQuickViewProduct(null)}
+              className="text-[11px] font-sans text-allura-muted hover:text-allura-goldDark transition-colors inline-flex items-center gap-1 uppercase tracking-wider"
+            >
+              <span>View Full Product Page</span>
+              <ArrowRight size={12} />
+            </Link>
           </div>
         </div>
+      </div>
     </Modal>
   );
 };

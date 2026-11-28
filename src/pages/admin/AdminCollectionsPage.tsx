@@ -606,10 +606,20 @@ export const AdminCollectionsPage: React.FC = () => {
               {/* Image */}
               <ImageUploadDropzone
                 label="Collection Image"
+                folder="collections"
+                allowSvg={false}
+                maxMB={10}
+                maxSide={800}
                 value={formData.imageUrl}
-                onChange={url => setFormData({ ...formData, imageUrl: url })}
-                aspectRatioLabel="Recommended: 1200×1500px (portrait) or 1920×800px (bannermad Ajv)"
-                helperText="A thumbnail is created automatically for uploaded images."
+                onChange={(url) => {
+                  setFormData(prev => ({
+                    ...prev,
+                    imageUrl: url,
+                    imageAlt: prev.imageAlt || (prev.name ? `${prev.name} cover image` : ''),
+                  }));
+                }}
+                aspectRatioLabel="Recommended: 800×800 px (1:1 WebP)"
+                helperText="Auto-compressed to WebP before upload."
                 showUrlTab={false}
                 showPresetsTab={false}
               />

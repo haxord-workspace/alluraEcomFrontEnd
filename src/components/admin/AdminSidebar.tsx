@@ -26,11 +26,13 @@ import {
   Bell,
   Image as ImageIcon,
   HelpCircle,
+  MessageSquare,
   X
 } from 'lucide-react';
 import { usePermissions } from '../../hooks/usePermissions';
 import { AlluraLogo } from '../common/AlluraLogo';
 import { AdminReviewsNavSection } from './reviews/AdminReviewsNavSection';
+import { getUnreadContactInquiryCount, CONTACT_INQUIRIES_UPDATED_EVENT } from '../../service/contactInquiries';
 
 interface AdminSidebarProps {
   isOpen: boolean;
@@ -46,18 +48,71 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   const { can, role, realRole } = usePermissions();
   const location = useLocation();
   const activeRoleLabel = role || realRole || '—';
+  const canViewCrm = can('customer_crm', 'view');
+
+  const [unreadEnquiryCount, setUnreadEnquiryCount] = useState<number>(0);
+
+  // Poll unread enquiries count every 60s & refresh on focus/visibility or update event
+  React.useEffect(() => {
+    if (!canViewCrm) return;
+
+    let isMounted = true;
+    const fetchUnreadCount = () => {
+      getUnreadContactInquiryCount()
+        .then((count) => {
+          if (isMounted) setUnreadEnquiryCount(count);
+        })
+        .catch((err) => {
+          console.debug('Failed to fetch unread enquiry count:', err);
+        });
+    };
+
+    fetchUnreadCount();
+
+    const interval = setInterval(fetchUnreadCount, 60000);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchUnreadCount();
+      }
+    };
+
+    window.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', fetchUnreadCount);
+    window.addEventListener(CONTACT_INQUIRIES_UPDATED_EVENT, fetchUnreadCount);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+      window.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', fetchUnreadCount);
+      window.removeEventListener(CONTACT_INQUIRIES_UPDATED_EVENT, fetchUnreadCount);
+    };
+  }, [canViewCrm]);
 
   // Collapsible section state
+  const isContentActive =
+    location.pathname.startsWith('/admin/content') ||
+    location.pathname.startsWith('/admin/homepage/experience') ||
+    location.pathname.startsWith('/admin/marketing/banners');
+
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
     catalog: true,
     suppliers: true,
     inventory: true,
     orders: true,
+    crm: true,
     marketing: true,
-    content: false,
+    content: isContentActive,
     intelligence: false,
     settings: false,
   });
+
+  React.useEffect(() => {
+    if (isContentActive) {
+      setOpenSections(prev => (prev.content ? prev : { ...prev, content: true }));
+    }
+  }, [isContentActive]);
 
   const toggleSection = (sec: string) => {
     setOpenSections(prev => ({ ...prev, [sec]: !prev[sec] }));
@@ -257,12 +312,49 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
           </div>
         )}
 
-        {/* CUSTOMERS */}
+        {/* CUSTOMER CRM */}
         {can('customer_crm', 'view') && (
-          <NavLink to="/admin/customers" className={navLinkClass}>
-            <Users size={16} />
-            {!isCollapsed && <span>Customers CRM</span>}
-          </NavLink>
+          <div className="space-y-1">
+            <button
+              onClick={() => toggleSection('crm')}
+              className="w-full flex items-center justify-between px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-allura-muted/80 hover:text-allura-text"
+            >
+              <span>Customer CRM</span>
+              {!isCollapsed && (
+                openSections.crm ? <ChevronDown size={13} /> : <ChevronRight size={13} />
+              )}
+            </button>
+            {(openSections.crm || isCollapsed) && (
+              <div className="space-y-0.5 pl-1">
+                <NavLink to="/admin/customers" className={navLinkClass}>
+                  <Users size={15} />
+                  {!isCollapsed && <span>Customers CRM</span>}
+                </NavLink>
+                <NavLink
+                  to="/admin/enquiries"
+                  className={navLinkClass}
+                  title={isCollapsed && unreadEnquiryCount > 0 ? `Customer Enquiries (${unreadEnquiryCount} unread)` : 'Customer Enquiries'}
+                >
+                  <div className="relative">
+                    <MessageSquare size={15} />
+                    {isCollapsed && unreadEnquiryCount > 0 && (
+                      <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-600 ring-2 ring-white" />
+                    )}
+                  </div>
+                  {!isCollapsed && (
+                    <div className="flex-1 flex items-center justify-between min-w-0">
+                      <span className="truncate">Customer Enquiries</span>
+                      {unreadEnquiryCount > 0 && (
+                        <span className="ml-1.5 px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-amber-600 text-white font-mono leading-none">
+                          {unreadEnquiryCount > 99 ? '99+' : unreadEnquiryCount}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </NavLink>
+              </div>
+            )}
+          </div>
         )}
         <AdminReviewsNavSection navLinkClass={navLinkClass} isCollapsed={isCollapsed} />
 
@@ -321,6 +413,10 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
             </button>
             {(openSections.content || isCollapsed) && (
               <div className="space-y-0.5 pl-1">
+                <NavLink to="/admin/homepage/experience" className={navLinkClass}>
+                  <Sparkles size={15} />
+                  {!isCollapsed && <span>Homepage Experience</span>}
+                </NavLink>
                 <NavLink to="/admin/marketing/banners" className={navLinkClass}>
                   <ImageIcon size={15} />
                   {!isCollapsed && <span>Store Banners</span>}

@@ -37,6 +37,18 @@ export interface PromotionApplicableTo {
   collectionIds: string[];
 }
 
+/** Admin-uploaded background image for a promotion (max one per promotion).
+ *  `thumbnailUrl` is backend-computed on save (R2 today: same file as `url`) and is
+ *  never sent by the client — only read back from create/update/list/detail responses. */
+export interface PromotionBackgroundImage {
+  url: string;
+  thumbnailUrl?: string;
+  publicId?: string;
+  alt?: string;
+  width?: number;
+  height?: number;
+}
+
 export interface AdminPromotion {
   id: string;
   name: string;
@@ -47,6 +59,7 @@ export interface AdminPromotion {
   discountType: PromotionDiscountType;
   discountValue: number;
   maxDiscountAmount?: number;
+  minimumOrderValue?: number;
   startDate: string;
   endDate: string;
   status: PromotionStatus;
@@ -57,6 +70,8 @@ export interface AdminPromotion {
   excludedCategories: string[];
   /** Evaluation order, higher first; qualifying promotions stack (Swagger `priority`). */
   priority: number;
+  /** Optional admin-uploaded background image; absent when none was set. */
+  backgroundImage?: PromotionBackgroundImage;
 }
 
 /** Body for POST/PATCH /admin/promotions. Only `name`, `discount`, `startsAt`,
@@ -75,6 +90,7 @@ export interface PromotionInput {
   excludedCategories?: string[];
   /** Integer; no minimum in the spec. */
   priority?: number;
+  minimumOrderValue?: number;
   discount: {
     type: 'PERCENTAGE' | 'FIXED';
     value: number;
@@ -87,6 +103,9 @@ export interface PromotionInput {
   status?: 'DRAFT' | 'ACTIVE' | 'INACTIVE' | 'EXPIRED';
   /** Replaced by Applies to > Categories; no longer used (no longer sent). */
   eligibleCategories?: string[];
+  /** Admin Promotion Management only. Omit to keep the existing image, an object to set/replace
+   *  it, or `null` to remove it — never send `null` by default. */
+  backgroundImage?: PromotionBackgroundImage | null;
 }
 
 /** Starting set of campaign types, taken from the existing mock data. Free text is also allowed. */
